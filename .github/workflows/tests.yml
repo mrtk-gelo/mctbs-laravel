@@ -1,3 +1,4 @@
+
 # GitHub Actions CI for MCTBS
 name: Laravel Tests
 
@@ -5,6 +6,7 @@ on:
   push:
     branches:
       - main
+      - fix/ci-laravel-directories
   pull_request:
     branches:
       - main
@@ -61,7 +63,7 @@ jobs:
         env:
           DB_CONNECTION: sqlite
           DB_DATABASE: ':memory:'
-      
+
       - name: Show Laravel log on failure
         if: failure()
         run: |
