@@ -30,6 +30,7 @@ jobs:
           mkdir -p storage/framework/views
           mkdir -p storage/framework/testing
           mkdir -p bootstrap/cache
+          mkdir -p storage/logs
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
