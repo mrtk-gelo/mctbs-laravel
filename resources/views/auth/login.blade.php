@@ -1,0 +1,76 @@
+@extends('layouts.auth')
+
+@section('title', 'Login | MCTBS')
+
+@section('content')
+<div class="auth-wrapper">
+    <div class="auth-left">
+        <div class="auth-left-noise"></div>
+        <div class="deco-ring deco-ring-1"></div>
+        <div class="deco-ring deco-ring-2"></div>
+        <div class="deco-ring deco-ring-3"></div>
+
+        <div class="left-content">
+            <div class="brand-logo">
+                <img src="{{ asset('img/mctbs.png') }}" alt="MCTBS logo">
+            </div>
+
+            <h1 class="left-heading">Motal and Conteros<br>Transient Booking System</h1>
+            <span class="heading-accent"></span>
+            <p class="left-subheader">A modern booking system designed for Baguio transient house services.</p>
+        </div>
+    </div>
+
+    <div class="auth-right">
+        <div class="auth-card">
+            <div class="card-eyebrow">
+                <span class="card-eyebrow-dot"></span>
+                Welcome back
+            </div>
+            <h2 class="card-title">Sign in to your account</h2>
+            <p class="card-subtitle">Enter your credentials to access your dashboard.</p>
+
+            <form method="POST" action="{{ route('login') }}" autocomplete="on">
+                @csrf
+
+                <div class="form-field">
+                    <label for="email">Email Address <span class="field-requirement">Required</span></label>
+                    <div class="input-wrap">
+                        <i class="fa fa-envelope input-icon"></i>
+                        <input id="email" type="email" name="email" value="{{ old('email') }}" placeholder="you@email.com" required autofocus>
+                    </div>
+                    @error('email')
+                        <div class="field-error">{{ $message }}</div>
+                    @enderror
+                </div>
+
+                <div class="form-field">
+                    <label for="password">Password <span class="field-requirement">Required</span></label>
+                    <div class="input-wrap">
+                        <i class="fa fa-lock input-icon"></i>
+                        <input id="password" type="password" name="password" placeholder="••••••••" required>
+                        <button type="button" class="password-toggle" aria-label="Toggle password visibility" onclick="const input = document.getElementById('password'); const value = input.type === 'password'; input.type = value ? 'text' : 'password'; this.innerHTML = value ? '<i class=\'fa fa-eye-slash\'></i>' : '<i class=\'fa fa-eye\'></i>';">
+                            <i class="fa fa-eye"></i>
+                        </button>
+                    </div>
+                    @error('password')
+                        <div class="field-error">{{ $message }}</div>
+                    @enderror
+                </div>
+
+                <button type="submit" class="btn-signin">
+                    <i class="fa fa-arrow-right-to-bracket"></i>
+                    Sign In
+                </button>
+            </form>
+
+            <div class="divider">or</div>
+
+            <p class="auth-link">
+                Don't have an account?&nbsp;
+                <a href="{{ route('register') }}">Register as Guest</a>
+            </p>
+        </div>
+    </div>
+</div>
+@endsection

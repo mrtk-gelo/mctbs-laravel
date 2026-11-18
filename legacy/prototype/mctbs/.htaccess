@@ -1,0 +1,15 @@
+# .htaccess
+Options -Indexes
+
+# Prevent direct access to config and includes only
+<FilesMatch "^(db|app)\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+</IfModule>

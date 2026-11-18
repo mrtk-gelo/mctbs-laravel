@@ -1,0 +1,186 @@
+<?php
+
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\ProfileController;
+use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\BookingWorkflowController;
+use App\Http\Controllers\Guest\BookingController as GuestBookingController;
+use App\Http\Controllers\Guest\DashboardController as GuestDashboardController;
+use App\Http\Controllers\Guest\FeedbackController as GuestFeedbackController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Owner\AdminController as OwnerAdminController;
+use App\Http\Controllers\Owner\DashboardController as OwnerDashboardController;
+use App\Http\Controllers\Owner\HouseController as OwnerHouseController;
+use App\Http\Controllers\PublicController;
+use App\Http\Controllers\Staff\DashboardController as StaffDashboardController;
+use App\Http\Controllers\Sysadmin\BackupController as SysadminBackupController;
+use App\Http\Controllers\Sysadmin\DashboardController as SysadminDashboardController;
+use App\Http\Controllers\Sysadmin\OwnerController as SysadminOwnerController;
+use App\Livewire\Guest\BookingForm;
+use App\Livewire\Owner\WalkInBookingForm;
+use Illuminate\Support\Facades\Route;
+
+// Public browsing — no auth required
+Route::get('/', [PublicController::class, 'home'])->name('home');
+Route::get('/transients', [PublicController::class, 'transients'])->name('public.transients');
+Route::get('/houses/{house}', [PublicController::class, 'house'])->name('public.house');
+Route::post('/houses/{house}/inquiries', [PublicController::class, 'sendHouseInquiry'])->name('public.houses.inquiries.store');
+Route::get('/units/{unit}', [PublicController::class, 'unit'])->name('public.unit');
+Route::post('/units/{unit}/inquiries', [PublicController::class, 'sendInquiry'])->name('public.units.inquiries.store');
+Route::get('/guest/feedback/{booking}/{token}', [GuestFeedbackController::class, 'show'])
+    ->name('guest.feedback.show');
+Route::post('/guest/feedback/{booking}/{token}', [GuestFeedbackController::class, 'store'])
+    ->middleware('throttle:10,1')
+    ->name('guest.feedback.store');
+
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [LoginController::class, 'create'])->name('login');
+    Route::post('/login', [LoginController::class, 'store']);
+});
+
+Route::get('/register', [RegisterController::class, 'create'])->name('register');
+Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
+
+Route::get('/logout', fn () => redirect()->route('home'));
+
+Route::post('/logout', [LoginController::class, 'destroy'])
+    ->middleware('auth')
+    ->name('logout');
+
+Route::middleware('auth')->group(function () {
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::get('/profile/security', [ProfileController::class, 'security'])->name('profile.security');
+    Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
+    Route::get('/notifications/{notificationId}', [NotificationController::class, 'open'])->name('notifications.open');
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::get('/payments/{paymentId}/proof', [BookingWorkflowController::class, 'downloadProof'])->name('payments.proof');
+});
+
+Route::middleware(['auth', 'role:guest'])->group(function () {
+    Route::get('/guest/dashboard', [GuestDashboardController::class, 'index'])->name('guest.dashboard');
+    Route::get('/units/{unit}/book', BookingForm::class)->name('guest.book');
+
+    Route::get('/guest/bookings/{booking_id}', [GuestBookingController::class, 'show'])->name('guest.bookings.show');
+    Route::get('/guest/bookings/{booking_id}/ticket', [GuestBookingController::class, 'ticket'])->name('guest.bookings.ticket');
+    Route::get('/guest/bookings/{booking_id}/payment', [GuestBookingController::class, 'payment'])->name('guest.bookings.payment');
+    Route::post('/guest/bookings/{booking_id}/payments', [GuestBookingController::class, 'submitPayment'])->name('guest.bookings.payments.store');
+    Route::post('/guest/bookings/{booking_id}/cancel', [GuestBookingController::class, 'cancel'])->name('guest.bookings.cancel');
+    Route::get('/guest/bookings/{booking_id}/receipt', [GuestBookingController::class, 'receipt'])->name('guest.bookings.receipt');
+    Route::get('/guest/bookings/{booking_id}/receipt/pdf', [GuestBookingController::class, 'receiptPdf'])->name('guest.bookings.receipt.pdf');
+});
+
+Route::middleware(['auth', 'role:sysadmin'])->prefix('sysadmin')->name('sysadmin.')->group(function () {
+    Route::get('/dashboard', [SysadminDashboardController::class, 'index'])->name('dashboard');
+    Route::post('/backups', [SysadminBackupController::class, 'store'])->name('backups.store');
+    Route::get('/backups/{filename}', [SysadminBackupController::class, 'download'])->name('backups.download');
+    Route::get('/owners', [SysadminOwnerController::class, 'index'])->name('owners.index');
+    Route::post('/owners/invite', [SysadminOwnerController::class, 'invite'])->name('owners.invite');
+    Route::delete('/owners', [SysadminOwnerController::class, 'bulkDestroy'])->name('owners.bulk-destroy');
+    Route::delete('/owners/{ownerId}', [SysadminOwnerController::class, 'destroy'])->whereNumber('ownerId')->name('owners.destroy');
+});
+
+Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->group(function () {
+    Route::get('/dashboard', [OwnerDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/houses', [OwnerHouseController::class, 'index'])->name('houses.index');
+    Route::get('/houses/create', [OwnerHouseController::class, 'create'])->name('houses.create');
+    Route::post('/houses', [OwnerHouseController::class, 'store'])->name('houses.store');
+    Route::get('/houses/{house}/edit', [OwnerHouseController::class, 'edit'])->name('houses.edit');
+    Route::put('/houses/{house}', [OwnerHouseController::class, 'update'])->name('houses.update');
+    Route::put('/houses/{house}/availability', [OwnerHouseController::class, 'updateHouseAvailability'])->name('houses.availability');
+    Route::get('/houses/{house}/units', [OwnerHouseController::class, 'units'])->name('houses.units');
+    Route::get('/houses/{house}/units/create', [OwnerHouseController::class, 'createUnit'])->name('houses.units.create');
+    Route::post('/houses/{house}/units', [OwnerHouseController::class, 'storeUnit'])->name('houses.units.store');
+    Route::get('/houses/{house}/units/{unit}/edit', [OwnerHouseController::class, 'editUnit'])->name('houses.units.edit');
+    Route::put('/houses/{house}/units/{unit}', [OwnerHouseController::class, 'updateUnit'])->name('houses.units.update');
+    Route::put('/houses/{house}/units/{unit}/availability', [OwnerHouseController::class, 'updateUnitAvailability'])->name('houses.units.availability');
+    Route::get('/admins', [OwnerAdminController::class, 'index'])->name('admins.index');
+    Route::post('/admins/invite', [OwnerAdminController::class, 'invite'])->name('admins.invite');
+    Route::delete('/admins/{invitation}', [OwnerAdminController::class, 'remove'])->name('admins.remove');
+    Route::get('/reports/excel', [BookingWorkflowController::class, 'downloadExcel'])->name('reports.excel');
+    Route::get('/reports/pdf', [BookingWorkflowController::class, 'downloadPdf'])->name('reports.pdf');
+    Route::get('/bookings', [BookingWorkflowController::class, 'index'])->name('bookings.index');
+    Route::get('/bookings/create', WalkInBookingForm::class)->name('bookings.create');
+    Route::get('/bookings/{bookingId}', [BookingWorkflowController::class, 'show'])->name('bookings.show');
+    Route::post('/bookings/{bookingId}/accept', [BookingWorkflowController::class, 'accept'])->name('bookings.accept');
+    Route::post('/bookings/{bookingId}/reject', [BookingWorkflowController::class, 'reject'])->name('bookings.reject');
+    Route::post('/bookings/{bookingId}/cancel', [BookingWorkflowController::class, 'cancel'])->name('bookings.cancel');
+    Route::post('/bookings/calendar/blocks', [BookingWorkflowController::class, 'storeCalendarBlock'])->name('bookings.calendar-blocks.store');
+    Route::delete('/bookings/calendar/blocks/{availabilityId}', [BookingWorkflowController::class, 'destroyCalendarBlock'])->name('bookings.calendar-blocks.destroy');
+    Route::get('/bookings/{bookingId}/edit', [BookingWorkflowController::class, 'edit'])->name('bookings.edit');
+    Route::put('/bookings/{bookingId}', [BookingWorkflowController::class, 'update'])->name('bookings.update');
+    Route::get('/bookings/{bookingId}/checkout', [BookingWorkflowController::class, 'checkout'])->name('bookings.checkout');
+    Route::post('/bookings/{bookingId}/check-in', [BookingWorkflowController::class, 'checkIn'])->name('bookings.check-in');
+    Route::get('/guests/{bookingId}/check-in', [BookingWorkflowController::class, 'guestCheckIn'])->name('guests.check-in');
+    Route::post('/guests/{bookingId}/headcount', [BookingWorkflowController::class, 'updateCheckInHeadcount'])->name('guests.headcount.update');
+    Route::post('/guests/{bookingId}/check-in/{bookingGuestId}/arrival', [BookingWorkflowController::class, 'recordGuestArrival'])->name('guests.arrivals.store');
+    Route::post('/guests/{bookingId}/check-in/{bookingGuestId}/no-show', [BookingWorkflowController::class, 'markGuestNoShow'])->name('guests.no-shows.store');
+    Route::post('/guests/{bookingId}/check-in/{bookingGuestId}/replacement', [BookingWorkflowController::class, 'replaceGuest'])->name('guests.replacements.store');
+    Route::post('/guests/{bookingId}/check-in/{bookingGuestId}/identity', [BookingWorkflowController::class, 'reviewGuestIdentity'])->name('guests.identity.review');
+    Route::post('/guests/{bookingId}/refunds', [BookingWorkflowController::class, 'refundCheckedInGuest'])->name('guests.refunds.store');
+    Route::post('/guests/{bookingId}/amenities', [BookingWorkflowController::class, 'addBookingAddons'])->name('guests.addons.store');
+    Route::post('/guests/{bookingId}/amenities/{addonId}/quantity', [BookingWorkflowController::class, 'adjustBookingAddonQuantity'])->whereNumber('addonId')->name('guests.addons.quantity');
+    Route::post('/guests/{bookingId}/feedback', [BookingWorkflowController::class, 'sendFeedbackRequest'])->name('guests.feedback.send');
+    Route::post('/bookings/{bookingId}/checkout/charges', [BookingWorkflowController::class, 'addCheckoutCharge'])->name('bookings.checkout.charges');
+    Route::post('/bookings/{bookingId}/checkout/charges/{chargeId}/quantity', [BookingWorkflowController::class, 'adjustCheckoutChargeQuantity'])->whereNumber('chargeId')->name('bookings.checkout.charges.quantity');
+    Route::post('/bookings/{bookingId}/checkout/damages', [BookingWorkflowController::class, 'addCheckoutDamages'])->name('bookings.checkout.damages.store');
+    Route::post('/bookings/{bookingId}/checkout/damages/custom', [BookingWorkflowController::class, 'addCustomCheckoutDamage'])->name('bookings.checkout.damages.custom');
+    Route::post('/bookings/{bookingId}/checkout/damages/{damageId}/quantity', [BookingWorkflowController::class, 'adjustCheckoutDamageQuantity'])->whereNumber('damageId')->name('bookings.checkout.damages.quantity');
+    Route::post('/bookings/{bookingId}/checkout/payments', [BookingWorkflowController::class, 'recordCheckoutPayment'])->name('bookings.checkout.payments');
+    Route::post('/bookings/{bookingId}/checkout/refunds/{refundId}', [BookingWorkflowController::class, 'processCheckoutRefund'])->whereNumber('refundId')->name('bookings.checkout.refunds.process');
+    Route::post('/bookings/{bookingId}/checkout/complete', [BookingWorkflowController::class, 'completeCheckout'])->name('bookings.checkout.complete');
+    Route::post('/bookings/{bookingId}/archive', [BookingWorkflowController::class, 'archive'])->name('bookings.archive');
+    Route::post('/bookings/archive-selected', [BookingWorkflowController::class, 'archiveSelected'])->name('bookings.archive-selected');
+    Route::post('/discounts/{discountId}/review', [BookingWorkflowController::class, 'reviewDiscount'])->name('discounts.review');
+    Route::post('/payments/{paymentId}/review', [BookingWorkflowController::class, 'reviewPayment'])->name('payments.review');
+});
+
+Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->group(function () {
+    Route::get('/dashboard', [StaffDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/houses', [OwnerHouseController::class, 'index'])->name('houses.index');
+    Route::get('/houses/{house}/edit', [OwnerHouseController::class, 'edit'])->name('houses.edit');
+    Route::put('/houses/{house}', [OwnerHouseController::class, 'update'])->name('houses.update');
+    Route::put('/houses/{house}/availability', [OwnerHouseController::class, 'updateHouseAvailability'])->name('houses.availability');
+    Route::get('/houses/{house}/units', [OwnerHouseController::class, 'units'])->name('houses.units');
+    Route::get('/houses/{house}/units/create', [OwnerHouseController::class, 'createUnit'])->name('houses.units.create');
+    Route::post('/houses/{house}/units', [OwnerHouseController::class, 'storeUnit'])->name('houses.units.store');
+    Route::get('/houses/{house}/units/{unit}/edit', [OwnerHouseController::class, 'editUnit'])->name('houses.units.edit');
+    Route::put('/houses/{house}/units/{unit}', [OwnerHouseController::class, 'updateUnit'])->name('houses.units.update');
+    Route::put('/houses/{house}/units/{unit}/availability', [OwnerHouseController::class, 'updateUnitAvailability'])->name('houses.units.availability');
+    Route::get('/reports/excel', [BookingWorkflowController::class, 'downloadExcel'])->name('reports.excel');
+    Route::get('/reports/pdf', [BookingWorkflowController::class, 'downloadPdf'])->name('reports.pdf');
+    Route::get('/bookings', [BookingWorkflowController::class, 'index'])->name('bookings.index');
+    Route::get('/bookings/create', WalkInBookingForm::class)->name('bookings.create');
+    Route::get('/bookings/{bookingId}', [BookingWorkflowController::class, 'show'])->name('bookings.show');
+    Route::post('/bookings/{bookingId}/accept', [BookingWorkflowController::class, 'accept'])->name('bookings.accept');
+    Route::post('/bookings/{bookingId}/reject', [BookingWorkflowController::class, 'reject'])->name('bookings.reject');
+    Route::post('/bookings/{bookingId}/cancel', [BookingWorkflowController::class, 'cancel'])->name('bookings.cancel');
+    Route::post('/bookings/calendar/blocks', [BookingWorkflowController::class, 'storeCalendarBlock'])->name('bookings.calendar-blocks.store');
+    Route::delete('/bookings/calendar/blocks/{availabilityId}', [BookingWorkflowController::class, 'destroyCalendarBlock'])->name('bookings.calendar-blocks.destroy');
+    Route::get('/bookings/{bookingId}/edit', [BookingWorkflowController::class, 'edit'])->name('bookings.edit');
+    Route::put('/bookings/{bookingId}', [BookingWorkflowController::class, 'update'])->name('bookings.update');
+    Route::get('/bookings/{bookingId}/checkout', [BookingWorkflowController::class, 'checkout'])->name('bookings.checkout');
+    Route::post('/bookings/{bookingId}/check-in', [BookingWorkflowController::class, 'checkIn'])->name('bookings.check-in');
+    Route::get('/guests/{bookingId}/check-in', [BookingWorkflowController::class, 'guestCheckIn'])->name('guests.check-in');
+    Route::post('/guests/{bookingId}/headcount', [BookingWorkflowController::class, 'updateCheckInHeadcount'])->name('guests.headcount.update');
+    Route::post('/guests/{bookingId}/check-in/{bookingGuestId}/arrival', [BookingWorkflowController::class, 'recordGuestArrival'])->name('guests.arrivals.store');
+    Route::post('/guests/{bookingId}/check-in/{bookingGuestId}/no-show', [BookingWorkflowController::class, 'markGuestNoShow'])->name('guests.no-shows.store');
+    Route::post('/guests/{bookingId}/check-in/{bookingGuestId}/replacement', [BookingWorkflowController::class, 'replaceGuest'])->name('guests.replacements.store');
+    Route::post('/guests/{bookingId}/check-in/{bookingGuestId}/identity', [BookingWorkflowController::class, 'reviewGuestIdentity'])->name('guests.identity.review');
+    Route::post('/guests/{bookingId}/refunds', [BookingWorkflowController::class, 'refundCheckedInGuest'])->name('guests.refunds.store');
+    Route::post('/guests/{bookingId}/amenities', [BookingWorkflowController::class, 'addBookingAddons'])->name('guests.addons.store');
+    Route::post('/guests/{bookingId}/amenities/{addonId}/quantity', [BookingWorkflowController::class, 'adjustBookingAddonQuantity'])->whereNumber('addonId')->name('guests.addons.quantity');
+    Route::post('/guests/{bookingId}/feedback', [BookingWorkflowController::class, 'sendFeedbackRequest'])->name('guests.feedback.send');
+    Route::post('/bookings/{bookingId}/checkout/charges', [BookingWorkflowController::class, 'addCheckoutCharge'])->name('bookings.checkout.charges');
+    Route::post('/bookings/{bookingId}/checkout/charges/{chargeId}/quantity', [BookingWorkflowController::class, 'adjustCheckoutChargeQuantity'])->whereNumber('chargeId')->name('bookings.checkout.charges.quantity');
+    Route::post('/bookings/{bookingId}/checkout/damages', [BookingWorkflowController::class, 'addCheckoutDamages'])->name('bookings.checkout.damages.store');
+    Route::post('/bookings/{bookingId}/checkout/damages/custom', [BookingWorkflowController::class, 'addCustomCheckoutDamage'])->name('bookings.checkout.damages.custom');
+    Route::post('/bookings/{bookingId}/checkout/damages/{damageId}/quantity', [BookingWorkflowController::class, 'adjustCheckoutDamageQuantity'])->whereNumber('damageId')->name('bookings.checkout.damages.quantity');
+    Route::post('/bookings/{bookingId}/checkout/payments', [BookingWorkflowController::class, 'recordCheckoutPayment'])->name('bookings.checkout.payments');
+    Route::post('/bookings/{bookingId}/checkout/refunds/{refundId}', [BookingWorkflowController::class, 'processCheckoutRefund'])->whereNumber('refundId')->name('bookings.checkout.refunds.process');
+    Route::post('/bookings/{bookingId}/checkout/complete', [BookingWorkflowController::class, 'completeCheckout'])->name('bookings.checkout.complete');
+    Route::post('/bookings/{bookingId}/archive', [BookingWorkflowController::class, 'archive'])->name('bookings.archive');
+    Route::post('/bookings/archive-selected', [BookingWorkflowController::class, 'archiveSelected'])->name('bookings.archive-selected');
+    Route::post('/discounts/{discountId}/review', [BookingWorkflowController::class, 'reviewDiscount'])->name('discounts.review');
+    Route::post('/payments/{paymentId}/review', [BookingWorkflowController::class, 'reviewPayment'])->name('payments.review');
+});

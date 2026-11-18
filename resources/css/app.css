@@ -1,0 +1,315 @@
+@import 'tailwindcss';
+@import './legacy.css';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+}
+
+.system-alert-dismiss {
+    display: inline-grid;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-size: 20px;
+    line-height: 1;
+}
+
+.system-alert-dismiss:hover {
+    background: rgb(0 0 0 / 8%);
+}
+
+.system-message-modal {
+    position: relative;
+}
+
+.system-message-modal > .system-alert-dismiss {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+}
+
+.booking-list-filters {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 190px)) auto auto;
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 18px;
+}
+
+.booking-list-filter-field label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.booking-list-filter-field input {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 13px;
+    border: 1.5px solid var(--border);
+    border-radius: 7px;
+    background: #fff;
+    color: var(--text);
+    font: inherit;
+    transition: border-color .15s, box-shadow .15s;
+}
+
+.booking-list-filter-field input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(230, 126, 34, .12);
+}
+
+.booking-list-sort {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    white-space: nowrap;
+}
+
+.booking-status-indicator {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+}
+
+.booking-status-indicator__dot {
+    position: absolute;
+    top: -3px;
+    right: -4px;
+    width: 9px;
+    height: 9px;
+    border: 2px solid var(--card);
+    border-radius: 50%;
+    background: var(--warning);
+}
+
+.booking-status-tooltip {
+    position: fixed;
+    z-index: 1200;
+    max-width: 280px;
+    padding: 10px 12px;
+    border: 1px solid rgb(255 255 255 / 12%);
+    border-left: 3px solid var(--warning);
+    border-radius: 8px;
+    background: #1f2937;
+    box-shadow: 0 8px 24px rgb(15 23 42 / 24%);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.45;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity .12s ease, transform .12s ease;
+}
+
+.booking-status-tooltip.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.booking-status-tooltip[hidden] {
+    display: none !important;
+}
+
+.booking-archive-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+}
+
+.booking-archive-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.booking-archive-select-all input,
+[data-archive-booking] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.booking-archive-count {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.booking-archive-toolbar [data-archive-submit] {
+    margin-left: auto;
+}
+
+.booking-archive-toolbar [data-archive-submit]:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+}
+
+[data-booking-list][hidden],
+[data-filter-empty][hidden] {
+    display: none !important;
+}
+
+@media (max-width: 767px) {
+    .booking-list-filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .booking-list-filter-search {
+        grid-column: 1 / -1;
+    }
+
+    .booking-archive-toolbar {
+        flex-wrap: wrap;
+    }
+
+    :root {
+        --nav-h: 104px;
+    }
+
+    html,
+    body {
+        max-width: 100%;
+        overflow-x: clip;
+    }
+
+    .topnav {
+        height: var(--nav-h);
+        flex-wrap: wrap;
+        align-content: center;
+        gap: 4px 10px;
+        padding: 6px 12px;
+    }
+
+    .topnav-center {
+        display: flex;
+        order: 3;
+        flex: 0 0 100%;
+        gap: 2px;
+        overflow-x: auto;
+        padding: 0;
+        scrollbar-width: none;
+    }
+
+    .topnav-center::-webkit-scrollbar {
+        display: none;
+    }
+
+    .topnav-center > a,
+    .nav-dropdown > a,
+    .nav-dropdown > .nav-dropdown-toggle {
+        min-height: 38px;
+        padding: 8px 10px;
+    }
+
+    .page-wrapper {
+        min-width: 0;
+    }
+
+    .container,
+    .container-sm {
+        width: 100%;
+        max-width: 100%;
+        padding-right: 16px;
+        padding-left: 16px;
+    }
+
+    table {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .modal-overlay {
+        align-items: flex-start;
+        overflow-y: auto;
+        padding: 12px;
+    }
+
+    .modal-box {
+        max-height: calc(100dvh - 24px);
+        overflow-y: auto;
+    }
+
+    .notif-dropdown {
+        right: -48px;
+        width: min(320px, calc(100vw - 24px));
+    }
+
+    .profile-dropdown .dropdown-menu {
+        right: 0;
+        left: auto;
+        max-width: calc(100vw - 24px);
+    }
+
+    .btn,
+    .btn-outline-sm,
+    .btn-primary-sm {
+        min-height: 40px;
+    }
+
+    .page-header-row > *,
+    .page-header-row .btn-group {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .card,
+    .card-body,
+    .row,
+    .col,
+    .col-2,
+    .col-3 {
+        min-width: 0;
+    }
+}
+
+@media (max-width: 400px) {
+    .container,
+    .container-sm {
+        padding-right: 12px;
+        padding-left: 12px;
+    }
+
+    .topnav-right {
+        gap: 6px;
+    }
+
+    .topnav-right .profile-btn {
+        max-width: 142px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .btn {
+        white-space: normal;
+    }
+}
