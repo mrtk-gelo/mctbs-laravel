@@ -62,6 +62,9 @@ jobs:
       - name: Run Laravel tests
         run: php artisan test
         env:
+          APP_DEBUG: true
+          LOG_CHANNEL: stderr
+          LOG_LEVEL: debug
           DB_CONNECTION: sqlite
           DB_DATABASE: ':memory:'
 
