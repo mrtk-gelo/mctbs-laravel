@@ -61,3 +61,12 @@ jobs:
         env:
           DB_CONNECTION: sqlite
           DB_DATABASE: ':memory:'
+      
+      - name: Show Laravel log on failure
+        if: failure()
+        run: |
+          if [ -f storage/logs/laravel.log ]; then
+            tail -n 200 storage/logs/laravel.log
+          else
+            echo "Laravel log file not found."
+          fi
