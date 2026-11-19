@@ -32,7 +32,7 @@ class BookingController extends Controller
             ->with(['unit.house', 'guest'])
             ->findOrFail($booking_id);
 
-        $backgroundImage = public_path('img\\hero-bg.png');
+        $backgroundImage = public_path('img/hero-bg.png');
         abort_unless(is_file($backgroundImage), 500, 'The booking ticket background image is missing.');
         $backgroundContents = file_get_contents($backgroundImage);
         abort_unless($backgroundContents !== false, 500, 'The booking ticket background image could not be read.');
