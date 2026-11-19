@@ -37,6 +37,14 @@ jobs:
       - name: Create Laravel environment file
         run: cp .env.example .env
 
+      - name: Prepare Laravel directories
+        run: |
+          mkdir -p bootstrap/cache
+          mkdir -p storage/framework/cache/data
+          mkdir -p storage/framework/sessions
+          mkdir -p storage/framework/testing
+          mkdir -p storage/framework/views
+
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
