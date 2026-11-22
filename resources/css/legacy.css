@@ -301,9 +301,9 @@ tr:hover td { background: #fafbfc; }
 .operations-empty i { margin-bottom: 8px; color: #b7b0a2; font-size: 22px; }
 .operations-empty p { max-width: 280px; margin: 0; }
 .dashboard-assigned-properties { flex-wrap: wrap; }
-.arrival-review-dialog { width: min(620px, calc(100vw - 28px)); max-width: 100%; max-height: min(780px, calc(100vh - 32px)); overflow: auto; padding: 0; border: 1px solid #e8e3d8; border-radius: 14px; color: var(--text); box-shadow: 0 24px 70px rgba(34, 29, 20, .24); }
+.arrival-review-dialog { position: fixed; inset: 0; width: min(620px, calc(100vw - 28px)); max-width: 100%; max-height: min(760px, calc(100vh - 80px)); margin: auto; overflow: auto; padding: 0; border: 1px solid #e8e3d8; border-radius: 14px; color: var(--text); box-shadow: 0 24px 70px rgba(34, 29, 20, .24); }
 .arrival-review-dialog::backdrop { background: rgba(25, 30, 39, .58); backdrop-filter: blur(2px); }
-.arrival-review-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px; border-bottom: 1px solid #f0ede6; }
+.arrival-review-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 24px; border-bottom: 1px solid #f0ede6; }
 .arrival-review-heading { display: flex; align-items: flex-start; gap: 12px; }
 .arrival-review-heading h2 { margin: 0 0 4px; color: var(--heading-color); font-size: 19px; }
 .arrival-review-heading p { max-width: 460px; margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
@@ -311,7 +311,7 @@ tr:hover td { background: #fafbfc; }
 .arrival-review-close { display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 22px; line-height: 1; }
 .arrival-review-close:hover { background: #f5f3ee; color: var(--text); }
 .arrival-review-dialog :is(button, a, input):focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
-.arrival-review-body { display: grid; gap: 16px; padding: 20px 22px 22px; }
+.arrival-review-body { display: grid; gap: 18px; padding: 24px 24px 30px; }
 .arrival-review-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .arrival-review-detail { display: grid; min-width: 0; gap: 4px; padding: 12px 14px; border: 1px solid #f0ede6; border-radius: 9px; background: #fdfcf9; }
 .arrival-review-detail span { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
@@ -341,7 +341,6 @@ tr:hover td { background: #fafbfc; }
 .arrival-review-reject-form label { color: var(--text); font-size: 12px; font-weight: 600; }
 .arrival-review-reject-form textarea { width: 100%; min-height: 66px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; color: var(--text); font: inherit; font-size: 13px; resize: vertical; }
 .arrival-review-discount-footnote { padding-top: 2px; }
-.operations-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .arrival-review-note { display: flex; gap: 8px; margin: 0; padding: 11px 12px; border-radius: 8px; background: #fff8eb; color: #74541f; font-size: 12px; line-height: 1.45; }
 .arrival-review-note i { margin-top: 2px; }
 .arrival-review-manage-link { width: fit-content; color: var(--accent-dark); font-size: 13px; font-weight: 700; text-decoration: none; }
@@ -1227,8 +1226,8 @@ a.calendar-day:hover { transform: translateY(-1px); border-color: var(--primary-
   .operations-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; min-height: 0; padding: 14px; }
   .operations-row-side { grid-column: 1 / -1; grid-row: 2; justify-items: start; text-align: left; }
   .operations-action { grid-column: 2; grid-row: 1; }
-  .operations-row-actions { grid-column: 2; grid-row: 1; flex-direction: column; align-items: stretch; }
-  .arrival-review-header, .arrival-review-body { padding: 16px; }
+  .arrival-review-header { padding: 18px 16px; }
+  .arrival-review-body { padding: 18px 16px 24px; }
   .arrival-review-actions { flex-direction: column-reverse; }
   .arrival-review-actions .btn { justify-content: center; width: 100%; }
   .workspace-page { margin-top: 18px; }

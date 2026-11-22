@@ -145,22 +145,8 @@
                                 <span class="text-muted fs-sm">{{ $booking->booking_reference ?? '#'.$booking->booking_id }}</span>
                                 @if ($booking->check_out->isToday())<span class="badge badge-pending">Checking out today</span>@endif
                             </div>
-                            <div class="operations-row-actions">
-                                @if ($booking->discounts->isNotEmpty())
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline btn-sm"
-                                        data-open-arrival-review="{{ $booking->booking_id }}"
-                                        aria-haspopup="dialog"
-                                        aria-controls="arrival-review-{{ $booking->booking_id }}"
-                                    >Review IDs</button>
-                                @endif
-                                <a href="{{ route($dashboardPrefix.'.guests.check-in', $booking->booking_id) }}" class="btn btn-outline btn-sm">Manage Guest</a>
-                            </div>
+                            <a href="{{ route($dashboardPrefix.'.guests.check-in', $booking->booking_id) }}" class="btn btn-outline btn-sm operations-action">Manage Guest</a>
                         </article>
-                        @if ($booking->discounts->isNotEmpty())
-                            @include('partials.arrival-review-dialog', ['booking' => $booking, 'dashboardPrefix' => $dashboardPrefix, 'allowCheckIn' => false])
-                        @endif
                     @empty
                         <div class="operations-empty"><i class="fa fa-bed"></i><p>No guests are currently checked in.</p></div>
                     @endforelse

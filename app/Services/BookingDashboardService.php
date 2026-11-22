@@ -118,7 +118,7 @@ class BookingDashboardService
             ->count();
         $currentGuests = $bookingScope()
             ->where('status', BookingStatus::CHECKED_IN)
-            ->with(['unit.house', 'guest', 'guests', 'discounts.guest', 'discounts.verifiedBy'])
+            ->with(['unit.house', 'guest', 'guests'])
             ->orderBy('check_out')
             ->orderBy('booking_id')
             ->get();
@@ -127,7 +127,7 @@ class BookingDashboardService
             ? null
             : $bookingScope()
                 ->where('booking_id', $focusBookingId)
-                ->whereIn('status', [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN])
+                ->where('status', BookingStatus::CONFIRMED)
                 ->with([
                     'unit.house',
                     'guest',

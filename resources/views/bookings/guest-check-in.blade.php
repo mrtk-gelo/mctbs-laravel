@@ -207,8 +207,12 @@
                             @elseif ($discount->verification_status === \App\Support\BookingStatus::PENDING && $discount->guest->roster_status !== \App\Models\BookingGuest::ROSTER_ACTIVE)
                                 <p class="form-hint mt-2">This guest was removed from the reservation, so the discount cannot be verified.</p>
                             @elseif ($discount->verification_status === \App\Support\BookingStatus::PENDING)
-                                <p class="form-hint mt-2">Review this ID from the dashboard’s Senior/PWD review modal.</p>
-                                <a href="{{ route($dashboardPrefix.'.dashboard', ['review' => $booking->booking_id]) }}" class="btn btn-outline btn-sm mt-2">Open dashboard review</a>
+                                @if ($booking->status === \App\Support\BookingStatus::CONFIRMED)
+                                    <p class="form-hint mt-2">Review this ID from the Upcoming Check-ins dashboard modal.</p>
+                                    <a href="{{ route($dashboardPrefix.'.dashboard', ['review' => $booking->booking_id]) }}" class="btn btn-outline btn-sm mt-2">Open arrival review</a>
+                                @else
+                                    <p class="form-hint mt-2">This ID has not been reviewed.</p>
+                                @endif
                             @endif
                             @if (in_array($discount->verification_status, ['Invalid', 'Rejected'], true) && $discount->verification_note)
                                 <p class="alert alert-danger mt-2 mb-0">Reason: {{ $discount->verification_note }}</p>
