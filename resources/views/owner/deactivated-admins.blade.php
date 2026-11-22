@@ -9,7 +9,7 @@
         </header>
         @if (session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
         @if (session('error'))<div class="alert alert-danger">{{ session('error') }}</div>@endif
-        <form method="GET" action="{{ route('owner.admins.deactivated') }}" class="card property-archive-filters account-lifecycle-filters account-lifecycle-filter-grid" role="search">
+        <form method="GET" action="{{ route('owner.admins.deactivated') }}" class="card property-archive-filters account-lifecycle-filters account-lifecycle-filter-grid account-lifecycle-owner-filter-grid" role="search">
             <div class="booking-list-filter-field booking-list-filter-search">
                 <label for="staff-search">Search</label>
                 <div class="property-archive-search"><i class="fa fa-search" aria-hidden="true"></i><input id="staff-search" type="search" name="q" value="{{ $search }}" placeholder="Search deactivated staff"></div>
