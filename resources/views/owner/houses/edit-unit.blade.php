@@ -101,7 +101,7 @@
                     <div class="form-group">
                         <label for="photos">Add More Photos</label>
                         <input id="photos" type="file" name="photos[]" accept="image/jpeg,image/png,image/webp" multiple>
-                        <p class="form-hint">The unit can have up to 10 photos total. JPG, PNG, or WebP; maximum 5 MB each.</p>
+                        <p class="form-hint">The unit can have up to 10 photos total. JPG, PNG, or WebP; maximum 10 MB each.</p>
                     </div>
                     <div style="display:flex;gap:10px">
                         <button type="submit" class="btn btn-primary"><i class="fa fa-floppy-disk"></i> Save Changes</button>
