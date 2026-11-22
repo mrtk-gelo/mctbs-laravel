@@ -2070,10 +2070,13 @@ test('owner reports total only verified payments for the selected period', funct
         ->assertOk()
         ->assertSee('Reports')
         ->assertDontSee('Manage Bookings')
-        ->assertSee('Net Revenue (after refunds)')
+        ->assertSee('Net Revenue')
+        ->assertSee('Payments received')
+        ->assertSee('Verified payments')
         ->assertDontSee('Main Revenue')
         ->assertSee('₱1,800.00')
-        ->assertDontSee('Refunds:')
+        ->assertSee('Refunds')
+        ->assertSee('₱0.00')
         ->assertSee('Cash')
         ->assertDontSee('GCash');
 
@@ -2351,7 +2354,7 @@ test('owner report filters revenue by quarter and selected house and subtracts p
     Payment::create([
         'booking_id' => $booking->booking_id,
         'payment_method' => 'GCash',
-        'amount' => 800,
+        'amount' => 2400,
         'payment_status' => PaymentStatus::VERIFIED,
         'payment_date' => now()->setYear($year)->setMonth(4)->setDay(10),
     ]);
@@ -2371,15 +2374,19 @@ test('owner report filters revenue by quarter and selected house and subtracts p
             'year' => $year,
             'quarter' => 'Q1',
             'house_id' => $house->house_id,
+            'report_tab' => 'breakdown',
+            'breakdown_section' => 'quarter',
         ]))
         ->assertOk()
-        ->assertSee('Revenue per Quarter')
+        ->assertSee('Quarterly Revenue')
+        ->assertSee('class="analytics-breakdown-panel active" data-breakdown-panel="quarter"', false)
         ->assertDontSee('Main Revenue')
         ->assertSee('Q1')
+        ->assertSee('₱1,000.00')
         ->assertSee('₱800.00')
-        ->assertSee('Refunds:')
+        ->assertSee('Refunds')
         ->assertSee('-₱200.00')
-        ->assertDontSee('₱1,800.00')
+        ->assertDontSee('₱2,400.00')
         ->assertSee('value="Q1" selected', false);
 });
 

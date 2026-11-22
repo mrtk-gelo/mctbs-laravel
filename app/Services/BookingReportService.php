@@ -27,13 +27,13 @@ class BookingReportService
         $from = Carbon::parse($filters['from_date'])->startOfDay();
         $to = Carbon::parse($filters['to_date'])->endOfDay();
         $payments = Payment::query()
-            ->with(['booking.unit'])
+            ->with(['booking.unit.house', 'booking.guest', 'booking.guests'])
             ->where('payment_status', PaymentStatus::VERIFIED)
             ->whereBetween('payment_date', [$from, $to])
             ->whereHas('booking.unit', fn ($query) => $query->whereIn('house_id', $visibleHouseIds))
             ->get();
         $refunds = Refund::query()
-            ->with(['booking.unit'])
+            ->with(['payment', 'booking.unit.house', 'booking.guest', 'booking.guests'])
             ->where('refund_status', 'Refunded')
             ->whereBetween('processed_at', [$from, $to])
             ->whereHas('payment', fn ($query) => $query->where('payment_status', PaymentStatus::VERIFIED))
@@ -92,6 +92,31 @@ class BookingReportService
         $totalReceived = (float) $payments->sum('amount');
         $totalRefunded = (float) $refunds->sum('amount');
         $periodLabel = ucfirst($filters['period']).' revenue from '.$from->format('M j, Y').' to '.$to->format('M j, Y');
+        $bookingChartRows = $this->bookingChartRows($createdBookings, $filters['period'], $from, $to);
+        $paymentChartRows = $this->paymentChartRows($payments, $filters['period'], $from, $to);
+        $transactions = $payments->map(fn (Payment $payment): array => [
+            'type' => 'Payment',
+            'reference' => $payment->reference_number ?: 'PAY-'.$payment->payment_id,
+            'booking_reference' => $payment->booking?->booking_reference,
+            'guest' => $payment->booking?->displayGuestName(),
+            'property' => $payment->booking?->unit?->house?->name,
+            'unit' => $payment->booking?->unit?->unit_type,
+            'payment_method' => $payment->payment_method ?: 'Other',
+            'date' => $payment->payment_date,
+            'amount' => (float) $payment->amount,
+            'status' => ucfirst((string) $payment->payment_status),
+        ])->concat($refunds->map(fn (Refund $refund): array => [
+            'type' => 'Refund',
+            'reference' => $refund->refund_reference ?: 'REF-'.$refund->refund_id,
+            'booking_reference' => $refund->booking?->booking_reference,
+            'guest' => $refund->booking?->displayGuestName(),
+            'property' => $refund->booking?->unit?->house?->name,
+            'unit' => $refund->booking?->unit?->unit_type,
+            'payment_method' => $refund->payment?->payment_method ?: 'Other',
+            'date' => $refund->processed_at,
+            'amount' => (float) $refund->amount,
+            'status' => ucfirst((string) $refund->refund_status),
+        ]))->sortByDesc(fn (array $transaction): int => $transaction['date']->getTimestamp())->values();
 
         return [
             'period' => $filters['period'],
@@ -129,7 +154,75 @@ class BookingReportService
                 'label' => $row['period'],
                 'revenue' => $row['revenue'],
             ]),
+            'bookingChartRows' => $bookingChartRows,
+            'paymentChartRows' => $paymentChartRows,
+            'transactions' => $transactions,
+            'recentTransactions' => $transactions->take(6)->values(),
         ];
+    }
+
+    /**
+     * @param  Collection<int, Booking>  $bookings
+     * @return array<int, array{label: string, value: int}>
+     */
+    private function bookingChartRows(Collection $bookings, string $period, Carbon $from, Carbon $to): array
+    {
+        $keys = $this->chartKeys($period, $from, $to);
+        $totals = $bookings->groupBy(function (Booking $booking) use ($period): string {
+            return $this->chartKey($booking->check_in, $period);
+        })->map(fn (Collection $rows): int => $rows->count());
+
+        return collect($keys)->map(fn (string $label, string $key): array => [
+            'label' => $label,
+            'value' => (int) $totals->get($key, 0),
+        ])->values()->all();
+    }
+
+    /**
+     * @param  Collection<int, Payment>  $payments
+     * @return array<int, array{label: string, value: float}>
+     */
+    private function paymentChartRows(Collection $payments, string $period, Carbon $from, Carbon $to): array
+    {
+        $keys = $this->chartKeys($period, $from, $to);
+        $totals = $payments->groupBy(fn (Payment $payment): string => $this->chartKey($payment->payment_date, $period))
+            ->map(fn (Collection $rows): float => (float) $rows->sum('amount'));
+
+        return collect($keys)->map(fn (string $label, string $key): array => [
+            'label' => $label,
+            'value' => (float) $totals->get($key, 0),
+        ])->values()->all();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function chartKeys(string $period, Carbon $from, Carbon $to): array
+    {
+        $keys = [];
+        $cursor = $period === 'annually'
+            ? $from->copy()->startOfMonth()
+            : ($period === 'weekly' ? $from->copy()->startOfDay() : $from->copy()->startOfWeek(Carbon::MONDAY));
+
+        while ($cursor->lte($to)) {
+            $keys[$this->chartKey($cursor, $period)] = $period === 'annually'
+                ? $cursor->format('M')
+                : ($period === 'weekly' ? $cursor->format('D') : $cursor->format('M j'));
+            $cursor = $period === 'weekly'
+                ? $cursor->addDay()
+                : ($period === 'annually' ? $cursor->addMonth() : $cursor->addWeek());
+        }
+
+        return $keys;
+    }
+
+    private function chartKey(Carbon $date, string $period): string
+    {
+        return match ($period) {
+            'weekly' => $date->toDateString(),
+            'annually' => $date->format('Y-m'),
+            default => $date->copy()->startOfWeek(Carbon::MONDAY)->toDateString(),
+        };
     }
 
     /**

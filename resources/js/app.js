@@ -546,3 +546,159 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+    const filterToggle = document.querySelector('.analytics-filter-toggle');
+    const filterPanel = document.getElementById('analytics-filter-panel');
+    filterToggle?.addEventListener('click', () => {
+        const opening = filterPanel.hidden;
+        filterPanel.hidden = !opening;
+        filterToggle.setAttribute('aria-expanded', String(opening));
+    });
+
+    const setReportTab = (tabName) => {
+        document.querySelectorAll('[data-report-tab]').forEach((tab) => {
+            const active = tab.dataset.reportTab === tabName;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', String(active));
+        });
+        document.querySelectorAll('[data-report-panel]').forEach((panel) => {
+            panel.classList.toggle('active', panel.dataset.reportPanel === tabName);
+        });
+        const hiddenTab = filterPanel?.querySelector('input[name="report_tab"]');
+        if (hiddenTab) {
+            hiddenTab.value = tabName;
+        }
+    };
+    document.querySelectorAll('[data-report-tab]').forEach((tab) => {
+        tab.addEventListener('click', () => setReportTab(tab.dataset.reportTab));
+    });
+    document.querySelectorAll('[data-switch-report-tab]').forEach((button) => {
+        button.addEventListener('click', () => setReportTab(button.dataset.switchReportTab));
+    });
+
+    document.querySelectorAll('[data-breakdown-section]').forEach((tab) => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('[data-breakdown-section]').forEach((item) => item.classList.toggle('active', item === tab));
+            document.querySelectorAll('[data-breakdown-panel]').forEach((panel) => {
+                panel.classList.toggle('active', panel.dataset.breakdownPanel === tab.dataset.breakdownSection);
+            });
+        });
+    });
+
+    const chartContainer = document.getElementById('analytics-line-chart');
+    const chartTitle = document.getElementById('analytics-chart-title');
+    const chartHeadline = document.getElementById('analytics-chart-headline');
+    const formatCurrency = (value) => new Intl.NumberFormat('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+        maximumFractionDigits: 2,
+    }).format(value);
+
+    const drawChart = (metric) => {
+        if (!chartContainer || !window.analyticsDatasets) {
+            return;
+        }
+        const rows = window.analyticsDatasets[metric] ?? [];
+        const width = 900;
+        const height = 300;
+        const padding = { top: 24, right: 18, bottom: 42, left: 74 };
+        const values = rows.map((row) => Number(row.value) || 0);
+        const maximum = Math.max(...values, 1);
+        const plotWidth = width - padding.left - padding.right;
+        const plotHeight = height - padding.top - padding.bottom;
+        const points = rows.map((row, index) => {
+            const x = rows.length === 1
+                ? padding.left + plotWidth / 2
+                : padding.left + (index / (rows.length - 1)) * plotWidth;
+            const y = padding.top + plotHeight - (Number(row.value) / maximum) * plotHeight;
+            return { x, y, ...row };
+        });
+
+        if (rows.length === 0) {
+            chartContainer.innerHTML = '<div class="analytics-empty analytics-chart-empty">No data available for this reporting period.</div>';
+            return;
+        }
+
+        const grid = Array.from({ length: 5 }, (_, index) => {
+            const y = padding.top + (index / 4) * plotHeight;
+            const value = maximum - (index / 4) * maximum;
+            const label = metric === 'revenue' || metric === 'payments'
+                ? formatCurrency(value)
+                : String(Math.round(value));
+            return `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" class="analytics-chart-grid"/>
+                <text x="${padding.left - 12}" y="${y + 4}" text-anchor="end" class="analytics-chart-axis">${label}</text>`;
+        }).join('');
+        const polyline = points.map((point) => `${point.x},${point.y}`).join(' ');
+        const area = points.length
+            ? `M ${points[0].x} ${padding.top + plotHeight} L ${points.map((point) => `${point.x} ${point.y}`).join(' L')} L ${points.at(-1).x} ${padding.top + plotHeight} Z`
+            : '';
+        const dots = points.map((point) => `
+            <circle cx="${point.x}" cy="${point.y}" r="4" class="analytics-chart-dot">
+                <title>${point.label}: ${metric === 'revenue' || metric === 'payments' ? formatCurrency(point.value) : point.value}</title>
+            </circle>`).join('');
+        const labelStep = Math.max(1, Math.ceil(rows.length / 8));
+        const labels = points.map((point, index) => index % labelStep === 0 || index === points.length - 1
+            ? `<text x="${point.x}" y="${height - 12}" text-anchor="middle" class="analytics-chart-axis">${point.label}</text>`
+            : '').join('');
+
+        chartContainer.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            ${grid}
+            <path d="${area}" class="analytics-chart-area"></path>
+            <polyline points="${polyline}" class="analytics-chart-line"></polyline>
+            ${dots}${labels}
+        </svg>`;
+    };
+
+    document.querySelectorAll('[data-chart-metric]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const metric = button.dataset.chartMetric;
+            document.querySelectorAll('[data-chart-metric]').forEach((item) => {
+                const active = item === button;
+                item.classList.toggle('active', active);
+                item.setAttribute('aria-selected', String(active));
+            });
+            chartTitle.textContent = {
+                revenue: 'Net Revenue',
+                bookings: 'Booking Count',
+                payments: 'Verified Payments',
+            }[metric];
+            chartHeadline.textContent = metric === 'revenue'
+                ? formatCurrency(window.analyticsTotalRevenue)
+                : (metric === 'payments' ? formatCurrency(window.analyticsTotalPayments) : String(window.analyticsTotalBookings));
+            drawChart(metric);
+        });
+    });
+    drawChart('revenue');
+
+    const reportYear = document.getElementById('report-year');
+    const reportQuarter = document.getElementById('report-quarter');
+    const reportFrom = document.getElementById('report-from-date');
+    const reportTo = document.getElementById('report-to-date');
+    const fillQuarterRange = () => {
+        if (!reportYear || !reportQuarter || !reportFrom || !reportTo) {
+            return;
+        }
+        const year = Number(reportYear.value);
+        const quarter = reportQuarter.value;
+        if (quarter === 'Custom') {
+            return;
+        }
+        const startMonth = quarter === 'All' ? 1 : (Number(quarter.slice(1)) - 1) * 3 + 1;
+        const endMonth = quarter === 'All' ? 12 : startMonth + 2;
+        reportFrom.value = `${year}-${String(startMonth).padStart(2, '0')}-01`;
+        const end = new Date(year, endMonth, 0);
+        reportTo.value = `${year}-${String(endMonth).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+    };
+    reportQuarter?.addEventListener('change', fillQuarterRange);
+    reportYear?.addEventListener('change', () => {
+        if (reportQuarter?.value !== 'Custom') {
+            fillQuarterRange();
+        }
+    });
+    [reportFrom, reportTo].forEach((field) => field?.addEventListener('input', () => {
+        if (reportQuarter) {
+            reportQuarter.value = 'Custom';
+        }
+    }));
+});

@@ -162,7 +162,11 @@ test('owner creates a per-head walk-in with free children and a Senior discount'
         'year' => Carbon::parse($checkIn)->year,
         'from_date' => $checkIn,
         'to_date' => $checkOut,
-    ]))->assertOk();
+    ]))->assertOk()
+        ->assertSee('Reports & Analytics')
+        ->assertSee('data-report-tab="overview"', false)
+        ->assertSee('Transaction Report')
+        ->assertSee('Booking Activity by Property');
 
     $report = app(BookingReportService::class)->generate(collect([$house->house_id]), [
         'period' => 'monthly',
