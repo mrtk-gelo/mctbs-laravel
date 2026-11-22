@@ -84,6 +84,8 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
     Route::get('/dashboard', [OwnerDashboardController::class, 'index'])->name('dashboard');
     Route::get('/houses', [OwnerHouseController::class, 'index'])->name('houses.index');
     Route::get('/houses/archive', [OwnerHouseController::class, 'archiveIndex'])->name('houses.archive.index');
+    Route::get('/houses/archive/export', [OwnerHouseController::class, 'exportArchive'])->name('houses.archive.export');
+    Route::post('/houses/archive/bulk', [OwnerHouseController::class, 'bulkArchiveAction'])->name('houses.archive.bulk');
     Route::post('/houses/archive/bulk-houses', [OwnerHouseController::class, 'bulkHouseArchiveAction'])->name('houses.archive.houses');
     Route::post('/houses/archive/bulk-units', [OwnerHouseController::class, 'bulkUnitArchiveAction'])->name('houses.archive.units');
     Route::get('/houses/create', [OwnerHouseController::class, 'create'])->name('houses.create');
@@ -148,6 +150,8 @@ Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->grou
     Route::get('/dashboard', [StaffDashboardController::class, 'index'])->name('dashboard');
     Route::get('/houses', [OwnerHouseController::class, 'index'])->name('houses.index');
     Route::get('/houses/archive', [OwnerHouseController::class, 'archiveIndex'])->name('houses.archive.index');
+    Route::get('/houses/archive/export', [OwnerHouseController::class, 'exportArchive'])->name('houses.archive.export');
+    Route::post('/houses/archive/bulk', [OwnerHouseController::class, 'bulkArchiveAction'])->name('houses.archive.bulk');
     Route::post('/houses/archive/bulk-houses', [OwnerHouseController::class, 'bulkHouseArchiveAction'])->name('houses.archive.houses');
     Route::post('/houses/archive/bulk-units', [OwnerHouseController::class, 'bulkUnitArchiveAction'])->name('houses.archive.units');
     Route::post('/houses/{house}/archive', [OwnerHouseController::class, 'archiveHouse'])->name('houses.archive');

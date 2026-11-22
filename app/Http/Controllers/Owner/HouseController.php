@@ -10,9 +10,11 @@ use App\Models\Unit;
 use App\Models\UnitPhoto;
 use App\Services\PropertyArchiveService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -20,6 +22,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 class HouseController extends Controller
@@ -37,52 +40,60 @@ class HouseController extends Controller
 
     public function archiveIndex(Request $request): View
     {
-        $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100'],
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date', 'after_or_equal:from'],
-        ]);
-        $search = trim((string) ($filters['q'] ?? ''));
-        $houseQuery = $this->accessibleHouses()
-            ->with('archivedBy')
-            ->withCount('units')
-            ->whereNotNull('archived_at');
-        $unitQuery = Unit::query()
-            ->with(['house.archivedBy', 'archivedBy'])
-            ->whereNotNull('archived_at')
-            ->whereIn('house_id', $this->accessibleHouses()->select('house_id'));
-
-        foreach (['from' => '>=', 'to' => '<='] as $field => $operator) {
-            if (isset($filters[$field])) {
-                $houseQuery->whereDate('archived_at', $operator, $filters[$field]);
-                $unitQuery->whereDate('archived_at', $operator, $filters[$field]);
-            }
-        }
-
-        if ($search !== '') {
-            $houseQuery->where(function (Builder $query) use ($search): void {
-                $query->where('name', 'like', "%{$search}%")
-                    ->orWhere('address', 'like', "%{$search}%")
-                    ->orWhere('city', 'like', "%{$search}%")
-                    ->orWhere('barangay', 'like', "%{$search}%");
-            });
-            $unitQuery->where(function (Builder $query) use ($search): void {
-                $query->where('unit_type', 'like', "%{$search}%")
-                    ->orWhereHas('house', function (Builder $houseQuery) use ($search): void {
-                        $houseQuery->where('name', 'like', "%{$search}%")
-                            ->orWhere('address', 'like', "%{$search}%")
-                            ->orWhere('city', 'like', "%{$search}%")
-                            ->orWhere('barangay', 'like', "%{$search}%");
-                    });
-            });
-        }
+        $filters = $this->validatedArchiveFilters($request);
+        $recordsQuery = $this->archiveRecordsQuery($filters);
+        $total = (clone $recordsQuery)->count();
+        $records = (clone $recordsQuery)
+            ->orderByDesc('archived_at')
+            ->orderBy('resource')
+            ->orderByDesc('entity_id')
+            ->forPage($filters['page'], $filters['per_page'])
+            ->get();
+        $paginator = new LengthAwarePaginator(
+            $records,
+            $total,
+            $filters['per_page'],
+            $filters['page'],
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
 
         return view('owner.houses.archive', [
-            'houses' => $houseQuery->orderByDesc('archived_at')->orderByDesc('house_id')->paginate(15, ['*'], 'housePage')->withQueryString(),
-            'units' => $unitQuery->orderByDesc('archived_at')->orderByDesc('unit_id')->paginate(15, ['*'], 'unitPage')->withQueryString(),
+            'records' => $paginator,
             'filters' => $filters,
             'dashboardPrefix' => Auth::user()->role->name === 'Staff' ? 'staff' : 'owner',
         ]);
+    }
+
+    public function exportArchive(Request $request): StreamedResponse
+    {
+        $filters = $this->validatedArchiveFilters($request);
+        $records = $this->archiveRecordsQuery($filters)
+            ->orderByDesc('archived_at')
+            ->orderBy('resource')
+            ->orderByDesc('entity_id');
+
+        return response()->streamDownload(function () use ($records): void {
+            $output = fopen('php://output', 'wb');
+
+            if ($output === false) {
+                throw new RuntimeException('The archive export stream could not be opened.');
+            }
+
+            fputcsv($output, ['Resource', 'Record', 'House', 'Archived At', 'Archived By']);
+
+            foreach ($records->cursor() as $record) {
+                $archivedBy = trim(($record->archived_by_first_name ?? '').' '.($record->archived_by_last_name ?? ''));
+                fputcsv($output, [
+                    $record->resource,
+                    $this->safeArchiveCsvValue($record->record_name),
+                    $this->safeArchiveCsvValue($record->house_name),
+                    $record->archived_at,
+                    $this->safeArchiveCsvValue($archivedBy !== '' ? $archivedBy : 'Former user'),
+                ]);
+            }
+
+            fclose($output);
+        }, 'property-archives.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     public function create(): View
@@ -229,6 +240,92 @@ class HouseController extends Controller
             $unit = $units->get($unitId);
             $house = $unit->house;
             if ($data['action'] === 'restore') {
+                try {
+                    $archive->restoreUnit($house, $unit);
+                    $results[] = "{$unit->unit_type} at {$house->name} restored.";
+                } catch (ValidationException $exception) {
+                    $results[] = "{$unit->unit_type} at {$house->name} not restored: ".$this->firstValidationError($exception);
+                }
+
+                continue;
+            }
+
+            $result = $archive->permanentlyDeleteUnit($house, $unit);
+            $results[] = "{$unit->unit_type} at {$house->name}: {$result['message']}"
+                .($result['cleanup_warning'] ? ' '.$result['cleanup_warning'] : '');
+        }
+
+        return redirect()
+            ->route($this->routeName('houses.archive.index'))
+            ->with('archiveResults', $results);
+    }
+
+    public function bulkArchiveAction(Request $request, PropertyArchiveService $archive): RedirectResponse
+    {
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['restore', 'delete'])],
+            'records' => ['required', 'array', 'min:1', 'max:50'],
+            'records.*' => ['required', 'string', 'regex:/^(house|unit):[1-9][0-9]*$/', 'distinct'],
+        ]);
+        $selectedRecords = collect($data['records'])->map(function (string $recordKey): array {
+            [$resource, $id] = explode(':', $recordKey, 2);
+
+            return ['resource' => $resource, 'id' => (int) $id];
+        });
+        $houseIds = $selectedRecords->where('resource', 'house')->pluck('id')->all();
+        $unitIds = $selectedRecords->where('resource', 'unit')->pluck('id')->all();
+        $houses = $this->accessibleHouses()
+            ->whereNotNull('archived_at')
+            ->whereIn('house_id', $houseIds)
+            ->get()
+            ->keyBy('house_id');
+        $units = Unit::query()
+            ->with('house')
+            ->whereNotNull('archived_at')
+            ->whereIn('unit_id', $unitIds)
+            ->whereIn('house_id', $this->accessibleHouses()->select('house_id'))
+            ->get()
+            ->keyBy('unit_id');
+
+        abort_unless($houses->count() === count($houseIds) && $units->count() === count($unitIds), 404);
+
+        $recordsToProcess = $data['action'] === 'delete'
+            ? $selectedRecords->sortBy(fn (array $record): int => $record['resource'] === 'unit' ? 0 : 1)->values()
+            : $selectedRecords->sortBy(fn (array $record): int => $record['resource'] === 'house' ? 0 : 1)->values();
+        $restoredHouseIds = [];
+        $results = [];
+
+        foreach ($recordsToProcess as $selectedRecord) {
+            if ($selectedRecord['resource'] === 'house') {
+                $house = $houses->get($selectedRecord['id']);
+                if ($data['action'] === 'restore') {
+                    try {
+                        $archive->restoreHouse($house);
+                        $restoredHouseIds[] = $house->house_id;
+                        $results[] = "{$house->name} restored.";
+                    } catch (ValidationException $exception) {
+                        $results[] = "{$house->name} not restored: ".$this->firstValidationError($exception);
+                    }
+
+                    continue;
+                }
+
+                $result = $archive->permanentlyDeleteHouse($house);
+                $results[] = "{$house->name}: {$result['message']}".($result['cleanup_warning'] ? ' '.$result['cleanup_warning'] : '');
+
+                continue;
+            }
+
+            $unit = $units->get($selectedRecord['id']);
+            $house = $unit->house;
+
+            if ($data['action'] === 'restore') {
+                if ($unit->archived_with_house && in_array($house->house_id, $restoredHouseIds, true)) {
+                    $results[] = "{$unit->unit_type} at {$house->name} restored with its house.";
+
+                    continue;
+                }
+
                 try {
                     $archive->restoreUnit($house, $unit);
                     $results[] = "{$unit->unit_type} at {$house->name} restored.";
@@ -608,6 +705,148 @@ class HouseController extends Controller
             ->exists();
 
         abort_unless($hasAssignment, 404);
+    }
+
+    /**
+     * @return array{resource: string, q: string, from: ?string, to: ?string, per_page: int, page: int}
+     */
+    private function validatedArchiveFilters(Request $request): array
+    {
+        $filters = $request->validate([
+            'resource' => ['nullable', Rule::in(['all', 'house', 'unit'])],
+            'q' => ['nullable', 'string', 'max:100'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'per_page' => ['nullable', Rule::in([10, 25, 50])],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        return [
+            'resource' => $filters['resource'] ?? 'all',
+            'q' => trim((string) ($filters['q'] ?? '')),
+            'from' => $filters['from'] ?? null,
+            'to' => $filters['to'] ?? null,
+            'per_page' => (int) ($filters['per_page'] ?? 10),
+            'page' => (int) ($filters['page'] ?? 1),
+        ];
+    }
+
+    /**
+     * @param  array{resource: string, q: string, from: ?string, to: ?string, per_page: int, page: int}  $filters
+     */
+    private function archiveRecordsQuery(array $filters): QueryBuilder
+    {
+        if ($filters['resource'] === 'house') {
+            return DB::query()->fromSub($this->houseArchiveQuery($filters), 'archived_properties');
+        }
+
+        if ($filters['resource'] === 'unit') {
+            return DB::query()->fromSub($this->unitArchiveQuery($filters), 'archived_properties');
+        }
+
+        return DB::query()->fromSub(
+            $this->houseArchiveQuery($filters)->unionAll($this->unitArchiveQuery($filters)),
+            'archived_properties'
+        );
+    }
+
+    private function safeArchiveCsvValue(?string $value): ?string
+    {
+        if ($value !== null && preg_match('/^[\x00-\x20]*[=+\-@]/', $value) === 1) {
+            return "'".$value;
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param  array{resource: string, q: string, from: ?string, to: ?string, per_page: int, page: int}  $filters
+     */
+    private function houseArchiveQuery(array $filters): QueryBuilder
+    {
+        $query = DB::table('transient_houses')
+            ->leftJoin('users as archive_users', 'archive_users.user_id', '=', 'transient_houses.archived_by')
+            ->whereNotNull('transient_houses.archived_at')
+            ->whereIn('transient_houses.house_id', $this->accessibleHouses()->select('house_id'))
+            ->selectRaw("'house' as entity_type")
+            ->addSelect([
+                'transient_houses.house_id as entity_id',
+                'transient_houses.house_id as house_id',
+                DB::raw('NULL as unit_id'),
+                DB::raw("'House' as resource"),
+                'transient_houses.name as record_name',
+                DB::raw('NULL as house_name'),
+                DB::raw('NULL as house_archived_at'),
+                'transient_houses.archived_at as archived_at',
+                'archive_users.first_name as archived_by_first_name',
+                'archive_users.last_name as archived_by_last_name',
+            ]);
+
+        if ($filters['from'] !== null) {
+            $query->whereDate('transient_houses.archived_at', '>=', $filters['from']);
+        }
+
+        if ($filters['to'] !== null) {
+            $query->whereDate('transient_houses.archived_at', '<=', $filters['to']);
+        }
+
+        if ($filters['q'] !== '') {
+            $search = "%{$filters['q']}%";
+            $query->where(function (QueryBuilder $query) use ($search): void {
+                $query->where('transient_houses.name', 'like', $search)
+                    ->orWhere('transient_houses.address', 'like', $search)
+                    ->orWhere('transient_houses.city', 'like', $search)
+                    ->orWhere('transient_houses.barangay', 'like', $search);
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * @param  array{resource: string, q: string, from: ?string, to: ?string, per_page: int, page: int}  $filters
+     */
+    private function unitArchiveQuery(array $filters): QueryBuilder
+    {
+        $query = DB::table('units')
+            ->join('transient_houses as houses', 'houses.house_id', '=', 'units.house_id')
+            ->leftJoin('users as archive_users', 'archive_users.user_id', '=', 'units.archived_by')
+            ->whereNotNull('units.archived_at')
+            ->whereIn('units.house_id', $this->accessibleHouses()->select('house_id'))
+            ->selectRaw("'unit' as entity_type")
+            ->addSelect([
+                'units.unit_id as entity_id',
+                'units.house_id as house_id',
+                'units.unit_id as unit_id',
+                DB::raw("'Unit' as resource"),
+                'units.unit_type as record_name',
+                'houses.name as house_name',
+                'houses.archived_at as house_archived_at',
+                'units.archived_at as archived_at',
+                'archive_users.first_name as archived_by_first_name',
+                'archive_users.last_name as archived_by_last_name',
+            ]);
+
+        if ($filters['from'] !== null) {
+            $query->whereDate('units.archived_at', '>=', $filters['from']);
+        }
+
+        if ($filters['to'] !== null) {
+            $query->whereDate('units.archived_at', '<=', $filters['to']);
+        }
+
+        if ($filters['q'] !== '') {
+            $search = "%{$filters['q']}%";
+            $query->where(function (QueryBuilder $query) use ($search): void {
+                $query->where('units.unit_type', 'like', $search)
+                    ->orWhere('houses.name', 'like', $search)
+                    ->orWhere('houses.address', 'like', $search)
+                    ->orWhere('houses.city', 'like', $search)
+                    ->orWhere('houses.barangay', 'like', $search);
+            });
+        }
+
+        return $query;
     }
 
     private function routeName(string $name): string
