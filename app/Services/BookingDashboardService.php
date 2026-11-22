@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\Invitation;
+use App\Models\Payment;
 use App\Models\Role;
 use App\Models\TransientHouse;
 use App\Models\User;
@@ -16,7 +17,7 @@ class BookingDashboardService
     public function __construct(private BookingWorkflowService $workflow) {}
 
     /**
-     * @return array{houses: Collection, pendingBookings: Collection, paymentReviews: Collection, upcomingCheckIns: Collection, currentGuests: Collection}
+     * @return array{houses: Collection, pendingBookings: Collection, pendingBookingsTotal: int, paymentReviews: Collection, paymentReviewsTotal: int, upcomingCheckIns: Collection, upcomingCheckInsTotal: int, currentGuests: Collection, currentGuestsTotal: int}
      */
     public function queuesFor(User $user): array
     {
@@ -46,7 +47,7 @@ class BookingDashboardService
         $upcomingCheckIns = $bookingScope()
             ->where('status', BookingStatus::CONFIRMED)
             ->whereDate('check_in', '>=', today()->toDateString())
-            ->with(['unit', 'guest', 'guests', 'payments' => fn ($query) => $query
+            ->with(['unit.house', 'guest', 'guests', 'payments' => fn ($query) => $query
                 ->where('payment_status', PaymentStatus::VERIFIED)])
             ->orderBy('check_in')
             ->orderBy('booking_id')
@@ -54,8 +55,10 @@ class BookingDashboardService
             ->filter(fn (Booking $booking): bool => $booking->payments->isNotEmpty()
                 && (float) $booking->payments->sum('amount') >= $booking->downpaymentAmount())
             ->values();
+        $upcomingCheckInsTotal = $upcomingCheckIns->count();
+        $upcomingCheckIns = $upcomingCheckIns->take(5)->values();
 
-        $paymentReviews = $bookingScope()
+        $paymentReviewQuery = $bookingScope()
             ->whereIn('status', [BookingStatus::ACCEPTED, BookingStatus::CONFIRMED])
             ->where(function ($query): void {
                 $query->whereHas('payments', fn ($paymentQuery) => $paymentQuery
@@ -65,36 +68,63 @@ class BookingDashboardService
                             ->whereDoesntHave('payments', fn ($paymentQuery) => $paymentQuery
                                 ->where('payment_status', PaymentStatus::VERIFIED));
                     });
-            })
+            });
+        $underReviewPaymentCount = Payment::query()
+            ->where('payment_status', PaymentStatus::UNDER_REVIEW)
+            ->whereHas('booking', fn ($query) => $query
+                ->whereIn('status', [BookingStatus::ACCEPTED, BookingStatus::CONFIRMED])
+                ->whereHas('unit', fn ($unitQuery) => $unitQuery->whereIn('house_id', $houseIds)))
+            ->count();
+        $unpaidAcceptedCount = $bookingScope()
+            ->where('status', BookingStatus::ACCEPTED)
+            ->whereDoesntHave('payments', fn ($paymentQuery) => $paymentQuery
+                ->where('payment_status', PaymentStatus::UNDER_REVIEW))
+            ->whereDoesntHave('payments', fn ($paymentQuery) => $paymentQuery
+                ->where('payment_status', PaymentStatus::VERIFIED))
+            ->count();
+        $paymentReviewsTotal = $underReviewPaymentCount + $unpaidAcceptedCount;
+
+        $paymentReviews = $paymentReviewQuery
             ->with(['unit.house', 'guest', 'guests', 'payments' => fn ($query) => $query
                 ->where('payment_status', PaymentStatus::UNDER_REVIEW)
                 ->orderBy('payment_date')])
             ->orderByRaw('CASE status WHEN ? THEN 1 ELSE 2 END', [BookingStatus::ACCEPTED])
             ->orderBy('updated_at')
-            ->limit(8)
+            ->limit(5)
             ->get();
 
         $paymentReviews->each(function (Booking $booking): void {
             $booking->setAttribute('payment_overdue', $this->workflow->isPaymentOverdue($booking));
         });
 
+        $pendingBookings = $bookingScope()
+            ->where('status', BookingStatus::PENDING)
+            ->with(['unit.house', 'guest', 'guests'])
+            ->orderBy('created_at')
+            ->orderBy('booking_id')
+            ->limit(5)
+            ->get();
+        $pendingBookingsTotal = $bookingScope()
+            ->where('status', BookingStatus::PENDING)
+            ->count();
+        $currentGuests = $bookingScope()
+            ->where('status', BookingStatus::CHECKED_IN)
+            ->with(['unit.house', 'guest', 'guests'])
+            ->orderBy('check_out')
+            ->orderBy('booking_id')
+            ->get();
+        $currentGuestsTotal = $currentGuests->count();
+
         return [
             'houses' => $houses,
-            'pendingBookings' => $bookingScope()
-                ->where('status', BookingStatus::PENDING)
-                ->with(['unit.house', 'guest', 'guests'])
-                ->orderBy('created_at')
-                ->orderBy('booking_id')
-                ->limit(8)
-                ->get(),
+            'pendingBookings' => $pendingBookings,
+            'pendingBookingsTotal' => $pendingBookingsTotal,
             'paymentReviews' => $paymentReviews,
+            'paymentReviewsTotal' => $paymentReviewsTotal,
             'upcomingCheckIns' => $upcomingCheckIns,
-            'currentGuests' => $bookingScope()
-                ->where('status', BookingStatus::CHECKED_IN)
-                ->with(['unit', 'guest', 'guests'])
-                ->orderBy('check_out')
-                ->orderBy('booking_id')
-                ->get(),
+            'upcomingCheckInsTotal' => $upcomingCheckInsTotal,
+            'currentGuests' => $currentGuests->take(5)->values(),
+            'currentGuestsTotal' => $currentGuestsTotal,
         ];
     }
 }
