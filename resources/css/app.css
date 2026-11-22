@@ -793,7 +793,7 @@
     margin-bottom: 24px;
 }
 
-.account-lifecycle-owner-filter-grid {
+.account-lifecycle-filters.account-lifecycle-owner-filter-grid {
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
 }
 
@@ -905,6 +905,10 @@
     }
 
     .account-lifecycle-filters {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .account-lifecycle-filters.account-lifecycle-owner-filter-grid {
         grid-template-columns: minmax(0, 1fr);
     }
 
