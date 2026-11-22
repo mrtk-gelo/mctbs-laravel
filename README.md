@@ -124,6 +124,35 @@ npm run dev
 
 Keep both development commands running while working with hot reload.
 
+## Deploy on Railway
+
+We deploy on Railway without Docker. Railway builds the app automatically.
+
+Uploaded photos, payment proofs, and backups are stored in `storage/app`. Railway deletes normal files on every redeploy, so add a Volume to the Laravel service with the mount path `/app/storage/app`. A Volume can be attached to only one service and may cause a short downtime during redeploys. Photos and files saved while testing on Railway are kept only when the Volume is attached.
+
+If an upload fails with "permission denied", add the variable `RAILWAY_RUN_UID=0`.
+
+Set these variables on the Laravel service:
+
+```text
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://<your-railway-link>
+APP_KEY
+DB_CONNECTION
+DB_HOST
+DB_PORT
+DB_DATABASE
+DB_USERNAME
+DB_PASSWORD
+RAILPACK_PHP_EXTENSIONS=gd
+SESSION_DRIVER=database
+CACHE_STORE=database
+QUEUE_CONNECTION=sync
+```
+
+The weekly scheduled backup does not run on Railway. Use the Backup button on the admin page.
+
 ## Running Automated Tests
 
 Run the Laravel test suite with:
