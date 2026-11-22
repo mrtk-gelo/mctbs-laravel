@@ -196,6 +196,7 @@ test('owner lists reuse archive-style table and pagination controls', function (
         ->get(route('owner.admins.index'))
         ->assertOk()
         ->assertSee('Registered after')
+        ->assertSee('account-lifecycle-owner-filter-grid', false)
         ->assertSee('Rows per page')
         ->assertSee('Active')
         ->assertSee('View Deactivated Staff')
