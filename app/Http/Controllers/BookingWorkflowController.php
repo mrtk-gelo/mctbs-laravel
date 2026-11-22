@@ -1142,6 +1142,12 @@ class BookingWorkflowController extends Controller
 
     public function reviewDiscount(Request $request, int $discountId, BookingWorkflowService $workflow): RedirectResponse
     {
+        $dashboardModal = $request->boolean('dashboard_modal');
+        $dashboardBookingId = (int) $request->input('dashboard_booking_id', 0);
+        if ($dashboardModal && $dashboardBookingId > 0) {
+            $request->session()->flash('openArrivalReview', $dashboardBookingId);
+        }
+
         $validated = $request->validate([
             'status' => ['required', 'in:Verified,Invalid,Rejected'],
             'verification_note' => [
@@ -1162,6 +1168,13 @@ class BookingWorkflowController extends Controller
             $validated['verification_note'] ?? null
         );
         $dashboardPrefix = strtolower($request->user()->role->name) === 'staff' ? 'staff' : 'owner';
+
+        if ($dashboardModal) {
+            return redirect()
+                ->route($dashboardPrefix.'.dashboard')
+                ->with('success', 'The Senior/PWD ID review was saved.')
+                ->with('openArrivalReview', $discount->booking_id);
+        }
 
         return redirect()
             ->route($dashboardPrefix.'.guests.check-in', $discount->booking_id)

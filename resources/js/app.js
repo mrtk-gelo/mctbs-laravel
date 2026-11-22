@@ -101,6 +101,11 @@ document.addEventListener('DOMContentLoaded', () => {
             dialog.showModal();
         }
     });
+    document.querySelectorAll('[data-auto-open-arrival-review="true"]').forEach((dialog) => {
+        if (typeof dialog.showModal === 'function') {
+            dialog.showModal();
+        }
+    });
 
     const scrollSections = [...document.querySelectorAll('[data-scroll-section]')];
     const scrollNavLinks = [...document.querySelectorAll('[data-scroll-nav]')];

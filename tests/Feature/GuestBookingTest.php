@@ -4085,10 +4085,11 @@ test('owner can check in a guest with a verified downpayment on the booking star
         ->assertSee('Review arrival details')
         ->assertSee('Second Guest')
         ->assertSee('Child Guest')
+        ->assertSee('Senior/PWD Verification')
         ->assertSee('Headcount')
         ->assertSee(route('owner.bookings.check-in', $booking->booking_id), false)
         ->assertSee(route('owner.guests.check-in', $booking->booking_id), false)
-        ->assertDontSee('SC-CHECKIN-PRIVATE')
+        ->assertSee('SC-CHECKIN-PRIVATE')
         ->assertDontSee('Check in this guest?', false);
 
     $this->post(route('owner.bookings.check-in', $booking->booking_id), [
@@ -4110,6 +4111,9 @@ test('owner can check in a guest with a verified downpayment on the booking star
     $this->get(route('owner.guests.check-in', $booking->booking_id))
         ->assertSee('Stay Details')
         ->assertSee('SC-CHECKIN-PRIVATE')
+        ->assertSee('Review this ID from the dashboard’s Senior/PWD review modal.')
+        ->assertDontSee('Verify ID')
+        ->assertDontSee('Reject ID')
         ->assertSee('Amenities Added');
 });
 
@@ -4138,6 +4142,52 @@ test('owner dashboard limits operational previews while showing accurate totals'
         ->assertSee('PREVIEW-5')
         ->assertDontSee('PREVIEW-6')
         ->assertSee('View all');
+});
+
+test('owner can open a checked-in guest ID review modal outside the dashboard preview', function () {
+    ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
+    $bookings = collect(range(1, 6))->map(fn (int $index): Booking => Booking::create([
+        'user_id' => $guest->user_id,
+        'unit_id' => $unit->unit_id,
+        'check_in' => today()->subDays($index),
+        'check_out' => today()->addDays($index),
+        'adult_count' => 1,
+        'child_count' => 0,
+        'total_price' => 3600,
+        'booking_reference' => 'CHECKED-IN-'.$index,
+        'status' => BookingStatus::CHECKED_IN,
+    ]));
+    $booking = $bookings->last();
+    $bookingGuest = BookingGuest::create([
+        'booking_id' => $booking->booking_id,
+        'full_name' => 'Outside Preview Guest',
+        'guest_type' => 'adult',
+        'share_amount' => 3600,
+        'is_primary_guest' => true,
+    ]);
+    BookingDiscount::create([
+        'booking_id' => $booking->booking_id,
+        'booking_guest_id' => $bookingGuest->booking_guest_id,
+        'discount_type' => 'PWD',
+        'id_reference' => 'OUTSIDE-PREVIEW-ID',
+        'verification_status' => BookingStatus::PENDING,
+        'eligible_amount' => 3600,
+        'discount_rate' => 20,
+        'discount_amount' => 720,
+        'final_amount' => 2880,
+        'refund_amount' => 0,
+        'refund_status' => 'None',
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('owner.dashboard', ['review' => $booking->booking_id]))
+        ->assertSee('OUTSIDE-PREVIEW-ID')
+        ->assertSee('data-auto-open-arrival-review="true"', false)
+        ->assertSee('id="arrival-review-'.$booking->booking_id.'"', false)
+        ->assertSee(route('owner.discounts.review', BookingDiscount::query()
+            ->where('booking_id', $booking->booking_id)
+            ->value('discount_id')), false)
+        ->assertDontSee('data-open-arrival-review="'.$booking->booking_id.'"', false);
 });
 
 test('owner dashboard lists paid confirmed arrivals on all future dates', function () {
@@ -4379,7 +4429,7 @@ test('check-in refuses bookings that do not meet the required conditions', funct
     ],
 ]);
 
-test('checked-in guests can verify an ID and apply its discount only to that guest share', function () {
+test('checked-in guests can verify an ID from the dashboard modal and apply it only to that guest share', function () {
     ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
     $booking = Booking::create([
         'user_id' => $guest->user_id,
@@ -4426,15 +4476,29 @@ test('checked-in guests can verify an ID and apply its discount only to that gue
         ->assertSee('Senior/PWD Verification')
         ->assertSee('SENIOR-CHECKIN-01')
         ->assertSee('Senior Guest')
-        ->assertSee('Verify')
+        ->assertDontSee('Verify ID')
+        ->assertDontSee('Reject ID');
+
+    $this->get(route('owner.dashboard'))
+        ->assertSee('SENIOR-CHECKIN-01')
+        ->assertSee('Verify ID')
         ->assertSee('Reject ID')
-        ->assertSee('data-discount-reason-panel  hidden', false);
+        ->assertSee('Review IDs');
 
     $this->post(route('owner.discounts.review', $discount->discount_id), [
         'status' => 'Verified',
         'verification_note' => '',
+        'dashboard_modal' => '1',
+        'dashboard_booking_id' => $booking->booking_id,
+        'dashboard_discount_id' => $discount->discount_id,
     ])
-        ->assertRedirect();
+        ->assertRedirect(route('owner.dashboard'))
+        ->assertSessionHas('openArrivalReview', $booking->booking_id);
+
+    $this->get(route('owner.dashboard'))
+        ->assertSee('data-auto-open-arrival-review="true"', false)
+        ->assertSee('SENIOR-CHECKIN-01')
+        ->assertSee('Reviewed by '.$owner->first_name.' '.$owner->last_name);
 
     expect($discount->fresh()->verification_status)->toBe('Verified')
         ->and($discount->fresh()->verified_by)->toBe($owner->user_id)
@@ -4482,21 +4546,32 @@ test('checked-in guests with invalid Senior/PWD IDs see the required message and
     ]);
 
     $this->actingAs($owner)
-        ->post(route('owner.discounts.review', $discount->discount_id), ['status' => 'Invalid'])
-        ->assertRedirect()
+        ->from(route('owner.dashboard'))
+        ->post(route('owner.discounts.review', $discount->discount_id), [
+            'status' => 'Invalid',
+            'dashboard_modal' => '1',
+            'dashboard_booking_id' => $booking->booking_id,
+            'dashboard_discount_id' => $discount->discount_id,
+        ])
+        ->assertRedirect(route('owner.dashboard'))
         ->assertSessionHasErrors([
             'verification_note' => 'Please explain why this ID cannot be accepted.',
-        ]);
+        ])
+        ->assertSessionHas('openArrivalReview', $booking->booking_id);
 
     expect($discount->fresh()->verification_status)->toBe(BookingStatus::PENDING);
-    $this->get(route('owner.guests.check-in', $booking->booking_id))
+    $this->get(route('owner.dashboard'))
         ->assertSee('Why can’t this ID be accepted?')
-        ->assertSee('Please explain why this ID cannot be accepted.');
+        ->assertSee('Please explain why this ID cannot be accepted.')
+        ->assertSee('data-auto-open-arrival-review="true"', false);
 
     $this->post(route('owner.discounts.review', $discount->discount_id), [
         'status' => 'Invalid',
         'verification_note' => 'The ID details do not match.',
-    ])->assertRedirect();
+        'dashboard_modal' => '1',
+        'dashboard_booking_id' => $booking->booking_id,
+        'dashboard_discount_id' => $discount->discount_id,
+    ])->assertRedirect(route('owner.dashboard'));
 
     expect($discount->fresh()->verification_status)->toBe('Invalid')
         ->and($discount->fresh()->verification_note)->toBe('The ID details do not match.')
@@ -4516,7 +4591,9 @@ test('checked-in guests with invalid Senior/PWD IDs see the required message and
 
     $this->actingAs($owner)
         ->get(route('owner.guests.check-in', $booking->booking_id))
-        ->assertSee('ID is invalid. Please tell the guest in person.');
+        ->assertSee('ID is invalid. Please tell the guest in person.')
+        ->assertSee('The ID details do not match.')
+        ->assertDontSee('Reject ID');
 });
 
 test('refunds for checked-in guests cannot exceed payments after previous refunds', function () {
