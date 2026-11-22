@@ -85,5 +85,10 @@
                 </div>
             @endforelse
         </div>
+        <div class="mt-4">
+            <a href="{{ route(auth()->user()->role->name === 'Staff' ? 'staff.houses.archive.index' : 'owner.houses.archive.index') }}" class="btn btn-outline">
+                <i class="fa fa-box-archive"></i> View Archived Properties
+            </a>
+        </div>
     </div>
 </x-shell>

@@ -95,8 +95,16 @@ class BookingWorkflowService
         $booking = Booking::with(['unit.house', 'guest'])->findOrFail($bookingId);
         $this->authorizeHouse($actor, $booking->unit->house);
         $acceptedBooking = DB::transaction(function () use ($booking): Booking {
+            $houseId = Unit::query()->whereKey($booking->unit_id)->firstOrFail()->house_id;
+            $house = TransientHouse::query()->whereKey($houseId)->lockForUpdate()->firstOrFail();
             $unit = Unit::query()->whereKey($booking->unit_id)->lockForUpdate()->firstOrFail();
             $booking = Booking::query()->whereKey($booking->booking_id)->lockForUpdate()->firstOrFail();
+
+            if ($unit->house_id !== $house->house_id
+                || $house->archived_at !== null
+                || $unit->archived_at !== null) {
+                throw ValidationException::withMessages(['booking' => 'Archived houses or units cannot accept booking requests.']);
+            }
 
             if ($booking->status !== BookingStatus::PENDING) {
                 throw ValidationException::withMessages(['booking' => 'Only pending booking requests can be accepted.']);
@@ -2090,6 +2098,8 @@ class BookingWorkflowService
         foreach ($this->overlappingPendingBookings($booking) as $next) {
             if ($next->status !== BookingStatus::PENDING
                 || $next->check_in->toDateString() <= today()->toDateString()
+                || $unit->archived_at !== null
+                || $unit->house->archived_at !== null
                 || $unit->status !== 'Available'
                 || $this->hasActiveOverlap($next)
                 || $this->hasBlockedDates($unit, $next)) {

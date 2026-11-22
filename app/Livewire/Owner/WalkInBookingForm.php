@@ -301,7 +301,9 @@ class WalkInBookingForm extends Component
 
         $query = Unit::query()
             ->with('house')
-            ->where('status', 'Available');
+            ->where('status', 'Available')
+            ->whereNull('archived_at')
+            ->whereHas('house', fn ($houseQuery) => $houseQuery->whereNull('archived_at'));
 
         if ($user->role?->name === 'Owner') {
             return $query

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TransientHouse extends Model
 {
@@ -29,6 +30,7 @@ class TransientHouse extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'social_links' => 'array',
+        'archived_at' => 'datetime',
     ];
 
     public function owner()
@@ -44,5 +46,10 @@ class TransientHouse extends Model
     public function invitations()
     {
         return $this->hasMany(Invitation::class, 'house_id', 'house_id');
+    }
+
+    public function archivedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'archived_by', 'user_id');
     }
 }

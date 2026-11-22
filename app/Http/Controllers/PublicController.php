@@ -56,12 +56,13 @@ class PublicController extends Controller
         return TransientHouse::query()
             ->with('owner')
             ->withCount([
-                'units' => fn ($q) => $q->where('status', 'Available'),
+                'units' => fn ($q) => $q->where('status', 'Available')->whereNull('archived_at'),
             ])
             ->withMin([
-                'units as min_price' => fn ($q) => $q->where('status', 'Available'),
+                'units as min_price' => fn ($q) => $q->where('status', 'Available')->whereNull('archived_at'),
             ], 'price')
             ->where('is_active', true)
+            ->whereNull('archived_at')
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")
@@ -76,13 +77,14 @@ class PublicController extends Controller
 
     public function house(TransientHouse $house): View
     {
-        abort_unless($house->is_active, 404);
+        abort_unless($house->is_active && $house->archived_at === null, 404);
 
         $house->load('owner');
 
         $units = $house->units()
             ->with('photos')
             ->where('status', 'Available')
+            ->whereNull('archived_at')
             ->orderBy('price')
             ->get();
 
@@ -98,8 +100,10 @@ class PublicController extends Controller
     {
         abort_unless(
             $unit->status === 'Available' &&
+            $unit->archived_at === null &&
             $unit->house &&
-            $unit->house->is_active,
+            $unit->house->is_active &&
+            $unit->house->archived_at === null,
             404
         );
 
@@ -200,8 +204,10 @@ class PublicController extends Controller
 
         abort_unless(
             $unit->status === 'Available'
+                && $unit->archived_at === null
                 && $unit->house
-                && $unit->house->is_active,
+                && $unit->house->is_active
+                && $unit->house->archived_at === null,
             404
         );
 
@@ -218,7 +224,7 @@ class PublicController extends Controller
             'message' => ['required', 'string', 'max:5000'],
         ]);
 
-        abort_unless($house->is_active, 404);
+        abort_unless($house->is_active && $house->archived_at === null, 404);
 
         $this->emailInquiryToOwner($data, $house);
 

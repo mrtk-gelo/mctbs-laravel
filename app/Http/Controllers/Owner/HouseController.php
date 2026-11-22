@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\TransientHouse;
 use App\Models\Unit;
 use App\Models\UnitPhoto;
+use App\Services\PropertyArchiveService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,19 +26,63 @@ class HouseController extends Controller
 {
     public function index(): View
     {
-        $user = Auth::user();
-        $houses = TransientHouse::query()
-            ->withCount('units')
-            ->when($user->role->name === 'Owner', function ($query) use ($user) {
-                $query->where('owner_id', $user->user_id);
-            }, function ($query) use ($user) {
-                $assignedHouseIds = $this->staffAssignments($user->email)->pluck('house_id');
-                $query->whereIn('house_id', $assignedHouseIds);
-            })
+        $houses = $this->accessibleHouses()
+            ->whereNull('archived_at')
+            ->withCount(['units' => fn (Builder $query) => $query->whereNull('archived_at')])
             ->orderByDesc('house_id')
             ->get();
 
         return view('owner.houses.index', ['houses' => $houses]);
+    }
+
+    public function archiveIndex(Request $request): View
+    {
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+        ]);
+        $search = trim((string) ($filters['q'] ?? ''));
+        $houseQuery = $this->accessibleHouses()
+            ->with('archivedBy')
+            ->withCount('units')
+            ->whereNotNull('archived_at');
+        $unitQuery = Unit::query()
+            ->with(['house.archivedBy', 'archivedBy'])
+            ->whereNotNull('archived_at')
+            ->whereIn('house_id', $this->accessibleHouses()->select('house_id'));
+
+        foreach (['from' => '>=', 'to' => '<='] as $field => $operator) {
+            if (isset($filters[$field])) {
+                $houseQuery->whereDate('archived_at', $operator, $filters[$field]);
+                $unitQuery->whereDate('archived_at', $operator, $filters[$field]);
+            }
+        }
+
+        if ($search !== '') {
+            $houseQuery->where(function (Builder $query) use ($search): void {
+                $query->where('name', 'like', "%{$search}%")
+                    ->orWhere('address', 'like', "%{$search}%")
+                    ->orWhere('city', 'like', "%{$search}%")
+                    ->orWhere('barangay', 'like', "%{$search}%");
+            });
+            $unitQuery->where(function (Builder $query) use ($search): void {
+                $query->where('unit_type', 'like', "%{$search}%")
+                    ->orWhereHas('house', function (Builder $houseQuery) use ($search): void {
+                        $houseQuery->where('name', 'like', "%{$search}%")
+                            ->orWhere('address', 'like', "%{$search}%")
+                            ->orWhere('city', 'like', "%{$search}%")
+                            ->orWhere('barangay', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        return view('owner.houses.archive', [
+            'houses' => $houseQuery->orderByDesc('archived_at')->orderByDesc('house_id')->paginate(15, ['*'], 'housePage')->withQueryString(),
+            'units' => $unitQuery->orderByDesc('archived_at')->orderByDesc('unit_id')->paginate(15, ['*'], 'unitPage')->withQueryString(),
+            'filters' => $filters,
+            'dashboardPrefix' => Auth::user()->role->name === 'Staff' ? 'staff' : 'owner',
+        ]);
     }
 
     public function create(): View
@@ -50,6 +95,158 @@ class HouseController extends Controller
         $this->authorizeHouseAccess($house);
 
         return view('owner.houses.edit', ['house' => $house]);
+    }
+
+    public function archiveHouse(TransientHouse $house, PropertyArchiveService $archive): RedirectResponse
+    {
+        $this->authorizeHouseAccess($house);
+        $archive->archiveHouse($house, Auth::user());
+
+        return redirect()
+            ->route($this->routeName('houses.index'))
+            ->with('success', 'House archived. Its units were archived with it.');
+    }
+
+    public function archiveUnit(TransientHouse $house, Unit $unit, PropertyArchiveService $archive): RedirectResponse
+    {
+        $this->authorizeUnitAccess($house, $unit);
+        $archive->archiveUnit($house, $unit, Auth::user());
+
+        return redirect()
+            ->route($this->routeName('houses.units'), $house)
+            ->with('success', 'Unit archived.');
+    }
+
+    public function restoreHouse(TransientHouse $house, PropertyArchiveService $archive): RedirectResponse
+    {
+        $this->authorizeHouseAccess($house, true);
+        $archive->restoreHouse($house);
+
+        return redirect()
+            ->route($this->routeName('houses.index'))
+            ->with('success', 'House restored. Units archived with the house were restored too.');
+    }
+
+    public function restoreUnit(TransientHouse $house, Unit $unit, PropertyArchiveService $archive): RedirectResponse
+    {
+        $this->authorizeUnitAccess($house, $unit, true);
+        $archive->restoreUnit($house, $unit);
+
+        return redirect()
+            ->route($this->routeName('houses.archive.index'))
+            ->with('archiveResults', ["{$unit->unit_type} restored."]);
+    }
+
+    public function permanentlyDeleteHouse(TransientHouse $house, PropertyArchiveService $archive): RedirectResponse
+    {
+        $this->authorizeHouseAccess($house, true);
+        $result = $archive->permanentlyDeleteHouse($house);
+        $message = "{$house->name}: {$result['message']}";
+
+        if ($result['cleanup_warning'] !== null) {
+            $message .= ' '.$result['cleanup_warning'];
+        }
+
+        return redirect()
+            ->route($this->routeName('houses.archive.index'))
+            ->with('archiveResults', [$message]);
+    }
+
+    public function permanentlyDeleteUnit(TransientHouse $house, Unit $unit, PropertyArchiveService $archive): RedirectResponse
+    {
+        $this->authorizeUnitAccess($house, $unit, true);
+        $result = $archive->permanentlyDeleteUnit($house, $unit);
+        $message = "{$unit->unit_type}: {$result['message']}";
+
+        if ($result['cleanup_warning'] !== null) {
+            $message .= ' '.$result['cleanup_warning'];
+        }
+
+        return redirect()
+            ->route($this->routeName('houses.archive.index'))
+            ->with('archiveResults', [$message]);
+    }
+
+    public function bulkHouseArchiveAction(Request $request, PropertyArchiveService $archive): RedirectResponse
+    {
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['restore', 'delete'])],
+            'house_ids' => ['required', 'array', 'min:1', 'max:50'],
+            'house_ids.*' => ['required', 'integer', 'distinct'],
+        ]);
+        $houseIds = array_map('intval', $data['house_ids']);
+        $houses = $this->accessibleHouses()
+            ->whereNotNull('archived_at')
+            ->whereIn('house_id', $houseIds)
+            ->get()
+            ->keyBy('house_id');
+
+        abort_unless($houses->count() === count($houseIds), 404);
+
+        $results = [];
+        foreach ($houseIds as $houseId) {
+            $house = $houses->get($houseId);
+            if ($data['action'] === 'restore') {
+                try {
+                    $archive->restoreHouse($house);
+                    $results[] = "{$house->name} restored.";
+                } catch (ValidationException $exception) {
+                    $results[] = "{$house->name} not restored: ".$this->firstValidationError($exception);
+                }
+
+                continue;
+            }
+
+            $result = $archive->permanentlyDeleteHouse($house);
+            $results[] = "{$house->name}: {$result['message']}".($result['cleanup_warning'] ? ' '.$result['cleanup_warning'] : '');
+        }
+
+        return redirect()
+            ->route($this->routeName('houses.archive.index'))
+            ->with('archiveResults', $results);
+    }
+
+    public function bulkUnitArchiveAction(Request $request, PropertyArchiveService $archive): RedirectResponse
+    {
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['restore', 'delete'])],
+            'unit_ids' => ['required', 'array', 'min:1', 'max:50'],
+            'unit_ids.*' => ['required', 'integer', 'distinct'],
+        ]);
+        $unitIds = array_map('intval', $data['unit_ids']);
+        $units = Unit::query()
+            ->with('house')
+            ->whereNotNull('archived_at')
+            ->whereIn('unit_id', $unitIds)
+            ->whereIn('house_id', $this->accessibleHouses()->select('house_id'))
+            ->get()
+            ->keyBy('unit_id');
+
+        abort_unless($units->count() === count($unitIds), 404);
+
+        $results = [];
+        foreach ($unitIds as $unitId) {
+            $unit = $units->get($unitId);
+            $house = $unit->house;
+            if ($data['action'] === 'restore') {
+                try {
+                    $archive->restoreUnit($house, $unit);
+                    $results[] = "{$unit->unit_type} at {$house->name} restored.";
+                } catch (ValidationException $exception) {
+                    $results[] = "{$unit->unit_type} at {$house->name} not restored: ".$this->firstValidationError($exception);
+                }
+
+                continue;
+            }
+
+            $result = $archive->permanentlyDeleteUnit($house, $unit);
+            $results[] = "{$unit->unit_type} at {$house->name}: {$result['message']}"
+                .($result['cleanup_warning'] ? ' '.$result['cleanup_warning'] : '');
+        }
+
+        return redirect()
+            ->route($this->routeName('houses.archive.index'))
+            ->with('archiveResults', $results);
     }
 
     public function store(Request $request): RedirectResponse
@@ -164,7 +361,7 @@ class HouseController extends Controller
 
         return view('owner.houses.units', [
             'house' => $house,
-            'units' => $house->units()->with('photos')->orderByDesc('unit_id')->get(),
+            'units' => $house->units()->with('photos')->whereNull('archived_at')->orderByDesc('unit_id')->get(),
         ]);
     }
 
@@ -347,11 +544,12 @@ class HouseController extends Controller
             : 'Unit has been hidden from the public site.');
     }
 
-    private function authorizeUnitAccess(TransientHouse $house, Unit $unit): void
+    private function authorizeUnitAccess(TransientHouse $house, Unit $unit, bool $allowArchived = false): void
     {
-        $this->authorizeHouseAccess($house);
+        $this->authorizeHouseAccess($house, $allowArchived);
 
         abort_unless($unit->house_id === $house->house_id, 404);
+        abort_unless($allowArchived || $unit->archived_at === null, 404);
     }
 
     private function hasMinimumTurnoverInterval(string $checkOutTime, string $checkInTime): bool
@@ -392,8 +590,10 @@ class HouseController extends Controller
         }
     }
 
-    private function authorizeHouseAccess(TransientHouse $house): void
+    private function authorizeHouseAccess(TransientHouse $house, bool $allowArchived = false): void
     {
+        abort_unless($allowArchived || $house->archived_at === null, 404);
+
         $user = Auth::user();
 
         if ($user->role->name === 'Owner') {
@@ -415,6 +615,24 @@ class HouseController extends Controller
         return Auth::user()->role->name === 'Staff'
             ? 'staff.'.$name
             : 'owner.'.$name;
+    }
+
+    private function accessibleHouses(): Builder
+    {
+        $user = Auth::user();
+
+        return TransientHouse::query()
+            ->when($user->role->name === 'Owner', function (Builder $query) use ($user): void {
+                $query->where('owner_id', $user->user_id);
+            }, function (Builder $query) use ($user): void {
+                $assignedHouseIds = $this->staffAssignments($user->email)->pluck('house_id');
+                $query->whereIn('house_id', $assignedHouseIds);
+            });
+    }
+
+    private function firstValidationError(ValidationException $exception): string
+    {
+        return collect($exception->errors())->flatten()->first() ?? 'The operation could not be completed.';
     }
 
     private function staffAssignments(string $email): Builder

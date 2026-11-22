@@ -22,6 +22,7 @@ class AdminController extends Controller
         return view('owner.admins', [
             'houses' => TransientHouse::where('owner_id', $owner->user_id)
                 ->where('is_active', true)
+                ->whereNull('archived_at')
                 ->orderBy('name')
                 ->get(),
             'admins' => Invitation::where('invited_by', $owner->user_id)
@@ -52,6 +53,7 @@ class AdminController extends Controller
         $house = TransientHouse::where('house_id', $data['house_id'])
             ->where('owner_id', $owner->user_id)
             ->where('is_active', true)
+            ->whereNull('archived_at')
             ->first();
 
         if (! $house) {

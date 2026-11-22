@@ -110,5 +110,20 @@
                 </form>
             </div>
         </div>
+        <div class="card mt-4 border-danger">
+            <div class="card-header text-danger">Danger Zone</div>
+            <div class="card-body">
+                <p>Archiving removes this unit from public listings and new bookings. Existing bookings and history are preserved. You can restore it from Archived Properties.</p>
+                <form
+                    method="POST"
+                    action="{{ route(auth()->user()->role->name === 'Staff' ? 'staff.houses.units.archive' : 'owner.houses.units.archive', [$house, $unit]) }}"
+                    data-record-name="{{ $unit->unit_type }}"
+                    onsubmit="return confirm('Archive unit: ' + this.dataset.recordName + '? Existing bookings and history will be preserved.')"
+                >
+                    @csrf
+                    <button type="submit" class="btn btn-danger"><i class="fa fa-box-archive"></i> Archive Unit</button>
+                </form>
+            </div>
+        </div>
     </div>
 </x-shell>
