@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Symfony\Component\Process\Exception\ExceptionInterface;
+use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
 
 class DatabaseBackupService
@@ -41,9 +42,13 @@ class DatabaseBackupService
             throw new RuntimeException('Backups require a MySQL or MariaDB connection.');
         }
 
-        $dumpPath = config('database.mysql_dump_path');
-        if (! is_string($dumpPath) || ! is_file($dumpPath)) {
-            throw new RuntimeException('Set MYSQLDUMP_PATH to the mysqldump.exe file in .env.');
+        $configuredDumpPath = config('database.mysql_dump_path');
+        $dumpPath = is_string($configuredDumpPath) && is_file($configuredDumpPath)
+            ? $configuredDumpPath
+            : $this->findDumpProgram();
+
+        if ($dumpPath === null) {
+            throw new RuntimeException('Set MYSQLDUMP_PATH to an existing mysqldump or mariadb-dump executable, or ensure one is available on PATH.');
         }
 
         $database = $connection['database'] ?? null;
@@ -117,6 +122,13 @@ class DatabaseBackupService
     private function isBackupFilename(string $filename): bool
     {
         return preg_match('/\Adatabase_\d{8}_\d{6}_[a-f0-9]{8}\.sql\z/', $filename) === 1;
+    }
+
+    private function findDumpProgram(): ?string
+    {
+        $finder = new ExecutableFinder;
+
+        return $finder->find('mysqldump') ?? $finder->find('mariadb-dump');
     }
 
     private function formatSize(int $bytes): string
