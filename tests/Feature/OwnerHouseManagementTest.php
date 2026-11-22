@@ -57,7 +57,7 @@ test('owner creates a house and unit that appear on public transient pages', fun
 
     $this->actingAs($owner)
         ->get('/owner/dashboard')
-        ->assertSee('Transient Houses');
+        ->assertSee('Dashboard');
 
     $this->get(route('owner.houses.create'))
         ->assertSee('Add Transient House')

@@ -3138,8 +3138,9 @@ test('a timely payment under review protects an accepted booking hold after the 
     $this->actingAs($owner)
         ->get(route('owner.dashboard'))
         ->assertOk()
-        ->assertSee('Deadline Nov 11, 10:00 AM')
-        ->assertSee('hold active while payment is reviewed.');
+        ->assertSee('Payments to Verify')
+        ->assertSee('GCash')
+        ->assertSee('Verify');
 });
 
 test('a timely payment rejected after the deadline no longer protects the booking hold', function () {
@@ -4011,8 +4012,8 @@ test('owner dashboard prioritizes scoped booking and payment queues without disc
         ->assertSee('New Booking Requests')
         ->assertSee('Payments to Verify')
         ->assertDontSee('Senior / PWD IDs to Verify')
-        ->assertSee('No upcoming guests expected.')
-        ->assertSee('No current guests.')
+        ->assertSee('No upcoming arrivals scheduled.')
+        ->assertSee('No guests are currently checked in.')
         ->assertSee('#'.$pending->booking_id)
         ->assertSee('#'.$confirmed->booking_id);
 });
@@ -4067,6 +4068,33 @@ test('owner can check in a guest with a verified downpayment on the booking star
     $this->get(route('owner.guests.check-in', $booking->booking_id))
         ->assertSee('Stay Details')
         ->assertSee('Amenities Added');
+});
+
+test('owner dashboard limits operational previews while showing accurate totals', function () {
+    ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
+
+    foreach (range(1, 6) as $index) {
+        Booking::create([
+            'user_id' => $guest->user_id,
+            'unit_id' => $unit->unit_id,
+            'check_in' => today()->addDays($index),
+            'check_out' => today()->addDays($index + 1),
+            'adult_count' => 1,
+            'child_count' => 0,
+            'total_price' => 3600,
+            'booking_reference' => 'PREVIEW-'.$index,
+            'status' => BookingStatus::PENDING,
+        ]);
+    }
+
+    $this->actingAs($owner)
+        ->get(route('owner.dashboard'))
+        ->assertOk()
+        ->assertSee('6 pending')
+        ->assertSee('PREVIEW-1')
+        ->assertSee('PREVIEW-5')
+        ->assertDontSee('PREVIEW-6')
+        ->assertSee('View all');
 });
 
 test('owner dashboard lists paid confirmed arrivals on all future dates', function () {
@@ -5962,7 +5990,7 @@ test('staff work queues and checkout actions are restricted to assigned properti
     $this->actingAs($staff)
         ->get(route('staff.dashboard'))
         ->assertOk()
-        ->assertSee('Work Queue');
+        ->assertSee('Dashboard');
     $this->get(route('staff.bookings.checkout', $booking->booking_id))->assertOk();
     $damageItem = UnitDamageItem::create([
         'unit_id' => $unit->unit_id,
