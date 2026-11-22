@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class AdminController extends Controller
@@ -22,6 +23,12 @@ class AdminController extends Controller
         $owner = Auth::user();
         $staffRole = Role::where('name', 'Staff')->firstOrFail();
         $search = trim((string) $request->query('q', ''));
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'per_page' => ['nullable', Rule::in([10, 25, 50])],
+            'registered_after' => ['nullable', 'date'],
+            'registered_before' => ['nullable', 'date', 'after_or_equal:registered_after'],
+        ]);
 
         return view('owner.admins', [
             'houses' => TransientHouse::where('owner_id', $owner->user_id)
@@ -42,8 +49,11 @@ class AdminController extends Controller
                                 ->orWhere('last_name', 'like', '%'.$search.'%'));
                     });
                 })
+                ->when($request->filled('registered_after'), fn ($query) => $query->whereHas('invitee', fn ($invitee) => $invitee->whereDate('registered_at', '>=', $request->query('registered_after'))))
+                ->when($request->filled('registered_before'), fn ($query) => $query->whereHas('invitee', fn ($invitee) => $invitee->whereDate('registered_at', '<=', $request->query('registered_before'))))
                 ->orderByDesc('invitation_id')
-                ->get(),
+                ->paginate((int) ($filters['per_page'] ?? 10))
+                ->withQueryString(),
             'invitations' => Invitation::where('invited_by', $owner->user_id)
                 ->where('role_id', $staffRole->role_id)
                 ->whereNull('used_at')
@@ -52,6 +62,11 @@ class AdminController extends Controller
                 ->orderByDesc('invitation_id')
                 ->get(),
             'search' => $search,
+            'filters' => [
+                'registered_after' => $filters['registered_after'] ?? '',
+                'registered_before' => $filters['registered_before'] ?? '',
+                'per_page' => (int) ($filters['per_page'] ?? 10),
+            ],
         ]);
     }
 
@@ -60,6 +75,12 @@ class AdminController extends Controller
         $owner = Auth::user();
         $staffRole = Role::where('name', 'Staff')->firstOrFail();
         $search = trim((string) $request->query('q', ''));
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'per_page' => ['nullable', Rule::in([10, 25, 50])],
+            'deactivated_after' => ['nullable', 'date'],
+            'deactivated_before' => ['nullable', 'date', 'after_or_equal:deactivated_after'],
+        ]);
 
         return view('owner.deactivated-admins', [
             'admins' => Invitation::where('invited_by', $owner->user_id)
@@ -75,9 +96,17 @@ class AdminController extends Controller
                                 ->orWhere('last_name', 'like', '%'.$search.'%'));
                     });
                 })
+                ->when($request->filled('deactivated_after'), fn ($query) => $query->whereHas('invitee', fn ($invitee) => $invitee->whereDate('deactivated_at', '>=', $request->query('deactivated_after'))))
+                ->when($request->filled('deactivated_before'), fn ($query) => $query->whereHas('invitee', fn ($invitee) => $invitee->whereDate('deactivated_at', '<=', $request->query('deactivated_before'))))
                 ->orderByDesc('invitation_id')
-                ->get(),
+                ->paginate((int) ($filters['per_page'] ?? 10))
+                ->withQueryString(),
             'search' => $search,
+            'filters' => [
+                'deactivated_after' => $filters['deactivated_after'] ?? '',
+                'deactivated_before' => $filters['deactivated_before'] ?? '',
+                'per_page' => (int) ($filters['per_page'] ?? 10),
+            ],
         ]);
     }
 

@@ -20,6 +20,9 @@ class OwnerController extends Controller
     {
         $validated = $request->validate([
             'q' => ['nullable', 'string', 'max:100'],
+            'per_page' => ['nullable', Rule::in([10, 25, 50])],
+            'registered_after' => ['nullable', 'date'],
+            'registered_before' => ['nullable', 'date', 'after_or_equal:registered_after'],
         ]);
         $search = trim($validated['q'] ?? '');
         $owners = User::whereHas('role', fn ($query) => $query->where('name', 'Owner'))
@@ -33,8 +36,11 @@ class OwnerController extends Controller
                         ->orWhere('phone', 'like', '%'.$search.'%');
                 });
             })
+            ->when($request->filled('registered_after'), fn ($query) => $query->whereDate('registered_at', '>=', $request->query('registered_after')))
+            ->when($request->filled('registered_before'), fn ($query) => $query->whereDate('registered_at', '<=', $request->query('registered_before')))
             ->orderByDesc('user_id')
-            ->get();
+            ->paginate((int) ($validated['per_page'] ?? 10))
+            ->withQueryString();
 
         if ($request->ajax()) {
             return view('sysadmin.partials.owner-results', compact('owners', 'search'));
@@ -55,6 +61,9 @@ class OwnerController extends Controller
     {
         $validated = $request->validate([
             'q' => ['nullable', 'string', 'max:100'],
+            'per_page' => ['nullable', Rule::in([10, 25, 50])],
+            'deactivated_after' => ['nullable', 'date'],
+            'deactivated_before' => ['nullable', 'date', 'after_or_equal:deactivated_after'],
         ]);
         $search = trim($validated['q'] ?? '');
         $owners = User::whereHas('role', fn ($query) => $query->where('name', 'Owner'))
@@ -68,8 +77,11 @@ class OwnerController extends Controller
                         ->orWhere('phone', 'like', '%'.$search.'%');
                 });
             })
+            ->when($request->filled('deactivated_after'), fn ($query) => $query->whereDate('deactivated_at', '>=', $request->query('deactivated_after')))
+            ->when($request->filled('deactivated_before'), fn ($query) => $query->whereDate('deactivated_at', '<=', $request->query('deactivated_before')))
             ->orderByDesc('deactivated_at')
-            ->get();
+            ->paginate((int) ($validated['per_page'] ?? 10))
+            ->withQueryString();
 
         if ($request->ajax()) {
             return view('sysadmin.partials.deactivated-owner-results', compact('owners', 'search'));

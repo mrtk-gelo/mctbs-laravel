@@ -68,9 +68,9 @@ test('a sysadmin invitation creates an owner account and consumes the invitation
         ->assertSee('Owner Management')
         ->assertSee('Invited Owner')
         ->assertSee('invited-owner@example.com')
-        ->assertSee('Date registered')
+        ->assertSee('Date Registered')
         ->assertSee('Deactivate selected')
-        ->assertSee('Select Invited Owner for deactivation')
+        ->assertSee('Select Invited Owner')
         ->assertDontSee('Active Staff');
 
     $this->get(route('sysadmin.dashboard'))
@@ -164,7 +164,7 @@ test('sysadmin owner search returns matching records over ajax', function () {
         ->get(route('sysadmin.owners.index', ['q' => 'Harbor']))
         ->assertOk()
         ->assertSee('Harbor Owner')
-        ->assertSee('Deactivate Harbor Owner')
+        ->assertSee('Deactivate')
         ->assertDontSee('Forest Owner')
         ->assertDontSee('<x-shell', false);
 });
@@ -407,10 +407,9 @@ test('an owner can invite staff for an owned house and the staff member lands on
         ->assertSee('Seaside House')
         ->assertDontSee('Pending invitations')
         ->assertDontSee('Properties available to assign')
-        ->assertSee('Invite a staff member')
+        ->assertSee('Invite Staff')
         ->assertSee('Assign to house')
-        ->assertSee('class="staff-list"', false)
-        ->assertSee('class="staff-card"', false)
+        ->assertSee('class="property-archive-table"', false)
         ->assertSee('Deactivate', false);
 });
 

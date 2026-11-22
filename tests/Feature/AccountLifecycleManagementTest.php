@@ -156,6 +156,95 @@ test('owner can deactivate and reactivate staff without changing parent restrict
         ->assertRedirect(route('login'));
 });
 
+test('owner lists reuse archive-style table and pagination controls', function () {
+    $sysadmin = lifecycleUser('System Admin', 'paged-sysadmin@example.com');
+    for ($index = 1; $index <= 11; $index++) {
+        lifecycleUser('Owner', "paged-owner-{$index}@example.com");
+    }
+
+    $this->actingAs($sysadmin)
+        ->get(route('sysadmin.owners.index'))
+        ->assertOk()
+        ->assertSee('Registered after')
+        ->assertSee('Rows per page')
+        ->assertSee('1–10 of 11 records')
+        ->assertSee('View Deactivated Owners')
+        ->assertSee('Pending Invitations');
+
+    $owner = lifecycleUser('Owner', 'staff-list-owner@example.com');
+    $staff = lifecycleUser('Staff', 'staff-list-user@example.com');
+    $house = TransientHouse::create([
+        'owner_id' => $owner->user_id,
+        'name' => 'Staff List House',
+        'address' => '3 Staff Road',
+        'city' => 'Baguio',
+        'contact_number' => '5553000',
+        'is_active' => true,
+    ]);
+    Invitation::create([
+        'invited_by' => $owner->user_id,
+        'house_id' => $house->house_id,
+        'role_id' => lifecycleRole('Staff')->role_id,
+        'email' => $staff->email,
+        'token' => 'active-staff-list-token',
+        'used_at' => now(),
+        'expires_at' => now()->addDay(),
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('owner.admins.index'))
+        ->assertOk()
+        ->assertSee('Registered after')
+        ->assertSee('Rows per page')
+        ->assertSee('Active')
+        ->assertSee('View Deactivated Staff')
+        ->assertSee('Pending Invitations')
+        ->assertDontSee('Invite a staff member</span>');
+});
+
+test('reactivation pages render archive-style bulk selection and pagination', function () {
+    $sysadmin = lifecycleUser('System Admin', 'reactivation-ui-admin@example.com');
+    $inactiveOwner = lifecycleUser('Owner', 'reactivation-ui-owner@example.com', ['is_active' => false]);
+
+    $this->actingAs($sysadmin)
+        ->get(route('sysadmin.owners.deactivated'))
+        ->assertOk()
+        ->assertSee('Deactivated after')
+        ->assertSee('Rows per page')
+        ->assertSee('Reactivate')
+        ->assertSee('Clear selection')
+        ->assertSee('1–1 of 1 records');
+
+    $owner = lifecycleUser('Owner', 'reactivation-ui-staff-owner@example.com');
+    $staff = lifecycleUser('Staff', 'reactivation-ui-staff@example.com', ['is_active' => false]);
+    $house = TransientHouse::create([
+        'owner_id' => $owner->user_id,
+        'name' => 'Reactivation UI House',
+        'address' => '4 Staff Road',
+        'city' => 'Baguio',
+        'contact_number' => '5554000',
+        'is_active' => true,
+    ]);
+    Invitation::create([
+        'invited_by' => $owner->user_id,
+        'house_id' => $house->house_id,
+        'role_id' => lifecycleRole('Staff')->role_id,
+        'email' => $staff->email,
+        'token' => 'inactive-staff-ui-token',
+        'used_at' => now(),
+        'expires_at' => now()->addDay(),
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('owner.admins.deactivated'))
+        ->assertOk()
+        ->assertSee('Deactivated after')
+        ->assertSee('Rows per page')
+        ->assertSee('Reactivate')
+        ->assertSee('Clear selection')
+        ->assertSee('1–1 of 1 records');
+});
+
 test('example', function () {
     $response = $this->get('/');
 

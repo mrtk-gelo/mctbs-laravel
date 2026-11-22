@@ -85,7 +85,7 @@
                 </div>
             @endforelse
         </div>
-        <div class="mt-4">
+        <div class="account-lifecycle-secondary-navigation account-lifecycle-secondary-navigation--outer">
             <a href="{{ route(auth()->user()->role->name === 'Staff' ? 'staff.houses.archive.index' : 'owner.houses.archive.index') }}" class="btn btn-outline">
                 <i class="fa fa-box-archive"></i> View Archived Properties
             </a>

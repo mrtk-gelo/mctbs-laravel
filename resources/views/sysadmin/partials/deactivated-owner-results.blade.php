@@ -1,20 +1,19 @@
-<section class="card personnel-table-card" id="owner-results">
-    <div class="card-header"><span>Deactivated owners</span><span class="text-muted fs-sm">{{ $owners->count() }} matching</span></div>
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>Select</th><th>Name</th><th>Email</th><th>Phone</th><th>Properties</th><th>Date Deactivated</th><th>Actions</th></tr></thead>
+<section class="card property-archive-records account-lifecycle-records" id="owner-results" aria-label="Deactivated owners">
+    <div class="property-archive-table-wrap">
+        <table class="property-archive-table">
+            <thead><tr><th class="property-archive-checkbox-column"><input type="checkbox" id="select-all-deactivated-owners" aria-label="Select all owners on this page"></th><th>Name</th><th>Email</th><th>Phone</th><th>Properties</th><th>Date Deactivated</th><th>Actions</th></tr></thead>
             <tbody>
                 @forelse ($owners as $person)
                     <tr>
-                        <td><input type="checkbox" name="owner_ids[]" value="{{ $person->user_id }}" form="bulk-owner-reactivate-form" aria-label="Select {{ $person->first_name }} {{ $person->last_name }}"></td>
-                        <td><div class="person-cell"><span class="avatar-initials">{{ $person->initials() }}</span><strong>{{ $person->first_name }} {{ $person->last_name }}</strong></div></td>
+                        <td class="property-archive-checkbox-column"><input type="checkbox" name="owner_ids[]" value="{{ $person->user_id }}" form="bulk-owner-reactivate-form" data-deactivated-owner-select aria-label="Select {{ $person->first_name }} {{ $person->last_name }}"></td>
+                        <td><strong>{{ $person->first_name }} {{ $person->last_name }}</strong></td>
                         <td>{{ $person->email }}</td>
                         <td>{{ $person->phone ?: '—' }}</td>
                         <td>{{ $person->transient_houses_count }}</td>
                         <td>{{ $person->deactivated_at?->format('M j, Y g:i A') ?? '—' }}</td>
                         <td>
                             <div class="personnel-row-actions">
-                                <form method="POST" action="{{ route('sysadmin.owners.reactivate', $person->user_id) }}">
+                                <form method="POST" action="{{ route('sysadmin.owners.reactivate', $person->user_id) }}" data-owner-row-reactivate data-account-name="{{ $person->first_name }} {{ $person->last_name }}">
                                     @csrf
                                     <button type="submit" class="btn btn-outline btn-sm">Reactivate</button>
                                 </form>
