@@ -82,10 +82,17 @@ test('archiving and restoring a house preserves visibility settings and independ
     $this->get(route('owner.houses.index'))->assertDontSee('Maple House');
     $this->get(route('owner.houses.archive.index', ['q' => 'Maple', 'from' => today()->toDateString(), 'to' => today()->toDateString()]))
         ->assertOk()
+        ->assertSee('Archives')
+        ->assertSee('Resource')
+        ->assertSee('Archived At')
+        ->assertSee('Archived By')
+        ->assertSee('Export')
         ->assertSee('Maple House')
         ->assertSee('Maple Suite')
-        ->assertSee('Restore Selected')
-        ->assertSee('Permanently Delete Selected');
+        ->assertSee('archive-bulk-restore', false)
+        ->assertSee('Delete Permanently')
+        ->assertDontSee('Restore Selected')
+        ->assertDontSee('Back to Properties');
 
     $this->post(route('owner.houses.restore', $house))
         ->assertRedirect(route('owner.houses.index'));
@@ -94,6 +101,95 @@ test('archiving and restoring a house preserves visibility settings and independ
         ->and($unitArchivedWithHouse->fresh()->archived_at)->toBeNull()
         ->and($unitArchivedWithHouse->fresh()->archived_with_house)->toBeFalse()
         ->and($independentlyArchivedUnit->fresh()->archived_at)->not->toBeNull();
+});
+
+test('archive records can be filtered by resource and exported as a csv', function () {
+    $owner = archiveManagementUser('Owner', 'archive-filter-owner@example.com');
+    $independentHouse = archiveManagementHouse($owner, 'Unit Archive Parent');
+    $independentUnit = archiveManagementUnit($independentHouse, 'Archived Suite');
+    $formulaNamedUnit = archiveManagementUnit($independentHouse, '=2+2');
+    $house = archiveManagementHouse($owner, 'House Only Archive');
+    $archive = app(PropertyArchiveService::class);
+    $archive->archiveUnit($independentHouse, $independentUnit, $owner);
+    $archive->archiveUnit($independentHouse, $formulaNamedUnit, $owner);
+    $archive->archiveHouse($house, $owner);
+
+    $this->actingAs($owner)
+        ->get(route('owner.houses.archive.index', ['resource' => 'house']))
+        ->assertOk()
+        ->assertSee('House Only Archive')
+        ->assertDontSee('Archived Suite');
+
+    $this->get(route('owner.houses.archive.index', ['resource' => 'unit']))
+        ->assertOk()
+        ->assertSee('Archived Suite')
+        ->assertSee('Unit Archive Parent')
+        ->assertDontSee('House Only Archive');
+
+    $export = $this->get(route('owner.houses.archive.export', ['resource' => 'unit']))
+        ->assertDownload('property-archives.csv')
+        ->assertHeaderContains('content-type', 'text/csv');
+    ob_start();
+    $export->baseResponse->sendContent();
+    $csv = ob_get_clean();
+
+    expect($csv)
+        ->toContain('Unit,"Archived Suite","Unit Archive Parent",')
+        ->and($csv)->toContain("Unit,'=2+2,\"Unit Archive Parent\",");
+});
+
+test('mixed archive bulk restoration preserves house and unit lifecycle behavior', function () {
+    $owner = archiveManagementUser('Owner', 'archive-bulk-restore-owner@example.com');
+    $archivedHouse = archiveManagementHouse($owner, 'Archived Parent House');
+    $houseUnit = archiveManagementUnit($archivedHouse, 'House Unit');
+    $independentHouse = archiveManagementHouse($owner, 'Active Parent House');
+    $independentUnit = archiveManagementUnit($independentHouse, 'Independent Unit');
+    $archive = app(PropertyArchiveService::class);
+    $archive->archiveHouse($archivedHouse, $owner);
+    $archive->archiveUnit($independentHouse, $independentUnit, $owner);
+
+    $this->actingAs($owner)
+        ->post(route('owner.houses.archive.bulk'), [
+            'action' => 'restore',
+            'records' => [
+                'unit:'.$houseUnit->unit_id,
+                'house:'.$archivedHouse->house_id,
+                'unit:'.$independentUnit->unit_id,
+            ],
+        ])
+        ->assertRedirect(route('owner.houses.archive.index'))
+        ->assertSessionHas('archiveResults', fn (array $results): bool => count($results) === 3);
+
+    expect($archivedHouse->fresh()->archived_at)->toBeNull()
+        ->and($houseUnit->fresh()->archived_at)->toBeNull()
+        ->and($independentUnit->fresh()->archived_at)->toBeNull();
+});
+
+test('mixed archive bulk deletion removes child units before their selected house', function () {
+    $owner = archiveManagementUser('Owner', 'archive-bulk-delete-owner@example.com');
+    $archivedHouse = archiveManagementHouse($owner, 'Bulk Delete House');
+    $houseUnit = archiveManagementUnit($archivedHouse, 'Bulk Delete House Unit');
+    $independentHouse = archiveManagementHouse($owner, 'Bulk Delete Unit Parent');
+    $independentUnit = archiveManagementUnit($independentHouse, 'Bulk Delete Independent Unit');
+    $archive = app(PropertyArchiveService::class);
+    $archive->archiveHouse($archivedHouse, $owner);
+    $archive->archiveUnit($independentHouse, $independentUnit, $owner);
+
+    $this->actingAs($owner)
+        ->post(route('owner.houses.archive.bulk'), [
+            'action' => 'delete',
+            'records' => [
+                'house:'.$archivedHouse->house_id,
+                'unit:'.$houseUnit->unit_id,
+                'unit:'.$independentUnit->unit_id,
+            ],
+        ])
+        ->assertRedirect(route('owner.houses.archive.index'))
+        ->assertSessionHas('archiveResults', fn (array $results): bool => count($results) === 3);
+
+    $this->assertDatabaseMissing('transient_houses', ['house_id' => $archivedHouse->house_id]);
+    $this->assertDatabaseMissing('units', ['unit_id' => $houseUnit->unit_id]);
+    $this->assertDatabaseMissing('units', ['unit_id' => $independentUnit->unit_id]);
 });
 
 test('archiving a unit removes it from public listings and blocks new and pending bookings', function () {
@@ -254,6 +350,10 @@ test('archive actions cannot expose or change another owner property', function 
     $this->post(route('owner.houses.archive.houses'), [
         'action' => 'delete',
         'house_ids' => [$otherHouse->house_id],
+    ])->assertNotFound();
+    $this->post(route('owner.houses.archive.bulk'), [
+        'action' => 'restore',
+        'records' => ['house:'.$otherHouse->house_id],
     ])->assertNotFound();
 
     expect($otherHouse->fresh()->archived_at)->not->toBeNull();
