@@ -3,6 +3,7 @@
   "deploy": {
     "aptPackages": [
       "mariadb-client"
-    ]
+    ],
+    "startCommand": "sh /app/railway-start.sh"
   }
 }
