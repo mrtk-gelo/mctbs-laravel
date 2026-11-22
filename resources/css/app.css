@@ -716,3 +716,58 @@
         text-align: center;
     }
 }
+
+.account-lifecycle-page {
+    padding-bottom: 32px;
+}
+
+.account-lifecycle-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 10px;
+}
+
+.account-lifecycle-filters {
+    display: grid;
+    grid-template-columns: minmax(260px, 420px);
+    align-items: end;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding: 18px;
+}
+
+.account-lifecycle-secondary-navigation {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.personnel-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.personnel-row-actions form {
+    margin: 0;
+}
+
+@media (max-width: 767px) {
+    .personnel-row-actions {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .account-lifecycle-filters {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .account-lifecycle-secondary-navigation {
+        justify-content: stretch;
+    }
+
+    .account-lifecycle-secondary-navigation .btn {
+        width: 100%;
+    }
+}

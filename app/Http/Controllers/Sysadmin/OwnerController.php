@@ -23,6 +23,7 @@ class OwnerController extends Controller
         ]);
         $search = trim($validated['q'] ?? '');
         $owners = User::whereHas('role', fn ($query) => $query->where('name', 'Owner'))
+            ->where('is_active', true)
             ->withCount('transientHouses')
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($query) use ($search): void {
@@ -48,6 +49,127 @@ class OwnerController extends Controller
                 ->orderByDesc('invitation_id')
                 ->get(),
         ]);
+    }
+
+    public function deactivated(Request $request): View
+    {
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+        ]);
+        $search = trim($validated['q'] ?? '');
+        $owners = User::whereHas('role', fn ($query) => $query->where('name', 'Owner'))
+            ->where('is_active', false)
+            ->withCount('transientHouses')
+            ->when($search !== '', function ($query) use ($search): void {
+                $query->where(function ($query) use ($search): void {
+                    $query->where('first_name', 'like', '%'.$search.'%')
+                        ->orWhere('last_name', 'like', '%'.$search.'%')
+                        ->orWhere('email', 'like', '%'.$search.'%')
+                        ->orWhere('phone', 'like', '%'.$search.'%');
+                });
+            })
+            ->orderByDesc('deactivated_at')
+            ->get();
+
+        if ($request->ajax()) {
+            return view('sysadmin.partials.deactivated-owner-results', compact('owners', 'search'));
+        }
+
+        return view('sysadmin.deactivated-owners', compact('owners', 'search'));
+    }
+
+    public function deactivate(int $ownerId): RedirectResponse
+    {
+        $owner = $this->ownedAccount($ownerId);
+        abort_if(! $owner->is_active, 422);
+
+        DB::transaction(function () use ($owner): void {
+            $owner->update([
+                'is_active' => false,
+                'deactivated_at' => now(),
+                'deactivated_by' => auth()->id(),
+            ]);
+            DB::table('sessions')->where('user_id', $owner->user_id)->delete();
+        });
+
+        return redirect()->route('sysadmin.owners.index')
+            ->with('success', "Owner account for {$owner->first_name} {$owner->last_name} was deactivated.");
+    }
+
+    public function reactivate(int $ownerId): RedirectResponse
+    {
+        $owner = $this->ownedAccount($ownerId);
+        abort_if($owner->is_active, 422);
+
+        $owner->update([
+            'is_active' => true,
+            'deactivated_at' => null,
+            'deactivated_by' => null,
+        ]);
+
+        return redirect()->route('sysadmin.owners.deactivated')
+            ->with('success', "Owner account for {$owner->first_name} {$owner->last_name} was reactivated.");
+    }
+
+    public function bulkDeactivate(Request $request): RedirectResponse
+    {
+        $ownerRole = Role::query()->where('name', 'Owner')->firstOrFail();
+        $data = $request->validate([
+            'owner_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'owner_ids.*' => ['required', 'integer', 'distinct', Rule::exists('users', 'user_id')->where('role_id', $ownerRole->role_id)],
+        ]);
+
+        $count = DB::transaction(function () use ($data): int {
+            $owners = User::query()
+                ->whereIn('user_id', $data['owner_ids'])
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($owners as $owner) {
+                $owner->update([
+                    'is_active' => false,
+                    'deactivated_at' => now(),
+                    'deactivated_by' => auth()->id(),
+                ]);
+                DB::table('sessions')->where('user_id', $owner->user_id)->delete();
+            }
+
+            return $owners->count();
+        });
+
+        return redirect()->route('sysadmin.owners.index')
+            ->with('success', "{$count} owner account(s) deactivated.");
+    }
+
+    public function bulkReactivate(Request $request): RedirectResponse
+    {
+        $ownerRole = Role::query()->where('name', 'Owner')->firstOrFail();
+        $data = $request->validate([
+            'owner_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'owner_ids.*' => ['required', 'integer', 'distinct', Rule::exists('users', 'user_id')->where('role_id', $ownerRole->role_id)],
+        ]);
+
+        $count = DB::transaction(function () use ($data): int {
+            $owners = User::query()
+                ->whereIn('user_id', $data['owner_ids'])
+                ->where('is_active', false)
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($owners as $owner) {
+                $owner->update([
+                    'is_active' => true,
+                    'deactivated_at' => null,
+                    'deactivated_by' => null,
+                ]);
+            }
+
+            return $owners->count();
+        });
+
+        return redirect()->route('sysadmin.owners.deactivated')
+            ->with('success', "{$count} owner account(s) reactivated.");
     }
 
     public function invite(Request $request): RedirectResponse
@@ -85,6 +207,7 @@ class OwnerController extends Controller
         $owner = User::query()
             ->where('role_id', $ownerRole->role_id)
             ->findOrFail($ownerId);
+        abort_if($owner->is_active, 422, 'Only deactivated owner accounts can be permanently deleted.');
         $ownerRoleId = $ownerRole->role_id;
 
         $blockers = DB::transaction(function () use ($owner, $ownerRoleId): array {
@@ -104,12 +227,12 @@ class OwnerController extends Controller
 
         if ($blockers !== []) {
             return redirect()
-                ->route('sysadmin.owners.index')
+                ->route('sysadmin.owners.deactivated')
                 ->with('error', $this->deletionBlockedMessage($owner, $blockers));
         }
 
         return redirect()
-            ->route('sysadmin.owners.index')
+            ->route('sysadmin.owners.deactivated')
             ->with('success', "Owner account for {$owner->first_name} {$owner->last_name} was deleted.");
     }
 
@@ -136,6 +259,10 @@ class OwnerController extends Controller
                 || $owners->contains(fn (User $owner): bool => (int) $owner->role_id !== (int) $ownerRole->role_id)) {
                 return ['blocked' => ['The selected owner accounts changed. Refresh the list and try again.'], 'deleted' => 0];
             }
+            $activeOwners = $owners->where('is_active', true);
+            if ($activeOwners->isNotEmpty()) {
+                return ['blocked' => ['Only deactivated owner accounts can be permanently deleted.'], 'deleted' => 0];
+            }
 
             $blockedOwners = [];
             $blockersByOwner = $this->deletionBlockers($owners);
@@ -161,13 +288,22 @@ class OwnerController extends Controller
 
         if ($result['blocked'] !== []) {
             return redirect()
-                ->route('sysadmin.owners.index')
+                ->route('sysadmin.owners.deactivated')
                 ->with('error', 'No accounts were deleted. '.$this->joinDeletionMessages($result['blocked']));
         }
 
         return redirect()
-            ->route('sysadmin.owners.index')
+            ->route('sysadmin.owners.deactivated')
             ->with('success', $result['deleted'].' owner account(s) deleted.');
+    }
+
+    private function ownedAccount(int $ownerId): User
+    {
+        $ownerRole = Role::query()->where('name', 'Owner')->firstOrFail();
+
+        return User::query()
+            ->where('role_id', $ownerRole->role_id)
+            ->findOrFail($ownerId);
     }
 
     /**

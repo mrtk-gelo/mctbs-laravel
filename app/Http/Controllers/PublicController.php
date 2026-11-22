@@ -63,6 +63,7 @@ class PublicController extends Controller
             ], 'price')
             ->where('is_active', true)
             ->whereNull('archived_at')
+            ->whereHas('owner', fn ($query) => $query->where('is_active', true))
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")
@@ -78,6 +79,7 @@ class PublicController extends Controller
     public function house(TransientHouse $house): View
     {
         abort_unless($house->is_active && $house->archived_at === null, 404);
+        abort_unless($house->owner()->where('is_active', true)->exists(), 404);
 
         $house->load('owner');
 
@@ -103,7 +105,8 @@ class PublicController extends Controller
             $unit->archived_at === null &&
             $unit->house &&
             $unit->house->is_active &&
-            $unit->house->archived_at === null,
+            $unit->house->archived_at === null &&
+            $unit->house->owner()->where('is_active', true)->exists(),
             404
         );
 
@@ -207,7 +210,8 @@ class PublicController extends Controller
                 && $unit->archived_at === null
                 && $unit->house
                 && $unit->house->is_active
-                && $unit->house->archived_at === null,
+                && $unit->house->archived_at === null
+                && $unit->house->owner()->where('is_active', true)->exists(),
             404
         );
 
@@ -224,7 +228,12 @@ class PublicController extends Controller
             'message' => ['required', 'string', 'max:5000'],
         ]);
 
-        abort_unless($house->is_active && $house->archived_at === null, 404);
+        abort_unless(
+            $house->is_active
+                && $house->archived_at === null
+                && $house->owner()->where('is_active', true)->exists(),
+            404
+        );
 
         $this->emailInquiryToOwner($data, $house);
 

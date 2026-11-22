@@ -6,7 +6,7 @@
             <tbody>
                 @forelse ($owners as $person)
                     <tr>
-                        <td><input type="checkbox" name="owner_ids[]" value="{{ $person->user_id }}" form="bulk-owner-delete-form" aria-label="Select {{ $person->first_name }} {{ $person->last_name }} for deletion"></td>
+                        <td><input type="checkbox" name="owner_ids[]" value="{{ $person->user_id }}" form="bulk-owner-deactivate-form" aria-label="Select {{ $person->first_name }} {{ $person->last_name }} for deactivation"></td>
                         <td><div class="person-cell">
                             <span class="avatar-initials">{{ $person->initials() }}</span>
                             <strong>{{ $person->first_name }} {{ $person->last_name }}</strong>
@@ -25,11 +25,10 @@
                             @endif
                         </td>
                         <td>
-                            <form method="POST" action="{{ route('sysadmin.owners.destroy', $person->user_id) }}" onsubmit="return confirm('Delete this owner account? Accounts linked to protected records cannot be deleted.')">
+                            <form method="POST" action="{{ route('sysadmin.owners.deactivate', $person->user_id) }}" onsubmit="return confirm('Deactivate this owner account? Existing properties and records will be preserved.')">
                                 @csrf
-                                @method('DELETE')
-                                <button type="submit" class="btn btn-danger btn-sm" aria-label="Delete {{ $person->first_name }} {{ $person->last_name }}">
-                                    <i class="fa fa-trash" aria-hidden="true"></i> Delete
+                                <button type="submit" class="btn btn-outline btn-danger btn-sm" aria-label="Deactivate {{ $person->first_name }} {{ $person->last_name }}">
+                                    <i class="fa fa-user-slash" aria-hidden="true"></i> Deactivate
                                 </button>
                             </form>
                         </td>

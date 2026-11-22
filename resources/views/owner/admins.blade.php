@@ -48,6 +48,16 @@
             </div>
         </div>
 
+        <form method="GET" action="{{ route('owner.admins.index') }}" class="card account-lifecycle-filters mb-3" role="search">
+            <div class="booking-list-filter-field">
+                <label for="staff-search">Search staff</label>
+                <div class="property-archive-search">
+                    <i class="fa fa-search"></i>
+                    <input id="staff-search" type="search" name="q" value="{{ request('q') }}" placeholder="Search staff">
+                </div>
+            </div>
+        </form>
+
         <div class="card staff-management-card">
             <div class="card-header"><span><i class="fa fa-users"></i> Your staff</span></div>
             <div class="card-body">
@@ -65,16 +75,20 @@
                             <i class="fa fa-building"></i>
                             {{ $entry->house->name ?? 'No house assigned' }}
                         </div>
-                        <form class="staff-card-actions" method="POST" action="{{ route('owner.admins.remove', $entry) }}" onsubmit="return confirm('Remove this staff member?')">
+                        <form class="staff-card-actions" method="POST" action="{{ route('owner.admins.deactivate', $entry) }}" onsubmit="return confirm('Deactivate this staff member? Existing historical records will remain intact.')">
                             @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn btn-danger btn-sm"><i class="fa fa-user-minus"></i> Remove</button>
+                            <button type="submit" class="btn btn-outline btn-danger btn-sm"><i class="fa fa-user-slash"></i> Deactivate</button>
                         </form>
                     </div>
                 @empty
                     <p class="text-muted">No staff yet.</p>
                 @endforelse
                 </div>
+            </div>
+            <div class="account-lifecycle-secondary-navigation mt-3">
+                <a href="{{ route('owner.admins.deactivated') }}" class="btn btn-outline">
+                    <i class="fa fa-user-slash"></i> View Deactivated Staff
+                </a>
             </div>
         </div>
     </div>

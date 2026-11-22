@@ -55,15 +55,20 @@
                         <p class="sr-only" data-search-status aria-live="polite"></p>
                         <p class="alert alert-danger mt-2" data-search-error hidden></p>
                     </form>
-                    <form id="bulk-owner-delete-form" method="POST" action="{{ route('sysadmin.owners.bulk-destroy') }}" onsubmit="return confirm('Delete the selected owner accounts? Accounts linked to protected records cannot be deleted.')">
+                    <form id="bulk-owner-deactivate-form" method="POST" action="{{ route('sysadmin.owners.bulk-deactivate') }}" onsubmit="return confirm('Deactivate the selected owner accounts? Existing properties and records will be preserved.')">
                         @csrf
-                        @method('DELETE')
-                        <button class="btn btn-danger btn-sm" type="submit"><i class="fa fa-trash"></i> Delete selected</button>
+                        <button class="btn btn-outline btn-danger btn-sm" type="submit"><i class="fa fa-user-slash"></i> Deactivate selected</button>
                     </form>
                 </div>
             </div>
             @include('sysadmin.partials.owner-results')
         </section>
+
+        <div class="account-lifecycle-secondary-navigation mb-3">
+            <a href="{{ route('sysadmin.owners.deactivated') }}" class="btn btn-outline">
+                <i class="fa fa-user-slash"></i> View Deactivated Owners
+            </a>
+        </div>
 
         <section class="card personnel-table-card" id="owner-invitations">
             <div class="card-header">

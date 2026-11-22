@@ -27,13 +27,20 @@ class LoginController extends Controller
 
         $user = User::with('role')
             ->where('email', $credentials['email'])
-            ->where('is_active', true)
             ->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
                 'email' => 'Invalid email or password.',
             ]);
+        }
+
+        if (! $user->is_active) {
+            $message = $user->role?->name === 'Owner'
+                ? 'Account Deactivated. Your account is currently deactivated and cannot access MCTBS. Contact the System Administrator to restore access.'
+                : 'Account Deactivated. Your account is inactive. Contact your Owner to restore access.';
+
+            throw ValidationException::withMessages(['email' => $message]);
         }
 
         if (! $user->email_verified_at && $user->role?->name !== 'Guest') {

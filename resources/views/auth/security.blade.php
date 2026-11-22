@@ -52,5 +52,22 @@
                 </div>
             </form>
         </section>
+
+        @if ($user->role->name === 'Owner')
+            <section class="card profile-settings-card mt-3" style="border-color:#fecaca">
+                <div class="card-header"><span><i class="fa fa-user-slash"></i> Deactivate account</span></div>
+                <div class="card-body">
+                    <p class="profile-section-intro">Deactivation immediately prevents account access. Your properties, units, and historical booking records remain intact.</p>
+                    <form method="POST" action="{{ route('profile.deactivate') }}" onsubmit="return confirm('Deactivate your account? You will be logged out and cannot access MCTBS until a System Administrator restores it.')">
+                        @csrf
+                        <div class="form-group">
+                            <label for="deactivate-current-password" class="required">Current password</label>
+                            <input id="deactivate-current-password" type="password" name="current_password" autocomplete="current-password" required>
+                        </div>
+                        <button type="submit" class="btn btn-danger">Deactivate Account</button>
+                    </form>
+                </div>
+            </section>
+        @endif
     </div>
 </x-shell>

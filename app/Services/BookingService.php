@@ -195,11 +195,16 @@ class BookingService
                 ->where('unit_id', $unit->unit_id)
                 ->lockForUpdate()
                 ->firstOrFail();
+            $ownerIsActive = DB::table('users')
+                ->where('user_id', $lockedHouse->owner_id)
+                ->where('is_active', true)
+                ->exists();
 
             if ($lockedUnit->house_id !== $lockedHouse->house_id
                 || $lockedHouse->archived_at !== null
                 || $lockedUnit->archived_at !== null
-                || $lockedUnit->status !== 'Available') {
+                || $lockedUnit->status !== 'Available'
+                || ! $ownerIsActive) {
                 throw ValidationException::withMessages([
                     'check_in' => 'This unit is no longer available for booking.',
                 ]);

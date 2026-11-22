@@ -69,8 +69,8 @@ test('a sysadmin invitation creates an owner account and consumes the invitation
         ->assertSee('Invited Owner')
         ->assertSee('invited-owner@example.com')
         ->assertSee('Date registered')
-        ->assertSee('Delete selected')
-        ->assertSee('Select Invited Owner for deletion')
+        ->assertSee('Deactivate selected')
+        ->assertSee('Select Invited Owner for deactivation')
         ->assertDontSee('Active Staff');
 
     $this->get(route('sysadmin.dashboard'))
@@ -164,7 +164,7 @@ test('sysadmin owner search returns matching records over ajax', function () {
         ->get(route('sysadmin.owners.index', ['q' => 'Harbor']))
         ->assertOk()
         ->assertSee('Harbor Owner')
-        ->assertSee('Delete Harbor Owner')
+        ->assertSee('Deactivate Harbor Owner')
         ->assertDontSee('Forest Owner')
         ->assertDontSee('<x-shell', false);
 });
@@ -176,12 +176,12 @@ test('a sysadmin can delete a single owner account with no protected records', f
         'last_name' => 'Owner',
         'email' => 'ready-owner@example.com',
         'password' => 'OwnerPass123!',
-        'is_active' => true,
+        'is_active' => false,
     ]);
 
     $this->actingAs($this->sysadmin)
         ->delete(route('sysadmin.owners.destroy', $owner->user_id))
-        ->assertRedirect(route('sysadmin.owners.index'))
+        ->assertRedirect(route('sysadmin.owners.deactivated'))
         ->assertSessionHas('success', 'Owner account for Ready Owner was deleted.');
 
     $this->assertDatabaseMissing('users', ['user_id' => $owner->user_id]);
@@ -195,7 +195,7 @@ test('a sysadmin cannot delete an owner account linked to a property', function 
         'last_name' => 'Owner',
         'email' => 'property-owner@example.com',
         'password' => 'OwnerPass123!',
-        'is_active' => true,
+        'is_active' => false,
     ]);
     $house = TransientHouse::create([
         'owner_id' => $owner->user_id,
@@ -208,7 +208,7 @@ test('a sysadmin cannot delete an owner account linked to a property', function 
 
     $this->actingAs($this->sysadmin)
         ->delete(route('sysadmin.owners.destroy', $owner->user_id))
-        ->assertRedirect(route('sysadmin.owners.index'))
+        ->assertRedirect(route('sysadmin.owners.deactivated'))
         ->assertSessionHas('error', 'Property Owner cannot be deleted while linked to properties. Reassign or remove those records first.');
 
     $this->assertDatabaseHas('users', ['user_id' => $owner->user_id]);
@@ -224,14 +224,14 @@ test('a sysadmin can bulk delete multiple unreferenced owner accounts', function
             'last_name' => 'Owner',
             'email' => $email,
             'password' => 'OwnerPass123!',
-            'is_active' => true,
+            'is_active' => false,
         ]));
 
     $this->actingAs($this->sysadmin)
         ->delete(route('sysadmin.owners.bulk-destroy'), [
             'owner_ids' => $owners->pluck('user_id')->all(),
         ])
-        ->assertRedirect(route('sysadmin.owners.index'))
+        ->assertRedirect(route('sysadmin.owners.deactivated'))
         ->assertSessionHas('success', '2 owner account(s) deleted.');
 
     foreach ($owners as $owner) {
@@ -247,7 +247,7 @@ test('bulk owner deletion deletes none when any selected account has protected r
         'last_name' => 'Owner',
         'email' => 'safe-owner@example.com',
         'password' => 'OwnerPass123!',
-        'is_active' => true,
+        'is_active' => false,
     ]);
     $protectedOwner = User::create([
         'role_id' => $ownerRoleId,
@@ -255,7 +255,7 @@ test('bulk owner deletion deletes none when any selected account has protected r
         'last_name' => 'Owner',
         'email' => 'protected-owner@example.com',
         'password' => 'OwnerPass123!',
-        'is_active' => true,
+        'is_active' => false,
     ]);
     $house = TransientHouse::create([
         'owner_id' => $protectedOwner->user_id,
@@ -270,7 +270,7 @@ test('bulk owner deletion deletes none when any selected account has protected r
         ->delete(route('sysadmin.owners.bulk-destroy'), [
             'owner_ids' => [$deletableOwner->user_id, $protectedOwner->user_id],
         ])
-        ->assertRedirect(route('sysadmin.owners.index'))
+        ->assertRedirect(route('sysadmin.owners.deactivated'))
         ->assertSessionHas('error', 'No accounts were deleted. Protected Owner cannot be deleted while linked to properties. Reassign or remove those records first.');
 
     $this->assertDatabaseHas('users', ['user_id' => $deletableOwner->user_id]);
@@ -411,7 +411,7 @@ test('an owner can invite staff for an owned house and the staff member lands on
         ->assertSee('Assign to house')
         ->assertSee('class="staff-list"', false)
         ->assertSee('class="staff-card"', false)
-        ->assertSee('Remove', false);
+        ->assertSee('Deactivate', false);
 });
 
 test('an owner cannot assign staff to another owners house', function () {

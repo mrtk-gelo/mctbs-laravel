@@ -38,6 +38,11 @@ class BookingForm extends Component
     {
         $unit->loadMissing('house');
         abort_unless($unit->archived_at === null && $unit->house?->archived_at === null, 404);
+        abort_unless(
+            $unit->house?->is_active &&
+            $unit->house->owner()->where('is_active', true)->exists(),
+            404
+        );
 
         $this->unit = $unit;
         $this->syncDiscountIds();

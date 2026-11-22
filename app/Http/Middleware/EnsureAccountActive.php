@@ -1,0 +1,57 @@
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\Response;
+
+class EnsureAccountActive
+{
+    /**
+     * Handle an incoming request.
+     *
+     * @param  Closure(Request): (Response)  $next
+     */
+    public function handle(Request $request, Closure $next): Response
+    {
+        $user = $request->user();
+
+        if ($user && ! $user->is_active) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()
+                ->route('login')
+                ->withErrors([
+                    'email' => $user->role?->name === 'Owner'
+                        ? 'Account Deactivated. Your account is currently deactivated. Contact the System Administrator to restore access.'
+                        : 'Account Deactivated. Your account is inactive. Contact your Owner to restore access.',
+                ]);
+        }
+
+        if ($user && $user->role?->name === 'Staff') {
+            $ownerId = DB::table('invitations')
+                ->where('email', $user->email)
+                ->whereNotNull('used_at')
+                ->value('invited_by');
+
+            if ($ownerId && ! DB::table('users')->where('user_id', $ownerId)->where('is_active', true)->exists()) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect()
+                    ->route('login')
+                    ->withErrors([
+                        'email' => 'Account Deactivated. Your Owner account is inactive. Contact the Owner or System Administrator.',
+                    ]);
+            }
+        }
+
+        return $next($request);
+    }
+}

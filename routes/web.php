@@ -52,6 +52,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::get('/profile/security', [ProfileController::class, 'security'])->name('profile.security');
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
+    Route::post('/profile/deactivate', [ProfileController::class, 'deactivate'])->name('profile.deactivate');
     Route::get('/notifications/{notificationId}', [NotificationController::class, 'open'])->name('notifications.open');
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::get('/payments/{paymentId}/proof', [BookingWorkflowController::class, 'downloadProof'])->name('payments.proof');
@@ -75,7 +76,12 @@ Route::middleware(['auth', 'role:sysadmin'])->prefix('sysadmin')->name('sysadmin
     Route::post('/backups', [SysadminBackupController::class, 'store'])->name('backups.store');
     Route::get('/backups/{filename}', [SysadminBackupController::class, 'download'])->name('backups.download');
     Route::get('/owners', [SysadminOwnerController::class, 'index'])->name('owners.index');
+    Route::get('/owners/deactivated', [SysadminOwnerController::class, 'deactivated'])->name('owners.deactivated');
     Route::post('/owners/invite', [SysadminOwnerController::class, 'invite'])->name('owners.invite');
+    Route::post('/owners/deactivate-selected', [SysadminOwnerController::class, 'bulkDeactivate'])->name('owners.bulk-deactivate');
+    Route::post('/owners/reactivate-selected', [SysadminOwnerController::class, 'bulkReactivate'])->name('owners.bulk-reactivate');
+    Route::post('/owners/{ownerId}/deactivate', [SysadminOwnerController::class, 'deactivate'])->whereNumber('ownerId')->name('owners.deactivate');
+    Route::post('/owners/{ownerId}/reactivate', [SysadminOwnerController::class, 'reactivate'])->whereNumber('ownerId')->name('owners.reactivate');
     Route::delete('/owners', [SysadminOwnerController::class, 'bulkDestroy'])->name('owners.bulk-destroy');
     Route::delete('/owners/{ownerId}', [SysadminOwnerController::class, 'destroy'])->whereNumber('ownerId')->name('owners.destroy');
 });
@@ -106,7 +112,14 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
     Route::put('/houses/{house}/units/{unit}', [OwnerHouseController::class, 'updateUnit'])->name('houses.units.update');
     Route::put('/houses/{house}/units/{unit}/availability', [OwnerHouseController::class, 'updateUnitAvailability'])->name('houses.units.availability');
     Route::get('/admins', [OwnerAdminController::class, 'index'])->name('admins.index');
+    Route::get('/admins/deactivated', [OwnerAdminController::class, 'deactivated'])->name('admins.deactivated');
     Route::post('/admins/invite', [OwnerAdminController::class, 'invite'])->name('admins.invite');
+    Route::post('/admins/deactivate-selected', [OwnerAdminController::class, 'bulkDeactivate'])->name('admins.bulk-deactivate');
+    Route::post('/admins/reactivate-selected', [OwnerAdminController::class, 'bulkReactivate'])->name('admins.bulk-reactivate');
+    Route::post('/admins/delete-selected', [OwnerAdminController::class, 'bulkPermanentlyDelete'])->name('admins.bulk-permanent-delete');
+    Route::post('/admins/{invitation}/deactivate', [OwnerAdminController::class, 'deactivate'])->name('admins.deactivate');
+    Route::post('/admins/{invitation}/reactivate', [OwnerAdminController::class, 'reactivate'])->name('admins.reactivate');
+    Route::delete('/admins/{invitation}/permanently', [OwnerAdminController::class, 'permanentlyDelete'])->name('admins.permanent-delete');
     Route::delete('/admins/{invitation}', [OwnerAdminController::class, 'remove'])->name('admins.remove');
     Route::get('/reports/excel', [BookingWorkflowController::class, 'downloadExcel'])->name('reports.excel');
     Route::get('/reports/pdf', [BookingWorkflowController::class, 'downloadPdf'])->name('reports.pdf');
