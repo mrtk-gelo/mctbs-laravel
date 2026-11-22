@@ -83,14 +83,23 @@ Route::middleware(['auth', 'role:sysadmin'])->prefix('sysadmin')->name('sysadmin
 Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->group(function () {
     Route::get('/dashboard', [OwnerDashboardController::class, 'index'])->name('dashboard');
     Route::get('/houses', [OwnerHouseController::class, 'index'])->name('houses.index');
+    Route::get('/houses/archive', [OwnerHouseController::class, 'archiveIndex'])->name('houses.archive.index');
+    Route::post('/houses/archive/bulk-houses', [OwnerHouseController::class, 'bulkHouseArchiveAction'])->name('houses.archive.houses');
+    Route::post('/houses/archive/bulk-units', [OwnerHouseController::class, 'bulkUnitArchiveAction'])->name('houses.archive.units');
     Route::get('/houses/create', [OwnerHouseController::class, 'create'])->name('houses.create');
     Route::post('/houses', [OwnerHouseController::class, 'store'])->name('houses.store');
+    Route::post('/houses/{house}/archive', [OwnerHouseController::class, 'archiveHouse'])->name('houses.archive');
+    Route::post('/houses/{house}/restore', [OwnerHouseController::class, 'restoreHouse'])->name('houses.restore');
+    Route::delete('/houses/{house}/permanently', [OwnerHouseController::class, 'permanentlyDeleteHouse'])->name('houses.permanently-delete');
     Route::get('/houses/{house}/edit', [OwnerHouseController::class, 'edit'])->name('houses.edit');
     Route::put('/houses/{house}', [OwnerHouseController::class, 'update'])->name('houses.update');
     Route::put('/houses/{house}/availability', [OwnerHouseController::class, 'updateHouseAvailability'])->name('houses.availability');
     Route::get('/houses/{house}/units', [OwnerHouseController::class, 'units'])->name('houses.units');
     Route::get('/houses/{house}/units/create', [OwnerHouseController::class, 'createUnit'])->name('houses.units.create');
     Route::post('/houses/{house}/units', [OwnerHouseController::class, 'storeUnit'])->name('houses.units.store');
+    Route::post('/houses/{house}/units/{unit}/archive', [OwnerHouseController::class, 'archiveUnit'])->name('houses.units.archive');
+    Route::post('/houses/{house}/units/{unit}/restore', [OwnerHouseController::class, 'restoreUnit'])->name('houses.units.restore');
+    Route::delete('/houses/{house}/units/{unit}/permanently', [OwnerHouseController::class, 'permanentlyDeleteUnit'])->name('houses.units.permanently-delete');
     Route::get('/houses/{house}/units/{unit}/edit', [OwnerHouseController::class, 'editUnit'])->name('houses.units.edit');
     Route::put('/houses/{house}/units/{unit}', [OwnerHouseController::class, 'updateUnit'])->name('houses.units.update');
     Route::put('/houses/{house}/units/{unit}/availability', [OwnerHouseController::class, 'updateUnitAvailability'])->name('houses.units.availability');
@@ -138,12 +147,21 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
 Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->group(function () {
     Route::get('/dashboard', [StaffDashboardController::class, 'index'])->name('dashboard');
     Route::get('/houses', [OwnerHouseController::class, 'index'])->name('houses.index');
+    Route::get('/houses/archive', [OwnerHouseController::class, 'archiveIndex'])->name('houses.archive.index');
+    Route::post('/houses/archive/bulk-houses', [OwnerHouseController::class, 'bulkHouseArchiveAction'])->name('houses.archive.houses');
+    Route::post('/houses/archive/bulk-units', [OwnerHouseController::class, 'bulkUnitArchiveAction'])->name('houses.archive.units');
+    Route::post('/houses/{house}/archive', [OwnerHouseController::class, 'archiveHouse'])->name('houses.archive');
+    Route::post('/houses/{house}/restore', [OwnerHouseController::class, 'restoreHouse'])->name('houses.restore');
+    Route::delete('/houses/{house}/permanently', [OwnerHouseController::class, 'permanentlyDeleteHouse'])->name('houses.permanently-delete');
     Route::get('/houses/{house}/edit', [OwnerHouseController::class, 'edit'])->name('houses.edit');
     Route::put('/houses/{house}', [OwnerHouseController::class, 'update'])->name('houses.update');
     Route::put('/houses/{house}/availability', [OwnerHouseController::class, 'updateHouseAvailability'])->name('houses.availability');
     Route::get('/houses/{house}/units', [OwnerHouseController::class, 'units'])->name('houses.units');
     Route::get('/houses/{house}/units/create', [OwnerHouseController::class, 'createUnit'])->name('houses.units.create');
     Route::post('/houses/{house}/units', [OwnerHouseController::class, 'storeUnit'])->name('houses.units.store');
+    Route::post('/houses/{house}/units/{unit}/archive', [OwnerHouseController::class, 'archiveUnit'])->name('houses.units.archive');
+    Route::post('/houses/{house}/units/{unit}/restore', [OwnerHouseController::class, 'restoreUnit'])->name('houses.units.restore');
+    Route::delete('/houses/{house}/units/{unit}/permanently', [OwnerHouseController::class, 'permanentlyDeleteUnit'])->name('houses.units.permanently-delete');
     Route::get('/houses/{house}/units/{unit}/edit', [OwnerHouseController::class, 'editUnit'])->name('houses.units.edit');
     Route::put('/houses/{house}/units/{unit}', [OwnerHouseController::class, 'updateUnit'])->name('houses.units.update');
     Route::put('/houses/{house}/units/{unit}/availability', [OwnerHouseController::class, 'updateUnitAvailability'])->name('houses.units.availability');

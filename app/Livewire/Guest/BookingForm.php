@@ -36,6 +36,9 @@ class BookingForm extends Component
 
     public function mount(Unit $unit): void
     {
+        $unit->loadMissing('house');
+        abort_unless($unit->archived_at === null && $unit->house?->archived_at === null, 404);
+
         $this->unit = $unit;
         $this->syncDiscountIds();
     }

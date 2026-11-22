@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Booking;
 use App\Models\BookingDiscount;
 use App\Models\BookingGuest;
+use App\Models\TransientHouse;
 use App\Models\Unit;
 use App\Models\User;
 use App\Support\BookingStatus;
@@ -182,12 +183,23 @@ class BookingService
     private function createBookingRecord(?User $guest, Unit $unit, array $data, string $status): Booking
     {
         return DB::transaction(function () use ($guest, $unit, $data, $status): Booking {
+            $houseId = Unit::query()
+                ->whereKey($unit->unit_id)
+                ->firstOrFail()
+                ->house_id;
+            $lockedHouse = TransientHouse::query()
+                ->whereKey($houseId)
+                ->lockForUpdate()
+                ->firstOrFail();
             $lockedUnit = Unit::query()
                 ->where('unit_id', $unit->unit_id)
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($lockedUnit->status !== 'Available') {
+            if ($lockedUnit->house_id !== $lockedHouse->house_id
+                || $lockedHouse->archived_at !== null
+                || $lockedUnit->archived_at !== null
+                || $lockedUnit->status !== 'Available') {
                 throw ValidationException::withMessages([
                     'check_in' => 'This unit is no longer available for booking.',
                 ]);

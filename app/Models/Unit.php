@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Unit extends Model
@@ -34,6 +35,8 @@ class Unit extends Model
         'extra_guest_fee' => 'decimal:2',
         'child_free_through_age' => 'integer',
         'price' => 'decimal:2',
+        'archived_at' => 'datetime',
+        'archived_with_house' => 'boolean',
     ];
 
     protected $attributes = [
@@ -77,5 +80,20 @@ class Unit extends Model
     public function reviews(): HasMany
     {
         return $this->hasMany(Review::class, 'unit_id', 'unit_id');
+    }
+
+    public function feedback(): HasMany
+    {
+        return $this->hasMany(Feedback::class, 'unit_id', 'unit_id');
+    }
+
+    public function damageReports(): HasMany
+    {
+        return $this->hasMany(DamageReport::class, 'unit_id', 'unit_id');
+    }
+
+    public function archivedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'archived_by', 'user_id');
     }
 }

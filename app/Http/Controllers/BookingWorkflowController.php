@@ -18,6 +18,7 @@ use App\Support\BookingFinancialContract;
 use App\Support\BookingStatus;
 use App\Support\PaymentStatus;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -179,6 +180,8 @@ class BookingWorkflowController extends Controller
         $calendarUnits = Unit::query()
             ->with('house')
             ->whereIn('house_id', $houseIds)
+            ->whereNull('archived_at')
+            ->whereHas('house', fn (Builder $query) => $query->whereNull('archived_at'))
             ->orderBy('house_id')
             ->orderBy('unit_type')
             ->get();
@@ -700,6 +703,7 @@ class BookingWorkflowController extends Controller
 
         $unit = Unit::query()->with('house')->findOrFail($data['unit_id']);
         abort_unless($workflow->canManageHouse($request->user(), $unit->house), 404);
+        abort_unless($unit->archived_at === null && $unit->house->archived_at === null, 404);
 
         $dates = collect($data['dates'])
             ->map(fn (string $date): Carbon => Carbon::parse($date)->startOfDay())
