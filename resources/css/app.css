@@ -497,10 +497,42 @@
     white-space: nowrap;
 }
 
-.property-archive-restore-note {
-    color: var(--text-muted);
+.property-archive-disabled-restore {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.property-archive-disabled-restore .btn:disabled {
+    cursor: not-allowed;
+    opacity: .48;
+}
+
+.property-archive-disabled-restore::after {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 7px);
+    left: 50%;
+    width: max-content;
+    max-width: 220px;
+    padding: 6px 9px;
+    border-radius: 6px;
+    background: #1f2937;
+    box-shadow: 0 3px 10px rgb(17 24 39 / 18%);
+    color: #fff;
+    content: attr(data-tooltip);
     font-size: 12px;
-    white-space: normal;
+    line-height: 1.35;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -3px);
+    transition: opacity .12s ease, transform .12s ease;
+}
+
+.property-archive-disabled-restore:hover::after,
+.property-archive-disabled-restore:focus-within::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
 }
 
 .property-archive-empty {
@@ -759,6 +791,10 @@
 .account-lifecycle-filter-grid {
     grid-template-columns: minmax(240px, 1.5fr) repeat(2, minmax(160px, .8fr));
     margin-bottom: 24px;
+}
+
+.account-lifecycle-owner-filter-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .account-lifecycle-table-section {

@@ -28,7 +28,7 @@
             </div>
         @endif
 
-        <form method="GET" action="{{ route('sysadmin.owners.index') }}" class="card property-archive-filters account-lifecycle-filters account-lifecycle-filter-grid" role="search">
+        <form method="GET" action="{{ route('sysadmin.owners.index') }}" class="card property-archive-filters account-lifecycle-filters account-lifecycle-filter-grid account-lifecycle-owner-filter-grid" role="search">
             <div class="booking-list-filter-field booking-list-filter-search">
                 <label for="owner-search">Search owners</label>
                 <div class="property-archive-search"><i class="fa fa-search" aria-hidden="true"></i><input id="owner-search" type="search" name="q" value="{{ $search }}" maxlength="100" placeholder="Search by name, email, or phone"></div>

@@ -166,6 +166,7 @@ test('owner lists reuse archive-style table and pagination controls', function (
         ->get(route('sysadmin.owners.index'))
         ->assertOk()
         ->assertSee('Registered after')
+        ->assertSee('account-lifecycle-owner-filter-grid', false)
         ->assertSee('Rows per page')
         ->assertSee('1–10 of 11 records')
         ->assertSee('View Deactivated Owners')

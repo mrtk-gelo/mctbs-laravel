@@ -138,6 +138,30 @@ test('archive records can be filtered by resource and exported as a csv', functi
         ->and($csv)->toContain("Unit,'=2+2,\"Unit Archive Parent\",");
 });
 
+test('unit restore stays disabled with a tooltip until its parent house is restored', function () {
+    $owner = archiveManagementUser('Owner', 'disabled-unit-restore-owner@example.com');
+    $house = archiveManagementHouse($owner, 'Archived Parent');
+    $unit = archiveManagementUnit($house, 'Independently Archived Unit');
+    $archive = app(PropertyArchiveService::class);
+    $archive->archiveUnit($house, $unit, $owner);
+    $archive->archiveHouse($house, $owner);
+
+    $this->actingAs($owner)
+        ->get(route('owner.houses.archive.index'))
+        ->assertOk()
+        ->assertSee('Independently Archived Unit')
+        ->assertSee('class="property-archive-disabled-restore" data-tooltip="Restore the house first"', false)
+        ->assertSee('disabled aria-label="Restore Independently Archived Unit at Archived Parent; restore the house first"', false);
+
+    $archive->restoreHouse($house);
+
+    $this->get(route('owner.houses.archive.index'))
+        ->assertOk()
+        ->assertSee('Independently Archived Unit')
+        ->assertDontSee('data-tooltip="Restore the house first"', false)
+        ->assertSee(route('owner.houses.units.restore', [$house, $unit]), false);
+});
+
 test('mixed archive bulk restoration preserves house and unit lifecycle behavior', function () {
     $owner = archiveManagementUser('Owner', 'archive-bulk-restore-owner@example.com');
     $archivedHouse = archiveManagementHouse($owner, 'Archived Parent House');

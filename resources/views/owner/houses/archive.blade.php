@@ -135,7 +135,11 @@
                                                 <button type="submit" class="btn btn-outline btn-sm">Restore</button>
                                             </form>
                                         @elseif ($record->house_archived_at !== null)
-                                            <span class="property-archive-restore-note">Restore the house first</span>
+                                            <span class="property-archive-disabled-restore" data-tooltip="Restore the house first">
+                                                <button type="button" class="btn btn-outline btn-sm" disabled aria-label="Restore {{ $recordName }}; restore the house first">
+                                                    Restore
+                                                </button>
+                                            </span>
                                         @else
                                             <form method="POST" action="{{ route($dashboardPrefix.'.houses.units.restore', [$record->house_id, $record->entity_id]) }}">
                                                 @csrf
