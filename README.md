@@ -130,6 +130,8 @@ We deploy on Railway without Docker. Railway builds the app automatically.
 
 Uploaded photos, payment proofs, and backups are stored in `storage/app`. Railway deletes normal files on every redeploy, so add a Volume to the Laravel service with the mount path `/app/storage/app`. A Volume can be attached to only one service and may cause a short downtime during redeploys. Photos and files saved while testing on Railway are kept only when the Volume is attached.
 
+At startup, Railpack runs `railway-start.sh` to ensure the house and unit photo directories and `public/storage` link exist before starting `php artisan serve`.
+
 If an upload fails with "permission denied", add the variable `RAILWAY_RUN_UID=0`.
 
 Set these variables on the Laravel service:
