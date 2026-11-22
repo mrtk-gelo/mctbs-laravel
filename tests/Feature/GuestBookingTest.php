@@ -4106,12 +4106,14 @@ test('owner can check in a guest with a verified downpayment on the booking star
         ->assertSee('MCTBS-000123')
         ->assertSee(today()->addDay()->format('M j, Y'))
         ->assertSee('Manage Guest')
+        ->assertDontSee('Review IDs')
+        ->assertDontSee('id="arrival-review-'.$booking->booking_id.'"', false)
         ->assertDontSee('Check in this guest?', false);
 
     $this->get(route('owner.guests.check-in', $booking->booking_id))
         ->assertSee('Stay Details')
         ->assertSee('SC-CHECKIN-PRIVATE')
-        ->assertSee('Review this ID from the dashboard’s Senior/PWD review modal.')
+        ->assertSee('This ID has not been reviewed.')
         ->assertDontSee('Verify ID')
         ->assertDontSee('Reject ID')
         ->assertSee('Amenities Added');
@@ -4144,19 +4146,28 @@ test('owner dashboard limits operational previews while showing accurate totals'
         ->assertSee('View all');
 });
 
-test('owner can open a checked-in guest ID review modal outside the dashboard preview', function () {
+test('owner can open a confirmed guest ID review modal outside the dashboard preview', function () {
     ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
     $bookings = collect(range(1, 6))->map(fn (int $index): Booking => Booking::create([
         'user_id' => $guest->user_id,
         'unit_id' => $unit->unit_id,
-        'check_in' => today()->subDays($index),
-        'check_out' => today()->addDays($index),
+        'check_in' => today()->addDays($index),
+        'check_out' => today()->addDays($index + 1),
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 3600,
-        'booking_reference' => 'CHECKED-IN-'.$index,
-        'status' => BookingStatus::CHECKED_IN,
+        'booking_reference' => 'CONFIRMED-'.$index,
+        'status' => BookingStatus::CONFIRMED,
     ]));
+    foreach ($bookings as $confirmedBooking) {
+        Payment::create([
+            'booking_id' => $confirmedBooking->booking_id,
+            'payment_method' => 'GCash',
+            'amount' => 1800,
+            'payment_status' => PaymentStatus::VERIFIED,
+            'payment_date' => now(),
+        ]);
+    }
     $booking = $bookings->last();
     $bookingGuest = BookingGuest::create([
         'booking_id' => $booking->booking_id,
@@ -4429,7 +4440,7 @@ test('check-in refuses bookings that do not meet the required conditions', funct
     ],
 ]);
 
-test('checked-in guests can verify an ID from the dashboard modal and apply it only to that guest share', function () {
+test('upcoming guests can verify an ID from the dashboard modal and apply it only to that guest share', function () {
     ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
     $booking = Booking::create([
         'user_id' => $guest->user_id,
@@ -4441,7 +4452,7 @@ test('checked-in guests can verify an ID from the dashboard modal and apply it o
         'total_price' => 3600,
         'room_subtotal' => 3600,
         'booking_reference' => 'MCTBS-ID-01',
-        'status' => BookingStatus::CHECKED_IN,
+        'status' => BookingStatus::CONFIRMED,
     ]);
     $seniorGuest = BookingGuest::create([
         'booking_id' => $booking->booking_id,
@@ -4470,20 +4481,27 @@ test('checked-in guests can verify an ID from the dashboard modal and apply it o
         'refund_amount' => 0,
         'refund_status' => 'None',
     ]);
+    Payment::create([
+        'booking_id' => $booking->booking_id,
+        'payment_method' => 'GCash',
+        'amount' => 1800,
+        'payment_status' => PaymentStatus::VERIFIED,
+        'payment_date' => now(),
+    ]);
 
     $this->actingAs($owner)
         ->get(route('owner.guests.check-in', $booking->booking_id))
         ->assertSee('Senior/PWD Verification')
         ->assertSee('SENIOR-CHECKIN-01')
         ->assertSee('Senior Guest')
+        ->assertSee('Open arrival review')
         ->assertDontSee('Verify ID')
         ->assertDontSee('Reject ID');
 
     $this->get(route('owner.dashboard'))
         ->assertSee('SENIOR-CHECKIN-01')
         ->assertSee('Verify ID')
-        ->assertSee('Reject ID')
-        ->assertSee('Review IDs');
+        ->assertSee('Reject ID');
 
     $this->post(route('owner.discounts.review', $discount->discount_id), [
         'status' => 'Verified',
@@ -4506,13 +4524,19 @@ test('checked-in guests can verify an ID from the dashboard modal and apply it o
         ->and($discount->fresh()->verification_note)->toBeNull()
         ->and($booking->fresh()->total_price)->toBe('3240.00');
 
+    $this->post(route('owner.bookings.check-in', $booking->booking_id), [
+        'guest_details_confirmed' => '1',
+    ])->assertRedirect(route('owner.dashboard'));
+
+    expect($booking->fresh()->status)->toBe(BookingStatus::CHECKED_IN);
+
     $this->get(route('owner.bookings.checkout', $booking->booking_id))
         ->assertSee('Senior/PWD discount')
         ->assertSee('₱360.00')
         ->assertSee('₱3,240.00');
 });
 
-test('checked-in guests with invalid Senior/PWD IDs see the required message and no discount', function () {
+test('upcoming guests with invalid Senior/PWD IDs see the required message and no discount', function () {
     ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
     $booking = Booking::create([
         'user_id' => $guest->user_id,
@@ -4522,7 +4546,7 @@ test('checked-in guests with invalid Senior/PWD IDs see the required message and
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 3600,
-        'status' => BookingStatus::CHECKED_IN,
+        'status' => BookingStatus::CONFIRMED,
     ]);
     $bookingGuest = BookingGuest::create([
         'booking_id' => $booking->booking_id,
@@ -4543,6 +4567,13 @@ test('checked-in guests with invalid Senior/PWD IDs see the required message and
         'final_amount' => 2880,
         'refund_amount' => 0,
         'refund_status' => 'None',
+    ]);
+    Payment::create([
+        'booking_id' => $booking->booking_id,
+        'payment_method' => 'GCash',
+        'amount' => 1800,
+        'payment_status' => PaymentStatus::VERIFIED,
+        'payment_date' => now(),
     ]);
 
     $this->actingAs($owner)
