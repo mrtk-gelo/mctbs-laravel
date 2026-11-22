@@ -47,7 +47,7 @@
                     <div class="form-group">
                         <label>Cover photo</label>
                         <input type="file" name="cover_photo" accept="image/jpeg,image/png,image/webp">
-                        <p class="form-hint">JPG, PNG, or WebP image; maximum 5 MB.</p>
+                        <p class="form-hint">JPG, PNG, or WebP image; maximum 10 MB.</p>
                     </div>
                     <div style="display:flex;gap:10px">
                         <button type="submit" class="btn btn-primary">Save House</button>

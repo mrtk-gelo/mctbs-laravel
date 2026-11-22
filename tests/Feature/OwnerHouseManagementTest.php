@@ -47,6 +47,11 @@ function createUnitPhotoUpload(string $name): UploadedFile
     return UploadedFile::fake()->createWithContent($name, $imageContents);
 }
 
+function createLargeImageUpload(string $name): UploadedFile
+{
+    return UploadedFile::fake()->image($name)->size(6 * 1024);
+}
+
 test('owner creates a house and unit that appear on public transient pages', function () {
     $owner = createHouseManagementUser('Owner', 'house-manager@example.com');
 
@@ -523,6 +528,93 @@ test('owner uploads multiple unit photos and guests can browse the gallery', fun
         ->assertSee(asset('storage/'.$photos[1]->photo_path), false)
         ->assertSee('View photo 2')
         ->assertSee('data-gallery-index="2"', false);
+});
+
+test('owner can create a house with a cover photo larger than 5 MB', function () {
+    Storage::fake('public');
+    $owner = createHouseManagementUser('Owner', 'large-cover-create-owner@example.com');
+
+    $this->actingAs($owner)
+        ->post(route('owner.houses.store'), [
+            'name' => 'Large Cover House',
+            'address' => '10 Test Street',
+            'city' => 'Baguio',
+            'contact_number' => '5551000',
+            'cover_photo' => createLargeImageUpload('large-cover.png'),
+        ])
+        ->assertRedirect(route('owner.houses.index'))
+        ->assertSessionHas('success');
+
+    $house = TransientHouse::where('name', 'Large Cover House')->firstOrFail();
+    expect($house->cover_photo)->not->toBeEmpty();
+    Storage::disk('public')->assertExists($house->cover_photo);
+});
+
+test('owner can update a house with a cover photo larger than 5 MB', function () {
+    Storage::fake('public');
+    $owner = createHouseManagementUser('Owner', 'large-cover-update-owner@example.com');
+    $house = createManagedHouse($owner, 'Large Cover Update House');
+
+    $this->actingAs($owner)
+        ->put(route('owner.houses.update', $house), [
+            'name' => $house->name,
+            'address' => $house->address,
+            'city' => $house->city,
+            'contact_number' => $house->contact_number,
+            'cover_photo' => createLargeImageUpload('large-cover.png'),
+        ])
+        ->assertRedirect(route('owner.houses.index'))
+        ->assertSessionHas('success');
+
+    expect($house->fresh()->cover_photo)->not->toBeEmpty();
+    Storage::disk('public')->assertExists($house->fresh()->cover_photo);
+});
+
+test('owner can create a unit with photos larger than 5 MB', function () {
+    Storage::fake('public');
+    $owner = createHouseManagementUser('Owner', 'large-unit-photo-create-owner@example.com');
+    $house = createManagedHouse($owner, 'Large Unit Photo House');
+
+    $this->actingAs($owner)
+        ->post(route('owner.houses.units.store', $house), [
+            'unit_type' => 'Large Photo Suite',
+            'capacity' => 2,
+            'price' => 1200,
+            'status' => 'Available',
+            'photos' => [createLargeImageUpload('large-unit-photo.png')],
+        ])
+        ->assertRedirect(route('owner.houses.units', $house))
+        ->assertSessionHas('success');
+
+    $unit = Unit::where('unit_type', 'Large Photo Suite')->firstOrFail();
+    $photo = $unit->photos()->firstOrFail();
+    Storage::disk('public')->assertExists($photo->photo_path);
+});
+
+test('owner can update a unit with photos larger than 5 MB', function () {
+    Storage::fake('public');
+    $owner = createHouseManagementUser('Owner', 'large-unit-photo-update-owner@example.com');
+    $house = createManagedHouse($owner, 'Large Unit Photo Update House');
+    $unit = $house->units()->create([
+        'unit_type' => 'Large Photo Suite',
+        'capacity' => 2,
+        'price' => 1200,
+        'status' => 'Available',
+    ]);
+
+    $this->actingAs($owner)
+        ->put(route('owner.houses.units.update', [$house, $unit]), [
+            'unit_type' => $unit->unit_type,
+            'capacity' => $unit->capacity,
+            'price' => $unit->price,
+            'status' => $unit->status,
+            'photos' => [createLargeImageUpload('large-unit-photo.png')],
+        ])
+        ->assertRedirect(route('owner.houses.units', $house))
+        ->assertSessionHas('success');
+
+    $photo = $unit->fresh()->photos()->firstOrFail();
+    Storage::disk('public')->assertExists($photo->photo_path);
 });
 
 test('owner can remove and replace unit photos without allowing cross-unit photo deletion', function () {

@@ -66,7 +66,7 @@ class HouseController extends Controller
             'social_links' => ['nullable', 'array', 'max:10'],
             'social_links.*.name' => ['nullable', 'string', 'max:50', 'required_with:social_links.*.url'],
             'social_links.*.url' => ['nullable', 'string', 'max:2048', 'regex:/^https?:\\/\\/.+/i', 'required_with:social_links.*.name'],
-            'cover_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'cover_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
         ]);
 
         $data['policies'] = $this->validatedPolicies($data['policies'] ?? []);
@@ -109,7 +109,7 @@ class HouseController extends Controller
             'social_links' => ['nullable', 'array', 'max:10'],
             'social_links.*.name' => ['nullable', 'string', 'max:50', 'required_with:social_links.*.url'],
             'social_links.*.url' => ['nullable', 'string', 'max:2048', 'regex:/^https?:\\/\\/.+/i', 'required_with:social_links.*.name'],
-            'cover_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'cover_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'remove_cover_photo' => ['nullable', 'boolean'],
         ]);
 
@@ -208,7 +208,7 @@ class HouseController extends Controller
             'damage_items.*.name' => ['required', 'string', 'max:100'],
             'damage_items.*.price' => ['required', 'numeric', 'min:0'],
             'photos' => ['nullable', 'array', 'max:10'],
-            'photos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'photos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
         ]);
 
         $data['check_in_time'] ??= '14:00';
@@ -268,7 +268,7 @@ class HouseController extends Controller
             'damage_items.*.name' => ['required', 'string', 'max:100'],
             'damage_items.*.price' => ['required', 'numeric', 'min:0'],
             'photos' => ['nullable', 'array', 'max:10'],
-            'photos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'photos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'remove_photos' => ['nullable', 'array', 'max:10'],
             'remove_photos.*' => ['required', 'integer'],
         ]);

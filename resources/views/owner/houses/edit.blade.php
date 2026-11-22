@@ -63,7 +63,7 @@
                             </label>
                         @endif
                         <input id="cover_photo" type="file" name="cover_photo" accept="image/jpeg,image/png,image/webp">
-                        <p class="form-hint">Upload a new JPG, PNG, or WebP image to replace the current one; maximum 5 MB.</p>
+                        <p class="form-hint">Upload a new JPG, PNG, or WebP image to replace the current one; maximum 10 MB.</p>
                     </div>
                     <div style="display:flex;gap:10px">
                         <button type="submit" class="btn btn-primary"><i class="fa fa-floppy-disk"></i> Save Changes</button>

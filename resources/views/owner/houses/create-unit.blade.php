@@ -83,7 +83,7 @@
                     <div class="form-group">
                         <label for="photos">Unit Photos</label>
                         <input id="photos" type="file" name="photos[]" accept="image/jpeg,image/png,image/webp" multiple>
-                        <p class="form-hint">Add up to 10 JPG, PNG, or WebP photos, maximum 5 MB each. The first photo is the main photo guests see.</p>
+                        <p class="form-hint">Add up to 10 JPG, PNG, or WebP photos, maximum 10 MB each. The first photo is the main photo guests see.</p>
                     </div>
                     <div style="display:flex;gap:10px">
                         <button type="submit" class="btn btn-primary">Save Unit</button>
