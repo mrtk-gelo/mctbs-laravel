@@ -21,6 +21,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +63,14 @@ class BookingWorkflowController extends Controller
             'period' => ['nullable', Rule::in(['weekly', 'monthly', 'annually'])],
             'quarter' => ['nullable', Rule::in(['All', 'Q1', 'Q2', 'Q3', 'Q4', 'Custom'])],
             'house_id' => ['nullable', 'integer', 'min:1'],
+            'report_tab' => ['nullable', Rule::in(['overview', 'transactions', 'breakdown'])],
+            'breakdown_section' => ['nullable', Rule::in(['period', 'property', 'unit', 'quarter', 'activity'])],
+            'transaction_search' => ['nullable', 'string', 'max:100'],
+            'transaction_type' => ['nullable', Rule::in(['All', 'Payments', 'Refunds'])],
+            'payment_method' => ['nullable', 'string', 'max:100'],
+            'transaction_from' => ['nullable', 'date_format:Y-m-d'],
+            'transaction_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:transaction_from'],
+            'page' => ['nullable', 'integer', 'min:1'],
         ]);
         $rangeValidator = Validator::make($request->query(), [
             'from_date' => ['nullable', 'string', 'date_format:Y-m-d', 'required_with:to_date'],
@@ -289,11 +298,66 @@ class BookingWorkflowController extends Controller
             $houseIds,
             $this->resolvedReportFilters($filters, $houseIds)
         );
+        $transactions = $report['transactions'];
+        $search = trim((string) ($filters['transaction_search'] ?? ''));
+        $type = $filters['transaction_type'] ?? 'All';
+        $method = trim((string) ($filters['payment_method'] ?? ''));
+        $transactionFrom = $filters['transaction_from'] ?? null;
+        $transactionTo = $filters['transaction_to'] ?? null;
+
+        $transactions = $transactions->filter(function (array $transaction) use ($search, $type, $method, $transactionFrom, $transactionTo): bool {
+            if ($type !== 'All' && $transaction['type'] !== $type) {
+                return false;
+            }
+            if ($method !== '' && strcasecmp($transaction['payment_method'], $method) !== 0) {
+                return false;
+            }
+            if ($transactionFrom !== null && $transaction['date']->toDateString() < $transactionFrom) {
+                return false;
+            }
+            if ($transactionTo !== null && $transaction['date']->toDateString() > $transactionTo) {
+                return false;
+            }
+            if ($search !== '') {
+                $haystack = implode(' ', array_filter([
+                    $transaction['reference'],
+                    $transaction['booking_reference'],
+                    $transaction['guest'],
+                    $transaction['property'],
+                    $transaction['unit'],
+                    $transaction['payment_method'],
+                ]));
+
+                if (! str_contains(strtolower($haystack), strtolower($search))) {
+                    return false;
+                }
+            }
+
+            return true;
+        })->values();
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $transactionPaginator = new LengthAwarePaginator(
+            $transactions->forPage($page, 10)->values(),
+            $transactions->count(),
+            10,
+            $page,
+            ['path' => request()->url(), 'query' => request()->query()]
+        );
 
         return view('bookings.reports', [
             ...$report,
             'dashboardPrefix' => $dashboardPrefix,
             'houses' => TransientHouse::query()->whereIn('house_id', $houseIds)->orderBy('name')->get(),
+            'transactions' => $transactionPaginator,
+            'activeReportTab' => $filters['report_tab'] ?? 'overview',
+            'activeBreakdownSection' => $filters['breakdown_section'] ?? 'period',
+            'transactionFilters' => [
+                'search' => $search,
+                'type' => $type,
+                'payment_method' => $method,
+                'from' => $transactionFrom,
+                'to' => $transactionTo,
+            ],
             'reportQuery' => [
                 'section' => 'reports',
                 'period' => $report['period'],
