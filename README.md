@@ -25,6 +25,8 @@ Install the following on your computer before setting up the project:
 
 ## Setup Instructions
 
+Database dumps must not be committed.
+
 ### 1. Clone the repository
 
 ```bash
