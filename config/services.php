@@ -25,6 +25,10 @@ return [
         'bank_account_number' => env('BANK_ACCOUNT_NUMBER', env('BDO_ACCOUNT_NUMBER')),
     ],
 
+    'brevo' => [
+        'key' => env('BREVO_API_KEY'),
+    ],
+
     'resend' => [
         'key' => env('RESEND_API_KEY'),
     ],
