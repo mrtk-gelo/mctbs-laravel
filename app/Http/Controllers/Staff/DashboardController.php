@@ -11,6 +11,11 @@ class DashboardController extends Controller
 {
     public function index(Request $request, BookingDashboardService $dashboard): View
     {
-        return view('staff.dashboard', $dashboard->queuesFor($request->user()));
+        $reviewBookingId = $request->query('review');
+        $focusBookingId = is_string($reviewBookingId) && ctype_digit($reviewBookingId)
+            ? (int) $reviewBookingId
+            : null;
+
+        return view('staff.dashboard', $dashboard->queuesFor($request->user(), $focusBookingId));
     }
 }

@@ -17,9 +17,9 @@ class BookingDashboardService
     public function __construct(private BookingWorkflowService $workflow) {}
 
     /**
-     * @return array{houses: Collection, pendingBookings: Collection, pendingBookingsTotal: int, paymentReviews: Collection, paymentReviewsTotal: int, upcomingCheckIns: Collection, upcomingCheckInsTotal: int, currentGuests: Collection, currentGuestsTotal: int}
+     * @return array{houses: Collection, pendingBookings: Collection, pendingBookingsTotal: int, paymentReviews: Collection, paymentReviewsTotal: int, upcomingCheckIns: Collection, upcomingCheckInsTotal: int, currentGuests: Collection, currentGuestsTotal: int, focusedReviewBooking: ?Booking}
      */
-    public function queuesFor(User $user): array
+    public function queuesFor(User $user, ?int $focusBookingId = null): array
     {
         if ($user->role?->name === 'Owner') {
             $houses = TransientHouse::query()
@@ -53,6 +53,8 @@ class BookingDashboardService
                 'guests' => fn ($query) => $query
                     ->orderByDesc('is_primary_guest')
                     ->orderBy('booking_guest_id'),
+                'discounts.guest',
+                'discounts.verifiedBy',
                 'payments' => fn ($query) => $query
                     ->where('payment_status', PaymentStatus::VERIFIED),
             ])
@@ -116,11 +118,28 @@ class BookingDashboardService
             ->count();
         $currentGuests = $bookingScope()
             ->where('status', BookingStatus::CHECKED_IN)
-            ->with(['unit.house', 'guest', 'guests'])
+            ->with(['unit.house', 'guest', 'guests', 'discounts.guest', 'discounts.verifiedBy'])
             ->orderBy('check_out')
             ->orderBy('booking_id')
             ->get();
         $currentGuestsTotal = $currentGuests->count();
+        $focusedReviewBooking = $focusBookingId === null
+            ? null
+            : $bookingScope()
+                ->where('booking_id', $focusBookingId)
+                ->whereIn('status', [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN])
+                ->with([
+                    'unit.house',
+                    'guest',
+                    'guests' => fn ($query) => $query
+                        ->orderByDesc('is_primary_guest')
+                        ->orderBy('booking_guest_id'),
+                    'discounts.guest',
+                    'discounts.verifiedBy',
+                    'payments' => fn ($query) => $query
+                        ->where('payment_status', PaymentStatus::VERIFIED),
+                ])
+                ->first();
 
         return [
             'houses' => $houses,
@@ -132,6 +151,7 @@ class BookingDashboardService
             'upcomingCheckInsTotal' => $upcomingCheckInsTotal,
             'currentGuests' => $currentGuests->take(5)->values(),
             'currentGuestsTotal' => $currentGuestsTotal,
+            'focusedReviewBooking' => $focusedReviewBooking,
         ];
     }
 }

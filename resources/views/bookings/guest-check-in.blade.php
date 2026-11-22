@@ -197,33 +197,18 @@
                                 <span class="badge {{ $discount->verification_status === 'Verified' ? 'badge-verified' : (in_array($discount->verification_status, ['Invalid', 'Rejected'], true) ? 'badge-unpaid' : 'badge-pending') }}">{{ $discount->verification_status }}</span>
                             </div>
                             <div class="text-muted fs-sm mt-1">ID number: {{ $discount->id_reference }}</div>
-                            @if ($discount->verification_status === 'Invalid')
-                                <p class="alert alert-danger mt-2 mb-0">ID is invalid. Please tell the guest in person.</p>
-                            @elseif ($discount->verification_status === 'Verified')
+                            @if ($discount->verification_status === 'Verified')
                                 <div class="flex-between fs-sm mt-2">
                                     <span>{{ $discount->discount_type }} discount for {{ $discount->guest->full_name }}</span>
                                     <strong>−₱{{ number_format($discount->discount_amount, 2) }}</strong>
                                 </div>
+                            @elseif ($discount->verification_status === 'Invalid')
+                                <p class="alert alert-danger mt-2 mb-0">ID is invalid. Please tell the guest in person.</p>
                             @elseif ($discount->verification_status === \App\Support\BookingStatus::PENDING && $discount->guest->roster_status !== \App\Models\BookingGuest::ROSTER_ACTIVE)
                                 <p class="form-hint mt-2">This guest was removed from the reservation, so the discount cannot be verified.</p>
                             @elseif ($discount->verification_status === \App\Support\BookingStatus::PENDING)
-                                <p class="form-hint mt-2">Compare this number with the guest’s physical ID before recording the result.</p>
-                                <form method="POST" action="{{ route($dashboardPrefix.'.discounts.review', $discount->discount_id) }}">
-                                    @csrf
-                                    <div class="flex-center gap-1 mt-2">
-                                        <button type="submit" name="status" value="Verified" class="btn btn-success">Verify</button>
-                                        <button type="button" class="btn btn-danger" data-show-discount-reason>Reject ID</button>
-                                    </div>
-                                    <div class="form-group mt-2" data-discount-reason-panel @if (! $errors->has('verification_note')) hidden @endif>
-                                        <label class="required" for="discount-review-note-{{ $discount->discount_id }}">Why can’t this ID be accepted?</label>
-                                        <textarea id="discount-review-note-{{ $discount->discount_id }}" name="verification_note" rows="2" maxlength="500" data-discount-review-note>{{ old('verification_note') }}</textarea>
-                                        @error('verification_note')<p class="form-hint text-danger">{{ $message }}</p>@enderror
-                                        <div class="flex-center gap-1 mt-2">
-                                            <button type="submit" name="status" value="Invalid" class="btn btn-danger">Reject ID</button>
-                                            <button type="button" class="btn btn-outline" data-hide-discount-reason>Go back</button>
-                                        </div>
-                                    </div>
-                                </form>
+                                <p class="form-hint mt-2">Review this ID from the dashboard’s Senior/PWD review modal.</p>
+                                <a href="{{ route($dashboardPrefix.'.dashboard', ['review' => $booking->booking_id]) }}" class="btn btn-outline btn-sm mt-2">Open dashboard review</a>
                             @endif
                             @if (in_array($discount->verification_status, ['Invalid', 'Rejected'], true) && $discount->verification_note)
                                 <p class="alert alert-danger mt-2 mb-0">Reason: {{ $discount->verification_note }}</p>
@@ -380,24 +365,6 @@
                 checkbox.addEventListener('change', () => {
                     const quantity = checkbox.closest('.amenity-card').querySelector('[data-amenity-quantity]');
                     quantity.disabled = !checkbox.checked;
-                });
-            });
-
-            document.querySelectorAll('[data-discount-review-note]').forEach((notes) => {
-                const form = notes.closest('form');
-                const panel = form.querySelector('[data-discount-reason-panel]');
-                const rejectButton = form.querySelector('[data-show-discount-reason]');
-                const backButton = form.querySelector('[data-hide-discount-reason]');
-
-                rejectButton.addEventListener('click', () => {
-                    panel.hidden = false;
-                    notes.required = true;
-                    notes.focus();
-                });
-                backButton.addEventListener('click', () => {
-                    panel.hidden = true;
-                    notes.required = false;
-                    notes.value = '';
                 });
             });
 
