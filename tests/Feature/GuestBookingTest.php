@@ -4031,6 +4031,41 @@ test('owner can check in a guest with a verified downpayment on the booking star
         'booking_reference' => 'MCTBS-000123',
         'status' => BookingStatus::CONFIRMED,
     ]);
+    $primaryBookingGuest = BookingGuest::create([
+        'booking_id' => $booking->booking_id,
+        'user_id' => $guest->user_id,
+        'full_name' => 'Booking Guest',
+        'guest_type' => 'adult',
+        'share_amount' => 1800,
+        'is_primary_guest' => true,
+    ]);
+    BookingGuest::create([
+        'booking_id' => $booking->booking_id,
+        'full_name' => 'Second Guest',
+        'guest_type' => 'adult',
+        'share_amount' => 1800,
+    ]);
+    BookingGuest::create([
+        'booking_id' => $booking->booking_id,
+        'full_name' => 'Child Guest',
+        'guest_type' => 'child',
+        'age' => 4,
+        'is_free_child' => true,
+        'share_amount' => 0,
+    ]);
+    BookingDiscount::create([
+        'booking_id' => $booking->booking_id,
+        'booking_guest_id' => $primaryBookingGuest->booking_guest_id,
+        'discount_type' => 'Senior Citizen',
+        'id_reference' => 'SC-CHECKIN-PRIVATE',
+        'verification_status' => BookingStatus::PENDING,
+        'eligible_amount' => 1800,
+        'discount_rate' => 20,
+        'discount_amount' => 360,
+        'final_amount' => 1440,
+        'refund_amount' => 0,
+        'refund_status' => 'None',
+    ]);
     Payment::create([
         'booking_id' => $booking->booking_id,
         'payment_method' => 'GCash',
@@ -4046,7 +4081,14 @@ test('owner can check in a guest with a verified downpayment on the booking star
         ->assertSee('Booking Guest')
         ->assertSee('Family Room')
         ->assertSee('MCTBS-000123')
-        ->assertSee('Manage Check-in')
+        ->assertSee('Review & Check-in')
+        ->assertSee('Review arrival details')
+        ->assertSee('Second Guest')
+        ->assertSee('Child Guest')
+        ->assertSee('Headcount')
+        ->assertSee(route('owner.bookings.check-in', $booking->booking_id), false)
+        ->assertSee(route('owner.guests.check-in', $booking->booking_id), false)
+        ->assertDontSee('SC-CHECKIN-PRIVATE')
         ->assertDontSee('Check in this guest?', false);
 
     $this->post(route('owner.bookings.check-in', $booking->booking_id), [
@@ -4067,6 +4109,7 @@ test('owner can check in a guest with a verified downpayment on the booking star
 
     $this->get(route('owner.guests.check-in', $booking->booking_id))
         ->assertSee('Stay Details')
+        ->assertSee('SC-CHECKIN-PRIVATE')
         ->assertSee('Amenities Added');
 });
 

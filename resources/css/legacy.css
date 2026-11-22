@@ -301,6 +301,35 @@ tr:hover td { background: #fafbfc; }
 .operations-empty i { margin-bottom: 8px; color: #b7b0a2; font-size: 22px; }
 .operations-empty p { max-width: 280px; margin: 0; }
 .dashboard-assigned-properties { flex-wrap: wrap; }
+.arrival-review-dialog { width: min(620px, calc(100vw - 28px)); max-width: 100%; max-height: min(780px, calc(100vh - 32px)); overflow: auto; padding: 0; border: 1px solid #e8e3d8; border-radius: 14px; color: var(--text); box-shadow: 0 24px 70px rgba(34, 29, 20, .24); }
+.arrival-review-dialog::backdrop { background: rgba(25, 30, 39, .58); backdrop-filter: blur(2px); }
+.arrival-review-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px; border-bottom: 1px solid #f0ede6; }
+.arrival-review-heading { display: flex; align-items: flex-start; gap: 12px; }
+.arrival-review-heading h2 { margin: 0 0 4px; color: var(--heading-color); font-size: 19px; }
+.arrival-review-heading p { max-width: 460px; margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.arrival-review-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 10px; background: #fff4e3; color: var(--accent); }
+.arrival-review-close { display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 22px; line-height: 1; }
+.arrival-review-close:hover { background: #f5f3ee; color: var(--text); }
+.arrival-review-dialog :is(button, a, input):focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.arrival-review-body { display: grid; gap: 16px; padding: 20px 22px 22px; }
+.arrival-review-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.arrival-review-detail { display: grid; min-width: 0; gap: 4px; padding: 12px 14px; border: 1px solid #f0ede6; border-radius: 9px; background: #fdfcf9; }
+.arrival-review-detail span { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.arrival-review-detail strong { color: var(--heading-color); font-size: 14px; overflow-wrap: anywhere; }
+.arrival-review-guests h3 { margin: 0 0 8px; color: var(--heading-color); font-size: 14px; }
+.arrival-review-guests ul { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.arrival-review-guests li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f2f0e9; font-size: 13px; }
+.arrival-review-guests li:last-child { border-bottom: 0; }
+.arrival-review-guest-meta { color: var(--text-muted); font-size: 12px; text-align: right; }
+.arrival-review-guests > p { margin: 0; font-size: 13px; }
+.arrival-review-note { display: flex; gap: 8px; margin: 0; padding: 11px 12px; border-radius: 8px; background: #fff8eb; color: #74541f; font-size: 12px; line-height: 1.45; }
+.arrival-review-note i { margin-top: 2px; }
+.arrival-review-manage-link { width: fit-content; color: var(--accent-dark); font-size: 13px; font-weight: 700; text-decoration: none; }
+.arrival-review-manage-link:hover { text-decoration: underline; }
+.arrival-review-form { display: grid; gap: 16px; }
+.arrival-review-confirm { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #e9e3d7; border-radius: 9px; background: #fff; color: var(--text); cursor: pointer; font-size: 13px; line-height: 1.5; }
+.arrival-review-confirm input { width: 17px; height: 17px; flex: 0 0 17px; margin-top: 1px; accent-color: var(--accent); }
+.arrival-review-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 14px; border-top: 1px solid #f0ede6; }
 
 /* ── BUTTONS ── */
 .btn {
@@ -1178,6 +1207,9 @@ a.calendar-day:hover { transform: translateY(-1px); border-color: var(--primary-
   .operations-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; min-height: 0; padding: 14px; }
   .operations-row-side { grid-column: 1 / -1; grid-row: 2; justify-items: start; text-align: left; }
   .operations-action { grid-column: 2; grid-row: 1; }
+  .arrival-review-header, .arrival-review-body { padding: 16px; }
+  .arrival-review-actions { flex-direction: column-reverse; }
+  .arrival-review-actions .btn { justify-content: center; width: 100%; }
   .workspace-page { margin-top: 18px; }
   .sysadmin-welcome { align-items: flex-start; flex-direction: column; padding: 22px; }
   .sysadmin-action-card { align-items: flex-start; flex-wrap: wrap; }
@@ -1216,6 +1248,13 @@ a.calendar-day:hover { transform: translateY(-1px); border-color: var(--primary-
   .hero-home h1 { font-size: clamp(42px, 11vw, 58px); }
   .hero-home p { font-size: 17px; }
   .transients-section { padding-top: 40px; padding-bottom: 44px; }
+}
+@media (max-width: 420px) {
+  .arrival-review-summary { grid-template-columns: minmax(0, 1fr); }
+  .arrival-review-heading { gap: 9px; }
+  .arrival-review-heading h2 { font-size: 17px; }
+  .arrival-review-guests li { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .arrival-review-guest-meta { text-align: left; }
 }
 @media print {
   .topnav, .site-footer, .report-toolbar, .report-range-filter, .report-header-actions, .report-page-header .btn { display: none !important; }

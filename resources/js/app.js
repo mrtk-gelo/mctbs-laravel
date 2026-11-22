@@ -80,6 +80,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }).observe(document.body, { childList: true, subtree: true });
 
+    document.addEventListener('click', (event) => {
+        const openButton = event.target.closest('[data-open-arrival-review]');
+        if (openButton) {
+            const dialog = document.getElementById(`arrival-review-${openButton.dataset.openArrivalReview}`);
+            if (dialog && typeof dialog.showModal === 'function') {
+                dialog.showModal();
+            }
+
+            return;
+        }
+
+        if (event.target.closest('[data-close-arrival-review]')) {
+            event.target.closest('dialog')?.close();
+        }
+    });
+
     document.querySelectorAll('[data-auto-open-dialog]').forEach((dialog) => {
         if (typeof dialog.showModal === 'function') {
             dialog.showModal();

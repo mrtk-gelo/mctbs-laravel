@@ -47,8 +47,15 @@ class BookingDashboardService
         $upcomingCheckIns = $bookingScope()
             ->where('status', BookingStatus::CONFIRMED)
             ->whereDate('check_in', '>=', today()->toDateString())
-            ->with(['unit.house', 'guest', 'guests', 'payments' => fn ($query) => $query
-                ->where('payment_status', PaymentStatus::VERIFIED)])
+            ->with([
+                'unit.house',
+                'guest',
+                'guests' => fn ($query) => $query
+                    ->orderByDesc('is_primary_guest')
+                    ->orderBy('booking_guest_id'),
+                'payments' => fn ($query) => $query
+                    ->where('payment_status', PaymentStatus::VERIFIED),
+            ])
             ->orderBy('check_in')
             ->orderBy('booking_id')
             ->get()
