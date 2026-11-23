@@ -26,7 +26,8 @@ class BookingFeedbackRequested extends Mailable
     public function content(): Content
     {
         return new Content(
-            text: 'emails.booking-feedback-requested',
+            html: 'emails.booking-feedback-requested',
+            text: 'emails.text.booking-feedback-requested',
             with: [
                 'feedbackUrl' => $this->feedbackUrl,
                 'guestName' => $this->booking->displayGuestName(),

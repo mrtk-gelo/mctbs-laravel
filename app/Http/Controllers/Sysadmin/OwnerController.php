@@ -6,13 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\Invitation;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\InvitationMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Throwable;
 
 class OwnerController extends Controller
 {
@@ -52,6 +55,7 @@ class OwnerController extends Controller
             'invitations' => Invitation::whereHas('role', fn ($query) => $query->where('name', 'Owner'))
                 ->whereNull('used_at')
                 ->where('expires_at', '>', now())
+                ->with(['role', 'invitedBy'])
                 ->orderByDesc('invitation_id')
                 ->get(),
         ]);
@@ -184,7 +188,7 @@ class OwnerController extends Controller
             ->with('success', "{$count} owner account(s) reactivated.");
     }
 
-    public function invite(Request $request): RedirectResponse
+    public function invite(Request $request, InvitationMailer $mailer): RedirectResponse
     {
         $data = $request->validate([
             'email' => ['required', 'email', Rule::unique('users', 'email')],
@@ -192,25 +196,75 @@ class OwnerController extends Controller
 
         $ownerRole = Role::where('name', 'Owner')->firstOrFail();
 
-        // Replace any earlier unused invite to the same email
-        Invitation::where('email', $data['email'])
-            ->where('role_id', $ownerRole->role_id)
+        $invitation = DB::transaction(function () use ($data, $ownerRole): Invitation {
+            $invitation = Invitation::query()
+                ->where('email', $data['email'])
+                ->where('role_id', $ownerRole->role_id)
+                ->whereNull('used_at')
+                ->where('expires_at', '>', now())
+                ->lockForUpdate()
+                ->orderByDesc('invitation_id')
+                ->first();
+
+            if ($invitation) {
+                return $invitation;
+            }
+
+            Invitation::query()
+                ->where('email', $data['email'])
+                ->where('role_id', $ownerRole->role_id)
+                ->whereNull('used_at')
+                ->delete();
+
+            return Invitation::create([
+                'email' => $data['email'],
+                'token' => Str::random(64),
+                'role_id' => $ownerRole->role_id,
+                'invited_by' => auth()->id(),
+                'house_id' => null,
+                'expires_at' => now()->addHours(config('invitations.expiry_hours')),
+            ]);
+        });
+
+        try {
+            $mailer->send($invitation);
+        } catch (Throwable $exception) {
+            Log::warning('Owner invitation email delivery failed.', [
+                'invitation_id' => $invitation->invitation_id,
+                'exception' => $exception::class,
+            ]);
+
+            return redirect()->route('sysadmin.owners.index')
+                ->with('error', "The invitation for {$invitation->email} was saved, but its email could not be sent. Retry it from Pending Invitations.");
+        }
+
+        return redirect()->route('sysadmin.owners.index')
+            ->with('success', "Invitation email sent to {$invitation->email}.");
+    }
+
+    public function resendInvitation(Invitation $invitation, InvitationMailer $mailer): RedirectResponse
+    {
+        $invitation = Invitation::query()
+            ->whereKey($invitation->invitation_id)
             ->whereNull('used_at')
-            ->delete();
+            ->where('expires_at', '>', now())
+            ->whereHas('role', fn ($query) => $query->where('name', 'Owner'))
+            ->firstOrFail();
 
-        $invitation = Invitation::create([
-            'email' => $data['email'],
-            'token' => Str::random(64),
-            'role_id' => $ownerRole->role_id,
-            'invited_by' => auth()->id(),
-            'house_id' => null,
-            'expires_at' => now()->addHours(config('invitations.expiry_hours')),
-        ]);
+        try {
+            $mailer->send($invitation);
+        } catch (Throwable $exception) {
+            Log::warning('Owner invitation resend failed.', [
+                'invitation_id' => $invitation->invitation_id,
+                'exception' => $exception::class,
+            ]);
 
-        session()->flash('success', "Invitation link is ready for {$invitation->email}.");
-        session()->flash('invite_link', route('register', ['token' => $invitation->token]));
+            return redirect()->route('sysadmin.owners.index')
+                ->with('error', "The invitation email could not be resent to {$invitation->email}. The invitation is still available to retry.");
+        }
 
-        return redirect()->route('sysadmin.owners.index');
+        return redirect()->route('sysadmin.owners.index')
+            ->with('success', "Invitation email resent to {$invitation->email}.");
     }
 
     public function destroy(int $ownerId): RedirectResponse

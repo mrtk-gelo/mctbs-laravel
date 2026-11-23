@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Mail\PasswordResetLink;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class User extends Authenticatable
@@ -98,5 +100,22 @@ class User extends Authenticatable
             Str::substr(trim($this->first_name), 0, 1)
                 .Str::substr(trim($this->last_name), 0, 1)
         );
+    }
+
+    /**
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        if (! $this->is_active) {
+            return;
+        }
+
+        $resetUrl = route('password.reset', [
+            'token' => $token,
+            'email' => $this->email,
+        ]);
+
+        Mail::to($this->email)->send(new PasswordResetLink($this, $resetUrl));
     }
 }

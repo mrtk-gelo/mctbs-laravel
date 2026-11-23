@@ -6,6 +6,7 @@ use App\Livewire\Guest\DownpaymentForm;
 use App\Livewire\NotificationBell;
 use App\Mail\BookingAccepted;
 use App\Mail\BookingFeedbackRequested;
+use App\Mail\BookingTicket;
 use App\Models\AdditionalCharge;
 use App\Models\Booking;
 use App\Models\BookingAddon;
@@ -28,6 +29,7 @@ use App\Models\UnitDamageItem;
 use App\Models\User;
 use App\Services\BookingReportService;
 use App\Services\BookingService;
+use App\Services\BookingTicketDeliveryService;
 use App\Services\BookingWorkflowService;
 use App\Support\BookingStatus;
 use App\Support\PaymentStatus;
@@ -35,6 +37,7 @@ use App\Support\UnitTimeFormatter;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -1594,7 +1597,7 @@ test('accepted reservations appear as booked on owner and public calendars with 
         ->assertDontSee('Temporarily held while payment is pending.');
 });
 
-test('acceptance email requests the downpayment and ticket is available after verification', function () {
+test('a ticket is emailed only after payment verification confirms the reserved booking', function () {
     Mail::fake();
     ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
     $unit->update([
@@ -1616,7 +1619,8 @@ test('acceptance email requests the downpayment and ticket is available after ve
         $content = $mail->render();
 
         return $mail->hasTo($guest->email)
-            && str_contains($content, 'Submit the downpayment of ₱1,800.00')
+            && str_contains($content, 'Submit the downpayment of')
+            && str_contains($content, '₱1,800.00')
             && str_contains($content, 'at 3:30 PM')
             && str_contains($content, 'at 11:00 AM')
             && str_contains($content, route('guest.bookings.payment', $booking->booking_id));
@@ -1637,34 +1641,58 @@ test('acceptance email requests the downpayment and ticket is available after ve
     $this->get(route('guest.bookings.ticket', $booking->booking_id))
         ->assertNotFound();
 
+    expect(app(BookingTicketDeliveryService::class)->send($booking->booking_id))
+        ->toBe('ineligible');
+    Mail::assertNotSent(BookingTicket::class);
+
     $payment = $workflow->submitPayment($guest, $booking->booking_id, [
         'payment_method' => 'GCash',
         'amount' => 1800,
     ]);
     $workflow->reviewPayment($owner, $payment->payment_id, PaymentStatus::VERIFIED, null);
 
+    Mail::assertSent(BookingTicket::class, function (BookingTicket $mail) use ($guest): bool {
+        expect($mail->pdfContents)->toStartWith('%PDF');
+        $attachments = $mail->attachments();
+        expect($attachments)->toHaveCount(1)
+            ->and($attachments[0]->as)->toBe('booking-ticket-'.$mail->booking->booking_reference.'.pdf')
+            ->and($attachments[0]->mime)->toBe('application/pdf');
+
+        return $mail->hasTo($guest->email)
+            && str_contains($mail->render(), 'Your booking is confirmed');
+    });
+
+    $additionalPayment = Payment::create([
+        'booking_id' => $booking->booking_id,
+        'payment_method' => 'GCash',
+        'amount' => 100,
+        'payment_status' => PaymentStatus::UNDER_REVIEW,
+        'payment_date' => now(),
+    ]);
+    $workflow->reviewPayment($owner, $additionalPayment->payment_id, PaymentStatus::VERIFIED, null);
+    Mail::assertSent(BookingTicket::class, 1);
+    expect($booking->fresh()->ticket_email_status)->toBe('sent')
+        ->and($booking->fresh()->ticket_email_sent_at)->not->toBeNull();
+
     $this->get(route('guest.bookings.show', $booking->booking_id))
-        ->assertSee('Download Ticket')
+        ->assertSee('Your Booking Ticket was emailed to '.$guest->email)
+        ->assertDontSee('Download Ticket')
         ->assertSeeInOrder([
             'class="col-fixed-300"',
             'class="booking-details-actions',
             'data-booking-ticket-action',
-            'href="'.route('guest.bookings.ticket', $booking->booking_id).'"',
-            'class="btn btn-success btn-block">Download Ticket',
         ], false)
-        ->assertSeeText('Download and show this ticket on check-in day.')
         ->assertDontSee('Please download your ticket')
         ->assertDontSee('Back to My Bookings')
         ->assertDontSee('<div class="text-muted fs-sm">Guests</div>', false);
     $ticketHtml = view('guest.bookings.ticket', [
         'booking' => $booking->fresh()->load('unit.house', 'guest'),
-        'backgroundImage' => '',
     ])->render();
     expect($ticketHtml)->toContain('3:30 PM')
         ->and($ticketHtml)->toContain('11:00 AM')
         ->and($ticketHtml)->toContain('Booking reference')
-        ->and($ticketHtml)->toContain('table-layout: fixed')
-        ->and($ticketHtml)->toContain('background-size: 100% 200%')
+        ->and($ticketHtml)->toContain('background: #fffaf5')
+        ->and($ticketHtml)->toContain('Booking status')
         ->and($ticketHtml)->not->toContain('Number of guests');
 
     $ticketResponse = $this->get(route('guest.bookings.ticket', $booking->booking_id));
@@ -1673,9 +1701,50 @@ test('acceptance email requests the downpayment and ticket is available after ve
         ->assertHeader('content-disposition');
     expect($ticketResponse->getContent())
         ->toStartWith('%PDF')
-        ->toContain('/Subtype /Image');
+        ->not->toContain('/Subtype /Image');
     preg_match_all('~/Type\s*/Page\b~', $ticketResponse->getContent(), $pageObjects);
     expect($pageObjects[0])->toHaveCount(1);
+});
+
+test('a ticket email failure does not roll back verified payment or booking confirmation', function () {
+    config([
+        'mail.default' => 'brevo',
+        'services.brevo.key' => 'test-only-api-key',
+    ]);
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://api.brevo.com/v3/smtp/email' => Http::response(['message' => 'rejected'], 500),
+    ]);
+
+    ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
+    $booking = Booking::create([
+        'user_id' => $guest->user_id,
+        'unit_id' => $unit->unit_id,
+        'check_in' => now()->addDays(5),
+        'check_out' => now()->addDays(7),
+        'adult_count' => 1,
+        'child_count' => 0,
+        'total_price' => 3600,
+        'booking_reference' => 'MCTBS-000102',
+        'status' => BookingStatus::ACCEPTED,
+        'accepted_at' => now(),
+        'payment_deadline' => now()->addDay(),
+    ]);
+    $payment = Payment::create([
+        'booking_id' => $booking->booking_id,
+        'payment_method' => 'GCash',
+        'amount' => 1800,
+        'payment_status' => PaymentStatus::UNDER_REVIEW,
+        'payment_date' => now(),
+    ]);
+
+    app(BookingWorkflowService::class)
+        ->reviewPayment($owner, $payment->payment_id, PaymentStatus::VERIFIED, null);
+
+    expect($booking->fresh()->status)->toBe(BookingStatus::CONFIRMED)
+        ->and($booking->fresh()->ticket_email_status)->toBe('failed')
+        ->and($payment->fresh()->payment_status)->toBe(PaymentStatus::VERIFIED);
+    Http::assertSentCount(1);
 });
 
 test('only the guest who owns a confirmed booking can download its ticket', function () {
@@ -1796,12 +1865,12 @@ test('guest feedback saves a review and notifies the owner and assigned staff', 
         'email' => $guest->email,
         'password' => 'GuestPass123!',
     ])->assertRedirect($feedbackUrl);
-    $this->get($feedbackUrl)->assertSee('Provide Feedback')->assertSee('Submit Feedback');
+    $this->get($feedbackUrl)->assertSee('How was your stay?')->assertSee('Submit feedback');
     $this->post($feedbackUrl, [
         'rating' => 5,
         'comment' => 'We had a lovely stay.',
-    ])->assertRedirect(route('guest.dashboard'));
-    $this->get(route('guest.dashboard'))->assertSee('Thank you for sharing your feedback.');
+    ])->assertRedirect($feedbackUrl);
+    $this->get($feedbackUrl)->assertSee('Thank you for sharing your feedback.');
 
     $this->assertDatabaseHas('reviews', [
         'booking_id' => $booking->booking_id,

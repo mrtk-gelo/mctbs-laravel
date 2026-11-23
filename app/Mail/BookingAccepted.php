@@ -32,7 +32,8 @@ class BookingAccepted extends Mailable
     public function content(): Content
     {
         return new Content(
-            text: 'emails.booking-accepted',
+            html: 'emails.booking-accepted',
+            text: 'emails.text.booking-accepted',
             with: [
                 'paymentUrl' => route('guest.bookings.payment', $this->booking->booking_id),
                 'downpaymentAmount' => $this->booking->downpaymentAmount(),

@@ -7,14 +7,17 @@ use App\Models\Invitation;
 use App\Models\Role;
 use App\Models\TransientHouse;
 use App\Models\User;
+use App\Services\InvitationMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Throwable;
 
 class AdminController extends Controller
 {
@@ -166,7 +169,7 @@ class AdminController extends Controller
             ->with('success', 'Staff account was permanently deleted.');
     }
 
-    public function invite(Request $request): RedirectResponse
+    public function invite(Request $request, InvitationMailer $mailer): RedirectResponse
     {
         $owner = Auth::user();
 
@@ -187,19 +190,72 @@ class AdminController extends Controller
 
         $staffRole = Role::where('name', 'Staff')->firstOrFail();
 
-        $invitation = Invitation::create([
-            'email' => $data['email'],
-            'token' => Str::random(64),
-            'role_id' => $staffRole->role_id,
-            'invited_by' => $owner->user_id,
-            'house_id' => $house->house_id,
-            'expires_at' => now()->addHours(config('invitations.expiry_hours')),
-        ]);
+        $invitation = DB::transaction(function () use ($data, $owner, $house, $staffRole): Invitation {
+            $invitation = Invitation::query()
+                ->where('email', $data['email'])
+                ->where('role_id', $staffRole->role_id)
+                ->where('invited_by', $owner->user_id)
+                ->where('house_id', $house->house_id)
+                ->whereNull('used_at')
+                ->where('expires_at', '>', now())
+                ->lockForUpdate()
+                ->orderByDesc('invitation_id')
+                ->first();
 
-        session()->flash('success', "Invitation link is ready for {$data['email']}.");
-        session()->flash('invite_link', route('register', ['token' => $invitation->token]));
+            return $invitation ?? Invitation::create([
+                'email' => $data['email'],
+                'token' => Str::random(64),
+                'role_id' => $staffRole->role_id,
+                'invited_by' => $owner->user_id,
+                'house_id' => $house->house_id,
+                'expires_at' => now()->addHours(config('invitations.expiry_hours')),
+            ]);
+        });
 
-        return redirect()->route('owner.admins.index');
+        try {
+            $mailer->send($invitation);
+        } catch (Throwable $exception) {
+            Log::warning('Staff invitation email delivery failed.', [
+                'invitation_id' => $invitation->invitation_id,
+                'exception' => $exception::class,
+            ]);
+
+            return redirect()->route('owner.admins.index')
+                ->with('error', "The invitation for {$invitation->email} was saved, but its email could not be sent. Retry it from Pending Invitations.");
+        }
+
+        return redirect()->route('owner.admins.index')
+            ->with('success', "Invitation email sent to {$invitation->email}.");
+    }
+
+    public function resendInvitation(Invitation $invitation, InvitationMailer $mailer): RedirectResponse
+    {
+        $invitation = Invitation::query()
+            ->whereKey($invitation->invitation_id)
+            ->where('invited_by', Auth::id())
+            ->whereNull('used_at')
+            ->where('expires_at', '>', now())
+            ->whereHas('role', fn ($query) => $query->where('name', 'Staff'))
+            ->whereHas('house', fn ($query) => $query
+                ->where('owner_id', Auth::id())
+                ->where('is_active', true)
+                ->whereNull('archived_at'))
+            ->firstOrFail();
+
+        try {
+            $mailer->send($invitation);
+        } catch (Throwable $exception) {
+            Log::warning('Staff invitation resend failed.', [
+                'invitation_id' => $invitation->invitation_id,
+                'exception' => $exception::class,
+            ]);
+
+            return redirect()->route('owner.admins.index')
+                ->with('error', "The invitation email could not be resent to {$invitation->email}. The invitation is still available to retry.");
+        }
+
+        return redirect()->route('owner.admins.index')
+            ->with('success', "Invitation email resent to {$invitation->email}.");
     }
 
     public function remove(Invitation $invitation): RedirectResponse

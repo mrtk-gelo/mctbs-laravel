@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Guest;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\BookingReceipt;
+use App\Services\BookingTicketDeliveryService;
+use App\Services\BookingTicketPdfGenerator;
 use App\Services\BookingWorkflowService;
 use App\Support\BookingFinancialContract;
 use App\Support\BookingStatus;
@@ -24,7 +26,7 @@ class BookingController extends Controller
         return view('guest.bookings.show', $this->bookingPageData($request, $booking_id));
     }
 
-    public function ticket(Request $request, int $booking_id): Response
+    public function ticket(Request $request, int $booking_id, BookingTicketPdfGenerator $pdfGenerator): Response
     {
         $booking = Booking::query()
             ->where('user_id', $request->user()->user_id)
@@ -32,17 +34,34 @@ class BookingController extends Controller
             ->with(['unit.house', 'guest'])
             ->findOrFail($booking_id);
 
-        $backgroundImage = public_path('img/hero-bg.png');
-        abort_unless(is_file($backgroundImage), 500, 'The booking ticket background image is missing.');
-        $backgroundContents = file_get_contents($backgroundImage);
-        abort_unless($backgroundContents !== false, 500, 'The booking ticket background image could not be read.');
+        return response($pdfGenerator->generate($booking))
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'attachment; filename="booking-ticket-'.$booking->booking_reference.'.pdf"');
+    }
 
-        return Pdf::loadView('guest.bookings.ticket', [
-            'booking' => $booking,
-            'backgroundImage' => 'data:image/png;base64,'.base64_encode($backgroundContents),
-        ])
-            ->setPaper('a4', 'landscape')
-            ->download('booking-ticket-'.$booking->booking_reference.'.pdf');
+    public function resendTicket(
+        Request $request,
+        int $booking_id,
+        BookingTicketDeliveryService $ticketDelivery
+    ): RedirectResponse {
+        Booking::query()
+            ->where('user_id', $request->user()->user_id)
+            ->findOrFail($booking_id);
+
+        $status = $ticketDelivery->send($booking_id);
+
+        return match ($status) {
+            'sent' => redirect()->route('guest.bookings.show', $booking_id)
+                ->with('success', 'Your booking ticket email was sent successfully.'),
+            'already_sent' => redirect()->route('guest.bookings.show', $booking_id)
+                ->with('info', 'Your booking ticket has already been emailed.'),
+            'in_progress' => redirect()->route('guest.bookings.show', $booking_id)
+                ->with('info', 'Your booking ticket email is already being processed.'),
+            'failed', 'missing_recipient' => redirect()->route('guest.bookings.show', $booking_id)
+                ->with('error', 'We could not email your ticket. You can download it here and try sending it again later.'),
+            default => redirect()->route('guest.bookings.show', $booking_id)
+                ->with('error', 'A ticket can only be sent for a confirmed booking.'),
+        };
     }
 
     public function payment(Request $request, int $booking_id): View|RedirectResponse

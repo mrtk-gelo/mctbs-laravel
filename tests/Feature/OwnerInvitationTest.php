@@ -1,5 +1,6 @@
 <?php
 
+use App\Mail\AccountInvitation;
 use App\Models\Invitation;
 use App\Models\Notification;
 use App\Models\Role;
@@ -7,6 +8,8 @@ use App\Models\TransientHouse;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 
 uses(RefreshDatabase::class);
 
@@ -22,16 +25,27 @@ beforeEach(function () {
 });
 
 test('a sysadmin invitation creates an owner account and consumes the invitation', function () {
+    Mail::fake();
+
     $inviteResponse = $this->actingAs($this->sysadmin)
         ->post(route('sysadmin.owners.invite'), ['email' => 'invited-owner@example.com'])
         ->assertRedirect(route('sysadmin.owners.index'))
-        ->assertSessionHas('invite_link');
+        ->assertSessionHas('success', 'Invitation email sent to invited-owner@example.com.')
+        ->assertSessionMissing('invite_link');
 
     $invitation = Invitation::where('email', 'invited-owner@example.com')->firstOrFail();
     expect($invitation->role->name)->toBe('Owner')
         ->and($invitation->house_id)->toBeNull()
         ->and($invitation->expires_at->isFuture())->toBeTrue();
-    $inviteResponse->assertSessionHas('invite_link', route('register', ['token' => $invitation->token]));
+    Mail::assertSent(AccountInvitation::class, fn (AccountInvitation $mail): bool => $mail->hasTo($invitation->email)
+        && str_contains($mail->render(), route('register', ['token' => $invitation->token]))
+        && str_contains($mail->render(), 'Owner'));
+
+    $this->actingAs($this->sysadmin)
+        ->post(route('sysadmin.owners.invite'), ['email' => 'invited-owner@example.com'])
+        ->assertSessionHas('success', 'Invitation email sent to invited-owner@example.com.');
+    expect(Invitation::where('email', 'invited-owner@example.com')->whereNull('used_at')->count())->toBe(1);
+    Mail::assertSent(AccountInvitation::class, 2);
 
     $this->get(route('register', ['token' => $invitation->token]))
         ->assertOk()
@@ -78,6 +92,40 @@ test('a sysadmin invitation creates an owner account and consumes the invitation
         ->assertSee('Manage Owners')
         ->assertDontSee('Active properties')
         ->assertDontSee('Revenue');
+});
+
+test('a failed owner invitation email keeps the invitation available for a safe retry', function () {
+    config([
+        'mail.default' => 'brevo',
+        'services.brevo.key' => 'test-brevo-key',
+    ]);
+
+    $attempt = 0;
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://api.brevo.com/v3/smtp/email' => function () use (&$attempt) {
+            $attempt++;
+
+            return Http::response([], $attempt === 1 ? 500 : 201);
+        },
+    ]);
+
+    $this->actingAs($this->sysadmin)
+        ->post(route('sysadmin.owners.invite'), ['email' => 'retry-owner@example.com'])
+        ->assertRedirect(route('sysadmin.owners.index'))
+        ->assertSessionHas('error')
+        ->assertSessionMissing('success')
+        ->assertSessionMissing('invite_link');
+
+    $invitation = Invitation::where('email', 'retry-owner@example.com')->firstOrFail();
+    expect($invitation->used_at)->toBeNull();
+
+    $this->post(route('sysadmin.owners.invitations.resend', $invitation))
+        ->assertRedirect(route('sysadmin.owners.index'))
+        ->assertSessionHas('success', 'Invitation email resent to retry-owner@example.com.');
+
+    expect(Invitation::where('email', 'retry-owner@example.com')->count())->toBe(1)
+        ->and($attempt)->toBe(2);
 });
 
 test('expired invitations notify the inviter to resend them without duplicate reminders', function () {
@@ -345,7 +393,9 @@ test('expired and used invitations cannot register an account', function () {
     expect($usedInvitation->fresh()->used_at)->not->toBeNull();
 });
 
-test('an owner can invite staff for an owned house and the staff member lands on their dashboard', function () {
+test('an owner emails a staff invitation with the assigned house and the staff member lands on their dashboard', function () {
+    Mail::fake();
+
     $owner = User::create([
         'role_id' => Role::where('name', 'Owner')->firstOrFail()->role_id,
         'first_name' => 'House',
@@ -370,13 +420,17 @@ test('an owner can invite staff for an owned house and the staff member lands on
             'house_id' => $house->house_id,
         ])
         ->assertRedirect(route('owner.admins.index'))
-        ->assertSessionHas('invite_link');
+        ->assertSessionHas('success', 'Invitation email sent to house-staff@example.com.')
+        ->assertSessionMissing('invite_link');
 
     $invitation = Invitation::where('email', 'house-staff@example.com')->firstOrFail();
     expect($invitation->role->name)->toBe('Staff')
         ->and($invitation->house_id)->toBe($house->house_id)
         ->and($invitation->expires_at->isFuture())->toBeTrue();
-    $inviteResponse->assertSessionHas('invite_link', route('register', ['token' => $invitation->token]));
+    Mail::assertSent(AccountInvitation::class, fn (AccountInvitation $mail): bool => $mail->hasTo($invitation->email)
+        && str_contains($mail->render(), route('register', ['token' => $invitation->token]))
+        && str_contains($mail->render(), 'Staff')
+        && str_contains($mail->render(), 'Seaside House'));
 
     $this->get(route('register', ['token' => $invitation->token]))
         ->assertOk()

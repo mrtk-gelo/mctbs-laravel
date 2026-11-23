@@ -99,6 +99,9 @@
         @if (session('success'))
             <div class="alert alert-success mb-3">{{ session('success') }}</div>
         @endif
+        @if (session('error'))
+            <div class="alert alert-danger mb-3" role="alert">{{ session('error') }}</div>
+        @endif
         <livewire:guest.booking-status :booking="$booking" :key="'guest-booking-status-'.$booking->booking_id" />
 
         <div class="row">
@@ -286,8 +289,26 @@
                 <div class="booking-details-actions mb-3" style="display:flex;flex-direction:column;gap:10px">
                     @if (in_array($booking->status, [\App\Support\BookingStatus::CONFIRMED, \App\Support\BookingStatus::CHECKED_IN], true))
                         <div data-booking-ticket-action>
-                            <a href="{{ route('guest.bookings.ticket', $booking->booking_id) }}" class="btn btn-success btn-block">Download Ticket</a>
-                            <p class="form-hint mt-1 mb-0">Download and show this ticket on check-in day.</p>
+                            @if ($booking->ticket_email_status === 'sent')
+                                <div class="alert alert-success mb-0" role="status">
+                                    Your Booking Ticket was emailed to {{ $booking->guest?->email }}. Open the PDF attachment before check-in.
+                                </div>
+                            @elseif ($booking->ticket_email_status === 'sending')
+                                <p class="form-hint mb-0" role="status">Your Booking Ticket email is being processed.</p>
+                            @else
+                                @if ($booking->ticket_email_status === 'failed')
+                                    <div class="alert alert-danger mb-2" role="alert">We could not email your ticket. You can download it now or retry sending it.</div>
+                                @else
+                                    <p class="form-hint mt-1 mb-2">Your booking is confirmed. Send your ticket to your email or download a copy.</p>
+                                @endif
+                                <form method="POST" action="{{ route('guest.bookings.ticket.email', $booking->booking_id) }}" class="mb-2">
+                                    @csrf
+                                    <button type="submit" class="btn btn-primary btn-block">
+                                        {{ $booking->ticket_email_status === 'failed' ? 'Retry Ticket Email' : 'Email My Ticket' }}
+                                    </button>
+                                </form>
+                                <a href="{{ route('guest.bookings.ticket', $booking->booking_id) }}" class="btn btn-outline btn-block">Download Ticket</a>
+                            @endif
                         </div>
                     @endif
                     @if ($booking->status === \App\Support\BookingStatus::ACCEPTED && ! $hasUnderReviewPayment && $verifiedPaymentTotal < $checkoutTotal)

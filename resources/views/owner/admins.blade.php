@@ -18,13 +18,6 @@
             </div>
         </header>
 
-        @if (session('invite_link'))
-            <div class="alert alert-info invitation-link-alert mb-3">
-                <strong>Invitation link ready (development mode):</strong>
-                <a href="{{ session('invite_link') }}">{{ session('invite_link') }}</a>
-            </div>
-        @endif
-
         <form method="GET" action="{{ route('owner.admins.index') }}" class="card property-archive-filters account-lifecycle-filters account-lifecycle-filter-grid account-lifecycle-owner-filter-grid" role="search">
             <div class="booking-list-filter-field booking-list-filter-search">
                 <label for="staff-search">Search staff</label>
@@ -133,7 +126,7 @@
                     @else
                         <div class="table-wrap">
                             <table class="property-archive-table account-lifecycle-modal-table">
-                                <thead><tr><th>Email</th><th>House</th><th>Expires</th><th>Status</th></tr></thead>
+                                <thead><tr><th>Email</th><th>House</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead>
                                 <tbody>
                                     @foreach ($invitations as $invitation)
                                         <tr>
@@ -141,6 +134,12 @@
                                             <td>{{ $invitation->house->name ?? '—' }}</td>
                                             <td>{{ $invitation->expires_at->format('M j, Y g:i A') }}</td>
                                             <td><span class="property-archive-resource">Awaiting registration</span></td>
+                                            <td>
+                                                <form method="POST" action="{{ route('owner.admins.invitations.resend', $invitation) }}">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-outline btn-sm">Resend email</button>
+                                                </form>
+                                            </td>
                                         </tr>
                                     @endforeach
                                 </tbody>

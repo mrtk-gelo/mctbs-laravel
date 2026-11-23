@@ -39,6 +39,8 @@ use Illuminate\Validation\ValidationException;
 
 class BookingWorkflowService
 {
+    public function __construct(private readonly BookingTicketDeliveryService $ticketDelivery) {}
+
     public function notifyBookingRequested(Booking $booking, Unit $unit, User $guest): void
     {
         $pendingRequests = $this->overlappingPendingBookings($booking);
@@ -360,7 +362,8 @@ class BookingWorkflowService
         $booking = $payment->booking;
         $this->authorizeHouse($actor, $booking->unit->house);
 
-        return DB::transaction(function () use ($payment, $booking, $actor, $status, $notes): Payment {
+        $bookingWasConfirmed = false;
+        $reviewedPayment = DB::transaction(function () use ($payment, $booking, $actor, $status, $notes, &$bookingWasConfirmed): Payment {
             Unit::query()->whereKey($booking->unit_id)->lockForUpdate()->firstOrFail();
             $booking = Booking::query()->whereKey($booking->booking_id)->lockForUpdate()->firstOrFail();
             $payment = Payment::query()->whereKey($payment->payment_id)->lockForUpdate()->firstOrFail();
@@ -390,6 +393,7 @@ class BookingWorkflowService
             $payment->save();
 
             if ($status === PaymentStatus::VERIFIED && $bookingWasAccepted) {
+                $bookingWasConfirmed = true;
                 $booking->status = BookingStatus::CONFIRMED;
                 $booking->booking_reference ??= 'MCTBS-'.str_pad((string) $booking->booking_id, 6, '0', STR_PAD_LEFT);
                 $booking->payment_deadline = null;
@@ -430,6 +434,12 @@ class BookingWorkflowService
 
             return $payment;
         });
+
+        if ($bookingWasConfirmed) {
+            $this->ticketDelivery->sendAfterCommit($reviewedPayment->booking_id);
+        }
+
+        return $reviewedPayment;
     }
 
     public function isPaymentOverdue(Booking $booking): bool
