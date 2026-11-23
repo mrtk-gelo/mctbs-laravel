@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\ProfileController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BookingWorkflowController;
@@ -36,6 +37,14 @@ Route::post('/guest/feedback/{booking}/{token}', [GuestFeedbackController::class
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'create'])->name('login');
     Route::post('/login', [LoginController::class, 'store']);
+    Route::get('/forgot-password', [PasswordResetController::class, 'requestForm'])->name('password.request');
+    Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink'])
+        ->middleware('throttle:5,1')
+        ->name('password.email');
+    Route::get('/reset-password/{token}', [PasswordResetController::class, 'resetForm'])->name('password.reset');
+    Route::post('/reset-password', [PasswordResetController::class, 'reset'])
+        ->middleware('throttle:10,1')
+        ->name('password.update');
 });
 
 Route::get('/register', [RegisterController::class, 'create'])->name('register');
@@ -64,6 +73,7 @@ Route::middleware(['auth', 'role:guest'])->group(function () {
 
     Route::get('/guest/bookings/{booking_id}', [GuestBookingController::class, 'show'])->name('guest.bookings.show');
     Route::get('/guest/bookings/{booking_id}/ticket', [GuestBookingController::class, 'ticket'])->name('guest.bookings.ticket');
+    Route::post('/guest/bookings/{booking_id}/ticket/email', [GuestBookingController::class, 'resendTicket'])->name('guest.bookings.ticket.email');
     Route::get('/guest/bookings/{booking_id}/payment', [GuestBookingController::class, 'payment'])->name('guest.bookings.payment');
     Route::post('/guest/bookings/{booking_id}/payments', [GuestBookingController::class, 'submitPayment'])->name('guest.bookings.payments.store');
     Route::post('/guest/bookings/{booking_id}/cancel', [GuestBookingController::class, 'cancel'])->name('guest.bookings.cancel');
@@ -78,6 +88,7 @@ Route::middleware(['auth', 'role:sysadmin'])->prefix('sysadmin')->name('sysadmin
     Route::get('/owners', [SysadminOwnerController::class, 'index'])->name('owners.index');
     Route::get('/owners/deactivated', [SysadminOwnerController::class, 'deactivated'])->name('owners.deactivated');
     Route::post('/owners/invite', [SysadminOwnerController::class, 'invite'])->name('owners.invite');
+    Route::post('/owners/invitations/{invitation}/resend', [SysadminOwnerController::class, 'resendInvitation'])->name('owners.invitations.resend');
     Route::post('/owners/deactivate-selected', [SysadminOwnerController::class, 'bulkDeactivate'])->name('owners.bulk-deactivate');
     Route::post('/owners/reactivate-selected', [SysadminOwnerController::class, 'bulkReactivate'])->name('owners.bulk-reactivate');
     Route::post('/owners/{ownerId}/deactivate', [SysadminOwnerController::class, 'deactivate'])->whereNumber('ownerId')->name('owners.deactivate');
@@ -114,6 +125,7 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
     Route::get('/admins', [OwnerAdminController::class, 'index'])->name('admins.index');
     Route::get('/admins/deactivated', [OwnerAdminController::class, 'deactivated'])->name('admins.deactivated');
     Route::post('/admins/invite', [OwnerAdminController::class, 'invite'])->name('admins.invite');
+    Route::post('/admins/invitations/{invitation}/resend', [OwnerAdminController::class, 'resendInvitation'])->name('admins.invitations.resend');
     Route::post('/admins/deactivate-selected', [OwnerAdminController::class, 'bulkDeactivate'])->name('admins.bulk-deactivate');
     Route::post('/admins/reactivate-selected', [OwnerAdminController::class, 'bulkReactivate'])->name('admins.bulk-reactivate');
     Route::post('/admins/delete-selected', [OwnerAdminController::class, 'bulkPermanentlyDelete'])->name('admins.bulk-permanent-delete');

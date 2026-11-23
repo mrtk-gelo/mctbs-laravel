@@ -30,6 +30,10 @@
             <h2 class="card-title">Sign in to your account</h2>
             <p class="card-subtitle">Enter your credentials to access your dashboard.</p>
 
+            @if (session('status'))
+                <div class="auth-alert success" role="status">{{ session('status') }}</div>
+            @endif
+
             <form method="POST" action="{{ route('login') }}" autocomplete="on">
                 @csrf
 
@@ -53,6 +57,7 @@
 
                 <div class="form-field">
                     <label for="password">Password <span class="field-requirement">Required</span></label>
+                    <div class="auth-password-recovery"><a href="{{ route('password.request') }}">Forgot password?</a></div>
                     <div class="input-wrap">
                         <i class="fa fa-lock input-icon"></i>
                         <input id="password" type="password" name="password" placeholder="••••••••" required>

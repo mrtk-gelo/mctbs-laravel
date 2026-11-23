@@ -21,13 +21,6 @@
             </div>
         </header>
 
-        @if (session('invite_link'))
-            <div class="alert alert-info invitation-link-alert mb-3">
-                <div><strong>Invitation link ready</strong><span>Development mode: share this link with the invited owner.</span></div>
-                <a href="{{ session('invite_link') }}">{{ session('invite_link') }}</a>
-            </div>
-        @endif
-
         <form method="GET" action="{{ route('sysadmin.owners.index') }}" class="card property-archive-filters account-lifecycle-filters account-lifecycle-filter-grid account-lifecycle-owner-filter-grid" role="search">
             <div class="booking-list-filter-field booking-list-filter-search">
                 <label for="owner-search">Search owners</label>
@@ -99,13 +92,19 @@
                     @else
                         <div class="table-wrap">
                             <table class="property-archive-table account-lifecycle-modal-table">
-                                <thead><tr><th>Email</th><th>Expires</th><th>Status</th></tr></thead>
+                                <thead><tr><th>Email</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead>
                                 <tbody>
                                     @foreach ($invitations as $invitation)
                                         <tr>
                                             <td><strong>{{ $invitation->email }}</strong></td>
                                             <td>{{ $invitation->expires_at->format('M j, Y g:i A') }}</td>
                                             <td><span class="property-archive-resource">Awaiting registration</span></td>
+                                            <td>
+                                                <form method="POST" action="{{ route('sysadmin.owners.invitations.resend', $invitation) }}">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-outline btn-sm">Resend email</button>
+                                                </form>
+                                            </td>
                                         </tr>
                                     @endforeach
                                 </tbody>

@@ -264,6 +264,40 @@ button, input {
     font-weight: 600;
 }
 
+.auth-password-recovery {
+    display: flex;
+    justify-content: flex-end;
+    margin: -5px 0 8px;
+    font-size: 12px;
+}
+
+.auth-password-recovery a,
+.auth-recovery-return a {
+    color: var(--amber-700);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.auth-password-recovery a:hover,
+.auth-recovery-return a:hover {
+    color: var(--amber-800);
+    text-decoration: underline;
+}
+
+.auth-recovery-return {
+    margin-top: 24px;
+}
+
+.auth-recovery-return i {
+    margin-right: 5px;
+}
+
+.btn-signin:disabled {
+    cursor: wait;
+    opacity: 0.75;
+    transform: none;
+}
+
 .field-requirement {
     margin-left: 4px;
     color: var(--gray-500);

@@ -28,10 +28,13 @@ class FeedbackController extends Controller
             abort_unless($request->user()->user_id === $booking->user_id, 403, 'This feedback link belongs to another guest.');
         }
 
-        $booking->load(['unit.house', 'guest', 'review', 'guests']);
-        if ($booking->user_id === null) {
-            abort_unless($this->hasValidToken($booking, $token), 404);
+        if ($booking->user_id === null && ! $this->hasValidToken($booking, $token)) {
+            return view('guest.feedback.invalid', [
+                'message' => $this->feedbackMessageForPublicLink($booking, $token),
+            ]);
         }
+
+        $booking->load(['unit.house', 'guest', 'review', 'guests']);
 
         return view('guest.feedback.show', [
             'booking' => $booking,
@@ -59,15 +62,15 @@ class FeedbackController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($lockedBooking->hasReviewOrLegacyFeedback()) {
-                throw ValidationException::withMessages([
-                    'feedback' => 'This feedback link has already been used.',
-                ]);
-            }
-
             if (! $this->hasValidToken($lockedBooking, $token)) {
                 throw ValidationException::withMessages([
                     'feedback' => $this->feedbackMessage($lockedBooking, $token),
+                ]);
+            }
+
+            if ($lockedBooking->hasReviewOrLegacyFeedback()) {
+                throw ValidationException::withMessages([
+                    'feedback' => 'This feedback link has already been used.',
                 ]);
             }
 
@@ -84,10 +87,6 @@ class FeedbackController extends Controller
             return $review;
         });
 
-        if ($booking->user_id !== null) {
-            return redirect()->route('guest.dashboard')->with('success', 'Thank you for sharing your feedback.');
-        }
-
         return redirect()
             ->route('guest.feedback.show', ['booking' => $booking->booking_id, 'token' => $token])
             ->with('success', 'Thank you for sharing your feedback.');
@@ -95,12 +94,12 @@ class FeedbackController extends Controller
 
     private function feedbackMessage(Booking $booking, string $token): ?string
     {
-        if ($booking->hasReviewOrLegacyFeedback()) {
-            return 'This feedback link has already been used. Thank you for sharing your feedback.';
-        }
-
         if (! hash_equals((string) $booking->feedback_token, hash('sha256', $token))) {
             return 'This feedback link is invalid or has expired.';
+        }
+
+        if ($booking->hasReviewOrLegacyFeedback()) {
+            return 'This feedback link has already been used. Thank you for sharing your feedback.';
         }
 
         if (! $booking->feedback_token_expires_at?->isFuture()) {
@@ -115,6 +114,22 @@ class FeedbackController extends Controller
         return $booking->feedback_token !== null
             && hash_equals($booking->feedback_token, hash('sha256', $token))
             && $booking->feedback_token_expires_at?->isFuture() === true;
+    }
+
+    private function feedbackMessageForPublicLink(Booking $booking, string $token): string
+    {
+        $tokenMatches = $booking->feedback_token !== null
+            && hash_equals($booking->feedback_token, hash('sha256', $token));
+
+        if (! $tokenMatches) {
+            return 'This feedback link is invalid or has expired.';
+        }
+
+        if ($booking->hasReviewOrLegacyFeedback()) {
+            return 'This feedback link has already been used. Thank you for sharing your feedback.';
+        }
+
+        return 'This feedback link has expired.';
     }
 
     private function notifyHouse(Booking $booking, Review $review): void

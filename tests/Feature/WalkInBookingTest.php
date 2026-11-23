@@ -588,7 +588,11 @@ test('walk-in can check in today and submit one review from the feedback token w
         ->assertSee($feedbackUrl);
 
     auth()->logout();
-    $this->get($feedbackUrl)->assertOk()->assertSee('Check-in Guest');
+    $this->get($feedbackUrl)
+        ->assertOk()
+        ->assertSee('How was your stay?')
+        ->assertSee('Walk-in Room')
+        ->assertDontSee('Check-in Guest');
     $feedbackRoute = route('guest.feedback.store', [
         'booking' => $booking->booking_id,
         'token' => basename($feedbackUrl),
@@ -609,7 +613,10 @@ test('walk-in can check in today and submit one review from the feedback token w
         ->assertSessionHasErrors('feedback');
     expect(Review::query()->where('booking_id', $booking->booking_id)->count())->toBe(1);
     $this->get(route('guest.feedback.show', ['booking' => $booking->booking_id, 'token' => 'invalid']))
-        ->assertNotFound();
+        ->assertOk()
+        ->assertSee('This feedback link is invalid or has expired.')
+        ->assertDontSee('Check-in Guest')
+        ->assertDontSee('Walk-in Room');
 });
 
 test('walk-in feedback is emailed to the saved contact when an email is provided', function () {
