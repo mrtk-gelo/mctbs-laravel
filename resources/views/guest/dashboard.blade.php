@@ -17,8 +17,6 @@
             </a>
         </div>
 
-        @include('bookings.partials.list-filters')
-
         <div class="tabs">
             <button type="button" class="tab-btn active" data-tab="tab-pending">Pending ({{ $pending->count() }})</button>
             <button type="button" class="tab-btn" data-tab="tab-accepted">Accepted ({{ $accepted->count() }})</button>
