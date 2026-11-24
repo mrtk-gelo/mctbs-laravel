@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Sysadmin;
+namespace App\Http\Controllers\Accadmin;
 
 use App\Http\Controllers\Controller;
 use App\Services\DatabaseBackupService;
@@ -16,12 +16,12 @@ class BackupController extends Controller
             $backups->create();
         } catch (RuntimeException $exception) {
             return redirect()
-                ->route('sysadmin.dashboard')
+                ->route('accadmin.dashboard')
                 ->with('error', $exception->getMessage());
         }
 
         return redirect()
-            ->route('sysadmin.dashboard')
+            ->route('accadmin.dashboard')
             ->with('success', 'Database backup created.');
     }
 

@@ -26,7 +26,7 @@
                         <td>{{ $person->registered_at?->format('M j, Y') ?? '—' }}</td>
                         <td><span class="property-archive-resource property-archive-resource--house">{{ $person->email_verified_at ? 'Active' : 'Unverified' }}</span></td>
                         <td>
-                            <form method="POST" action="{{ route('sysadmin.owners.deactivate', $person->user_id) }}" data-account-deactivate data-account-name="{{ $person->first_name }} {{ $person->last_name }}">
+                            <form method="POST" action="{{                             route('accadmin.owners.deactivate', $person->user_id) }}" data-account-deactivate data-account-name="{{ $person->first_name }} {{ $person->last_name }}">
                                 @csrf
                                 <button type="submit" class="btn btn-outline btn-sm">Deactivate</button>
                             </form>

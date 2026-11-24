@@ -13,11 +13,11 @@
                         <td>{{ $person->deactivated_at?->format('M j, Y g:i A') ?? '—' }}</td>
                         <td>
                             <div class="personnel-row-actions">
-                                <form method="POST" action="{{ route('sysadmin.owners.reactivate', $person->user_id) }}" data-owner-row-reactivate data-account-name="{{ $person->first_name }} {{ $person->last_name }}">
+                                <form method="POST" action="{{                                 route('accadmin.owners.reactivate', $person->user_id) }}" data-owner-row-reactivate data-account-name="{{ $person->first_name }} {{ $person->last_name }}">
                                     @csrf
                                     <button type="submit" class="btn btn-outline btn-sm">Reactivate</button>
                                 </form>
-                                <form method="POST" action="{{ route('sysadmin.owners.destroy', $person->user_id) }}" onsubmit="return confirm('Permanently delete this owner account? This cannot be undone.')">
+                                <form method="POST" action="{{                                 route('accadmin.owners.destroy', $person->user_id) }}" onsubmit="return confirm('Permanently delete this owner account? This cannot be undone.')">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="btn btn-danger btn-sm">Delete Permanently</button>

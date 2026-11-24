@@ -19,7 +19,7 @@ class Role extends Model
 
     public function displayName(): string
     {
-        return $this->name === 'System Admin' ? 'Account Manager' : $this->name;
+        return $this->name;
     }
 
     public function users()

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Sysadmin;
+namespace App\Http\Controllers\Accadmin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invitation;
@@ -46,10 +46,10 @@ class OwnerController extends Controller
             ->withQueryString();
 
         if ($request->ajax()) {
-            return view('sysadmin.partials.owner-results', compact('owners', 'search'));
+            return view('accadmin.partials.owner-results', compact('owners', 'search'));
         }
 
-        return view('sysadmin.owners', [
+        return view('accadmin.owners', [
             'owners' => $owners,
             'search' => $search,
             'invitations' => Invitation::whereHas('role', fn ($query) => $query->where('name', 'Owner'))
@@ -88,10 +88,10 @@ class OwnerController extends Controller
             ->withQueryString();
 
         if ($request->ajax()) {
-            return view('sysadmin.partials.deactivated-owner-results', compact('owners', 'search'));
+            return view('accadmin.partials.deactivated-owner-results', compact('owners', 'search'));
         }
 
-        return view('sysadmin.deactivated-owners', compact('owners', 'search'));
+        return view('accadmin.deactivated-owners', compact('owners', 'search'));
     }
 
     public function deactivate(int $ownerId): RedirectResponse
@@ -108,7 +108,7 @@ class OwnerController extends Controller
             DB::table('sessions')->where('user_id', $owner->user_id)->delete();
         });
 
-        return redirect()->route('sysadmin.owners.index')
+        return redirect()->route('accadmin.owners.index')
             ->with('success', "Owner account for {$owner->first_name} {$owner->last_name} was deactivated.");
     }
 
@@ -123,7 +123,7 @@ class OwnerController extends Controller
             'deactivated_by' => null,
         ]);
 
-        return redirect()->route('sysadmin.owners.deactivated')
+        return redirect()->route('accadmin.owners.deactivated')
             ->with('success', "Owner account for {$owner->first_name} {$owner->last_name} was reactivated.");
     }
 
@@ -154,7 +154,7 @@ class OwnerController extends Controller
             return $owners->count();
         });
 
-        return redirect()->route('sysadmin.owners.index')
+        return redirect()->route('accadmin.owners.index')
             ->with('success', "{$count} owner account(s) deactivated.");
     }
 
@@ -184,7 +184,7 @@ class OwnerController extends Controller
             return $owners->count();
         });
 
-        return redirect()->route('sysadmin.owners.deactivated')
+        return redirect()->route('accadmin.owners.deactivated')
             ->with('success', "{$count} owner account(s) reactivated.");
     }
 
@@ -234,11 +234,11 @@ class OwnerController extends Controller
                 'exception' => $exception::class,
             ]);
 
-            return redirect()->route('sysadmin.owners.index')
+            return redirect()->route('accadmin.owners.index')
                 ->with('error', "The invitation for {$invitation->email} was saved, but its email could not be sent. Retry it from Pending Invitations.");
         }
 
-        return redirect()->route('sysadmin.owners.index')
+        return redirect()->route('accadmin.owners.index')
             ->with('success', "Invitation email sent to {$invitation->email}.");
     }
 
@@ -259,11 +259,11 @@ class OwnerController extends Controller
                 'exception' => $exception::class,
             ]);
 
-            return redirect()->route('sysadmin.owners.index')
+            return redirect()->route('accadmin.owners.index')
                 ->with('error', "The invitation email could not be resent to {$invitation->email}. The invitation is still available to retry.");
         }
 
-        return redirect()->route('sysadmin.owners.index')
+        return redirect()->route('accadmin.owners.index')
             ->with('success', "Invitation email resent to {$invitation->email}.");
     }
 
@@ -293,12 +293,12 @@ class OwnerController extends Controller
 
         if ($blockers !== []) {
             return redirect()
-                ->route('sysadmin.owners.deactivated')
+                ->route('accadmin.owners.deactivated')
                 ->with('error', $this->deletionBlockedMessage($owner, $blockers));
         }
 
         return redirect()
-            ->route('sysadmin.owners.deactivated')
+            ->route('accadmin.owners.deactivated')
             ->with('success', "Owner account for {$owner->first_name} {$owner->last_name} was deleted.");
     }
 
@@ -354,12 +354,12 @@ class OwnerController extends Controller
 
         if ($result['blocked'] !== []) {
             return redirect()
-                ->route('sysadmin.owners.deactivated')
+                ->route('accadmin.owners.deactivated')
                 ->with('error', 'No accounts were deleted. '.$this->joinDeletionMessages($result['blocked']));
         }
 
         return redirect()
-            ->route('sysadmin.owners.deactivated')
+            ->route('accadmin.owners.deactivated')
             ->with('success', $result['deleted'].' owner account(s) deleted.');
     }
 

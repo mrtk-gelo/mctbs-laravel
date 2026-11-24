@@ -1,5 +1,5 @@
 <x-shell title="Owner Management | MCTBS">
-    <x-slot:nav>@include('partials.sysadmin-nav', ['activePage' => 'owners'])</x-slot:nav>
+    <x-slot:nav>@include('partials.accadmin-nav', ['activePage' => 'owners'])</x-slot:nav>
 
     <main class="container workspace-page account-lifecycle-page">
         @if (session('success'))<div class="alert alert-success" role="status">{{ session('success') }}</div>@endif
@@ -21,7 +21,7 @@
             </div>
         </header>
 
-        <form method="GET" action="{{ route('sysadmin.owners.index') }}" class="card property-archive-filters account-lifecycle-filters account-lifecycle-filter-grid account-lifecycle-owner-filter-grid" role="search">
+        <form method="GET" action="{{ route('accadmin.owners.index') }}" class="card property-archive-filters account-lifecycle-filters account-lifecycle-filter-grid account-lifecycle-owner-filter-grid" role="search">
             <div class="booking-list-filter-field booking-list-filter-search">
                 <label for="owner-search">Search owners</label>
                 <div class="property-archive-search"><i class="fa fa-search" aria-hidden="true"></i><input id="owner-search" type="search" name="q" value="{{ $search }}" maxlength="100" placeholder="Search by name, email, or phone"></div>
@@ -38,16 +38,16 @@
             <button type="submit" class="sr-only">Apply filters</button>
         </form>
 
-        <form id="bulk-owner-deactivate-form" method="POST" action="{{ route('sysadmin.owners.bulk-deactivate') }}">
+        <form id="bulk-owner-deactivate-form" method="POST" action="{{ route('accadmin.owners.bulk-deactivate') }}">
             @csrf
         </form>
         <section class="account-lifecycle-table-section" aria-label="Registered owners">
-            @include('sysadmin.partials.owner-results')
+            @include('accadmin.partials.owner-results')
             @include('partials.account-lifecycle-pagination', ['records' => $owners, 'paginationId' => 'owners'])
         </section>
 
         <div class="account-lifecycle-secondary-navigation account-lifecycle-secondary-navigation--outer">
-            <a href="{{ route('sysadmin.owners.deactivated') }}" class="btn btn-outline">
+            <a href="{{ route('accadmin.owners.deactivated') }}" class="btn btn-outline">
                 <i class="fa fa-user-slash"></i> View Deactivated Owners
             </a>
         </div>
@@ -65,7 +65,7 @@
                     <button type="button" class="btn btn-outline btn-sm" data-account-modal-close>Close</button>
                 </header>
                 <div class="account-lifecycle-modal-content">
-                    <form method="POST" action="{{ route('sysadmin.owners.invite') }}">
+                    <form method="POST" action="{{ route('accadmin.owners.invite') }}">
                         @csrf
                         <div class="form-group">
                             <label class="required" for="owner-email">Email address</label>
@@ -100,7 +100,7 @@
                                             <td>{{ $invitation->expires_at->format('M j, Y g:i A') }}</td>
                                             <td><span class="property-archive-resource">Awaiting registration</span></td>
                                             <td>
-                                                <form method="POST" action="{{ route('sysadmin.owners.invitations.resend', $invitation) }}">
+                                                <form method="POST" action="{{ route('accadmin.owners.invitations.resend', $invitation) }}">
                                                     @csrf
                                                     <button type="submit" class="btn btn-outline btn-sm">Resend email</button>
                                                 </form>

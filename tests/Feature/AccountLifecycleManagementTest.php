@@ -32,24 +32,24 @@ function lifecycleUser(string $role, string $email, array $attributes = []): Use
     ]);
 }
 
-test('system admin can deactivate and reactivate an owner', function () {
-    $sysadmin = lifecycleUser('System Admin', 'lifecycle-sysadmin@example.com');
+test('account admin can deactivate and reactivate an owner', function () {
+    $sysadmin = lifecycleUser('Account Admin', 'lifecycle-sysadmin@example.com');
     $owner = lifecycleUser('Owner', 'lifecycle-owner@example.com');
 
     $this->actingAs($sysadmin)
-        ->post(route('sysadmin.owners.deactivate', $owner->user_id))
-        ->assertRedirect(route('sysadmin.owners.index'));
+        ->post(route('accadmin.owners.deactivate', $owner->user_id))
+        ->assertRedirect(route('accadmin.owners.index'));
 
     expect($owner->fresh()->is_active)->toBeFalse()
         ->and($owner->fresh()->deactivated_at)->not->toBeNull()
         ->and($owner->fresh()->deactivated_by)->toBe($sysadmin->user_id);
 
-    $this->get(route('sysadmin.owners.deactivated'))
+    $this->get(route('accadmin.owners.deactivated'))
         ->assertOk()
         ->assertSee('lifecycle-owner@example.com');
 
-    $this->post(route('sysadmin.owners.reactivate', $owner->user_id))
-        ->assertRedirect(route('sysadmin.owners.deactivated'));
+    $this->post(route('accadmin.owners.reactivate', $owner->user_id))
+        ->assertRedirect(route('accadmin.owners.deactivated'));
 
     expect($owner->fresh()->is_active)->toBeTrue()
         ->and($owner->fresh()->deactivated_at)->toBeNull();
@@ -157,13 +157,13 @@ test('owner can deactivate and reactivate staff without changing parent restrict
 });
 
 test('owner lists reuse archive-style table and pagination controls', function () {
-    $sysadmin = lifecycleUser('System Admin', 'paged-sysadmin@example.com');
+    $sysadmin = lifecycleUser('Account Admin', 'paged-sysadmin@example.com');
     for ($index = 1; $index <= 11; $index++) {
         lifecycleUser('Owner', "paged-owner-{$index}@example.com");
     }
 
     $this->actingAs($sysadmin)
-        ->get(route('sysadmin.owners.index'))
+        ->get(route('accadmin.owners.index'))
         ->assertOk()
         ->assertSee('Registered after')
         ->assertSee('account-lifecycle-owner-filter-grid', false)
@@ -205,11 +205,11 @@ test('owner lists reuse archive-style table and pagination controls', function (
 });
 
 test('reactivation pages render archive-style bulk selection and pagination', function () {
-    $sysadmin = lifecycleUser('System Admin', 'reactivation-ui-admin@example.com');
+    $sysadmin = lifecycleUser('Account Admin', 'reactivation-ui-admin@example.com');
     $inactiveOwner = lifecycleUser('Owner', 'reactivation-ui-owner@example.com', ['is_active' => false]);
 
     $this->actingAs($sysadmin)
-        ->get(route('sysadmin.owners.deactivated'))
+        ->get(route('accadmin.owners.deactivated'))
         ->assertOk()
         ->assertSee('Deactivated after')
         ->assertSee('account-lifecycle-owner-filter-grid', false)

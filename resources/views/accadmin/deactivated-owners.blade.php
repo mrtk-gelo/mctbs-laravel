@@ -1,7 +1,7 @@
 <x-shell title="Deactivated Owners | MCTBS">
-    <x-slot:nav>@include('partials.sysadmin-nav', ['activePage' => 'owners'])</x-slot:nav>
+    <x-slot:nav>@include('partials.accadmin-nav', ['activePage' => 'owners'])</x-slot:nav>
     <main class="container workspace-page account-lifecycle-page">
-        <a href="{{ route('sysadmin.owners.index') }}" class="text-muted fs-sm account-lifecycle-back">
+        <a href="{{ route('accadmin.owners.index') }}" class="text-muted fs-sm account-lifecycle-back">
             <i class="fa fa-arrow-left"></i> Back to owner management
         </a>
         <header class="page-header-row page-header account-lifecycle-header">
@@ -9,7 +9,7 @@
         </header>
         @if (session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
         @if (session('error'))<div class="alert alert-danger">{{ session('error') }}</div>@endif
-        <form method="GET" action="{{ route('sysadmin.owners.deactivated') }}" class="card property-archive-filters account-lifecycle-filters account-lifecycle-filter-grid account-lifecycle-owner-filter-grid" role="search">
+        <form method="GET" action="{{ route('accadmin.owners.deactivated') }}" class="card property-archive-filters account-lifecycle-filters account-lifecycle-filter-grid account-lifecycle-owner-filter-grid" role="search">
             <div class="booking-list-filter-field booking-list-filter-search">
                 <label for="owner-search">Search</label>
                 <div class="property-archive-search"><i class="fa fa-search" aria-hidden="true"></i><input id="owner-search" type="search" name="q" value="{{ $search }}" placeholder="Search deactivated owners"></div>
@@ -20,13 +20,13 @@
             <button type="submit" class="sr-only">Apply filters</button>
         </form>
 
-        <form id="bulk-owner-reactivate-form" method="POST" action="{{ route('sysadmin.owners.bulk-reactivate') }}">@csrf</form>
-        <form id="bulk-owner-destroy-form" method="POST" action="{{ route('sysadmin.owners.bulk-destroy') }}" data-owner-bulk-delete>
+        <form id="bulk-owner-reactivate-form" method="POST" action="{{ route('accadmin.owners.bulk-reactivate') }}">@csrf</form>
+        <form id="bulk-owner-destroy-form" method="POST" action="{{ route('accadmin.owners.bulk-destroy') }}" data-owner-bulk-delete>
             @csrf
             @method('DELETE')
         </form>
         <section class="account-lifecycle-table-section" aria-label="Deactivated owners">
-            @include('sysadmin.partials.deactivated-owner-results')
+            @include('accadmin.partials.deactivated-owner-results')
             @include('partials.account-lifecycle-pagination', ['records' => $owners, 'paginationId' => 'deactivated-owners'])
         </section>
 

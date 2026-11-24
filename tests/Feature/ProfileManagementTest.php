@@ -21,11 +21,11 @@ function createProfileManagementUser(string $role, string $email): User
     ]);
 }
 
-test('owner staff and system admin dashboards show icon navigation and profile actions', function () {
+test('owner staff and account admin dashboards show icon navigation and profile actions', function () {
     foreach ([
         ['Owner', 'owner.dashboard', 'fa-building'],
         ['Staff', 'staff.dashboard', 'fa-building'],
-        ['System Admin', 'sysadmin.dashboard', 'fa-users'],
+        ['Account Admin', 'accadmin.dashboard', 'fa-users'],
     ] as [$role, $route, $navigationIcon]) {
         $user = createProfileManagementUser($role, strtolower(str_replace(' ', '-', $role)).'@example.com');
 
@@ -39,10 +39,9 @@ test('owner staff and system admin dashboards show icon navigation and profile a
             ->assertSee('Profile')
             ->assertSee('Logout')
             ->assertSee($user->first_name);
-        if ($role === 'System Admin') {
-            $response->assertSee('Account Manager')
-                ->assertSee('Account Manager Dashboard')
-                ->assertDontSee('System Admin Dashboard');
+        if ($role === 'Account Admin') {
+            $response->assertSee('Account Admin')
+                ->assertSee('Account Admin Dashboard');
         }
     }
 });
@@ -77,7 +76,7 @@ test('an authenticated user can update profile details without changing account 
         'last_name' => 'Owner',
         'phone' => '5559876',
         'email' => 'changed@example.com',
-        'role_id' => Role::where('name', 'System Admin')->firstOrFail()->role_id,
+        'role_id' => Role::where('name', 'Account Admin')->firstOrFail()->role_id,
     ])->assertRedirect(route('profile.edit'))
         ->assertSessionHas('success');
 

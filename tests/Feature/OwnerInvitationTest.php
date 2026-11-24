@@ -15,7 +15,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     $this->sysadmin = User::create([
-        'role_id' => Role::where('name', 'System Admin')->firstOrFail()->role_id,
+        'role_id' => Role::where('name', 'Account Admin')->firstOrFail()->role_id,
         'first_name' => 'System',
         'last_name' => 'Admin',
         'email' => 'sysadmin@example.com',
@@ -28,8 +28,8 @@ test('a sysadmin invitation creates an owner account and consumes the invitation
     Mail::fake();
 
     $inviteResponse = $this->actingAs($this->sysadmin)
-        ->post(route('sysadmin.owners.invite'), ['email' => 'invited-owner@example.com'])
-        ->assertRedirect(route('sysadmin.owners.index'))
+        ->post(route('accadmin.owners.invite'), ['email' => 'invited-owner@example.com'])
+        ->assertRedirect(route('accadmin.owners.index'))
         ->assertSessionHas('success', 'Invitation email sent to invited-owner@example.com.')
         ->assertSessionMissing('invite_link');
 
@@ -42,7 +42,7 @@ test('a sysadmin invitation creates an owner account and consumes the invitation
         && str_contains($mail->render(), 'Owner'));
 
     $this->actingAs($this->sysadmin)
-        ->post(route('sysadmin.owners.invite'), ['email' => 'invited-owner@example.com'])
+        ->post(route('accadmin.owners.invite'), ['email' => 'invited-owner@example.com'])
         ->assertSessionHas('success', 'Invitation email sent to invited-owner@example.com.');
     expect(Invitation::where('email', 'invited-owner@example.com')->whereNull('used_at')->count())->toBe(1);
     Mail::assertSent(AccountInvitation::class, 2);
@@ -77,7 +77,7 @@ test('a sysadmin invitation creates an owner account and consumes the invitation
     $this->get('/owner/dashboard')->assertOk();
 
     $this->actingAs($this->sysadmin)
-        ->get(route('sysadmin.owners.index'))
+        ->get(route('accadmin.owners.index'))
         ->assertOk()
         ->assertSee('Owner Management')
         ->assertSee('Invited Owner')
@@ -87,7 +87,7 @@ test('a sysadmin invitation creates an owner account and consumes the invitation
         ->assertSee('Select Invited Owner')
         ->assertDontSee('Active Staff');
 
-    $this->get(route('sysadmin.dashboard'))
+    $this->get(route('accadmin.dashboard'))
         ->assertOk()
         ->assertSee('Manage Owners')
         ->assertDontSee('Active properties')
@@ -111,8 +111,8 @@ test('a failed owner invitation email keeps the invitation available for a safe 
     ]);
 
     $this->actingAs($this->sysadmin)
-        ->post(route('sysadmin.owners.invite'), ['email' => 'retry-owner@example.com'])
-        ->assertRedirect(route('sysadmin.owners.index'))
+        ->post(route('accadmin.owners.invite'), ['email' => 'retry-owner@example.com'])
+        ->assertRedirect(route('accadmin.owners.index'))
         ->assertSessionHas('error')
         ->assertSessionMissing('success')
         ->assertSessionMissing('invite_link');
@@ -120,8 +120,8 @@ test('a failed owner invitation email keeps the invitation available for a safe 
     $invitation = Invitation::where('email', 'retry-owner@example.com')->firstOrFail();
     expect($invitation->used_at)->toBeNull();
 
-    $this->post(route('sysadmin.owners.invitations.resend', $invitation))
-        ->assertRedirect(route('sysadmin.owners.index'))
+    $this->post(route('accadmin.owners.invitations.resend', $invitation))
+        ->assertRedirect(route('accadmin.owners.index'))
         ->assertSessionHas('success', 'Invitation email resent to retry-owner@example.com.');
 
     expect(Invitation::where('email', 'retry-owner@example.com')->count())->toBe(1)
@@ -178,7 +178,7 @@ test('expired invitations notify the inviter to resend them without duplicate re
 
     $this->actingAs($this->sysadmin)
         ->get(route('notifications.open', Notification::where('user_id', $this->sysadmin->user_id)->where('type', 'invitation_expired')->firstOrFail()->notification_id))
-        ->assertRedirect(route('sysadmin.owners.index'));
+        ->assertRedirect(route('accadmin.owners.index'));
     $this->actingAs($owner)
         ->get(route('notifications.open', Notification::where('user_id', $owner->user_id)->where('type', 'invitation_expired')->firstOrFail()->notification_id))
         ->assertRedirect(route('owner.admins.index'));
@@ -209,7 +209,7 @@ test('sysadmin owner search returns matching records over ajax', function () {
 
     $this->actingAs($this->sysadmin)
         ->withHeader('X-Requested-With', 'XMLHttpRequest')
-        ->get(route('sysadmin.owners.index', ['q' => 'Harbor']))
+        ->get(route('accadmin.owners.index', ['q' => 'Harbor']))
         ->assertOk()
         ->assertSee('Harbor Owner')
         ->assertSee('Deactivate')
@@ -228,8 +228,8 @@ test('a sysadmin can delete a single owner account with no protected records', f
     ]);
 
     $this->actingAs($this->sysadmin)
-        ->delete(route('sysadmin.owners.destroy', $owner->user_id))
-        ->assertRedirect(route('sysadmin.owners.deactivated'))
+        ->delete(route('accadmin.owners.destroy', $owner->user_id))
+        ->assertRedirect(route('accadmin.owners.deactivated'))
         ->assertSessionHas('success', 'Owner account for Ready Owner was deleted.');
 
     $this->assertDatabaseMissing('users', ['user_id' => $owner->user_id]);
@@ -255,8 +255,8 @@ test('a sysadmin cannot delete an owner account linked to a property', function 
     ]);
 
     $this->actingAs($this->sysadmin)
-        ->delete(route('sysadmin.owners.destroy', $owner->user_id))
-        ->assertRedirect(route('sysadmin.owners.deactivated'))
+        ->delete(route('accadmin.owners.destroy', $owner->user_id))
+        ->assertRedirect(route('accadmin.owners.deactivated'))
         ->assertSessionHas('error', 'Property Owner cannot be deleted while linked to properties. Reassign or remove those records first.');
 
     $this->assertDatabaseHas('users', ['user_id' => $owner->user_id]);
@@ -276,10 +276,10 @@ test('a sysadmin can bulk delete multiple unreferenced owner accounts', function
         ]));
 
     $this->actingAs($this->sysadmin)
-        ->delete(route('sysadmin.owners.bulk-destroy'), [
+        ->delete(route('accadmin.owners.bulk-destroy'), [
             'owner_ids' => $owners->pluck('user_id')->all(),
         ])
-        ->assertRedirect(route('sysadmin.owners.deactivated'))
+        ->assertRedirect(route('accadmin.owners.deactivated'))
         ->assertSessionHas('success', '2 owner account(s) deleted.');
 
     foreach ($owners as $owner) {
@@ -315,10 +315,10 @@ test('bulk owner deletion deletes none when any selected account has protected r
     ]);
 
     $this->actingAs($this->sysadmin)
-        ->delete(route('sysadmin.owners.bulk-destroy'), [
+        ->delete(route('accadmin.owners.bulk-destroy'), [
             'owner_ids' => [$deletableOwner->user_id, $protectedOwner->user_id],
         ])
-        ->assertRedirect(route('sysadmin.owners.deactivated'))
+        ->assertRedirect(route('accadmin.owners.deactivated'))
         ->assertSessionHas('error', 'No accounts were deleted. Protected Owner cannot be deleted while linked to properties. Reassign or remove those records first.');
 
     $this->assertDatabaseHas('users', ['user_id' => $deletableOwner->user_id]);
@@ -328,10 +328,10 @@ test('bulk owner deletion deletes none when any selected account has protected r
 
 test('bulk owner deletion rejects empty and non-owner selections', function () {
     $this->actingAs($this->sysadmin)
-        ->delete(route('sysadmin.owners.bulk-destroy'), [])
+        ->delete(route('accadmin.owners.bulk-destroy'), [])
         ->assertSessionHasErrors('owner_ids');
 
-    $this->delete(route('sysadmin.owners.bulk-destroy'), [
+    $this->delete(route('accadmin.owners.bulk-destroy'), [
         'owner_ids' => [$this->sysadmin->user_id],
     ])->assertSessionHasErrors('owner_ids.0');
 
@@ -349,7 +349,7 @@ test('non-admin users cannot delete owner accounts', function () {
     ]);
 
     $this->actingAs($owner)
-        ->delete(route('sysadmin.owners.destroy', $owner->user_id))
+        ->delete(route('accadmin.owners.destroy', $owner->user_id))
         ->assertForbidden();
 
     $this->assertDatabaseHas('users', ['user_id' => $owner->user_id]);

@@ -531,7 +531,7 @@ return new class extends Migration
         | role_id references the same roles table used by users.
         |
         | Available roles:
-        | 1 = System Admin
+        | 1 = Account Admin
         | 2 = Owner
         | 3 = Staff
         | 4 = Guest
@@ -666,8 +666,8 @@ return new class extends Migration
         */
         DB::table('roles')->insert([
             [
-                'name' => 'System Admin',
-                'description' => 'Manages the MCTBS system and system-wide settings.',
+                'name' => 'Account Admin',
+                'description' => 'Manages MCTBS accounts and system-wide account operations.',
             ],
             [
                 'name' => 'Owner',

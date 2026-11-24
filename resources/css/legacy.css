@@ -749,7 +749,7 @@ textarea { resize: vertical; min-height: 90px; }
   background: linear-gradient(120deg, #fff2d4 0%, #fffaf1 60%, #fff 100%);
   box-shadow: var(--shadow);
 }
-.sysadmin-welcome h1 { margin: 0 0 7px; font-size: 28px; line-height: 1.2; color: var(--heading-color); }
+.sysadmin-welcome h1 { margin: 0 0 7px; font-size: 28px; line-height: 1.2; font-weight: 800; color: var(--heading-color); }
 .sysadmin-welcome p:not(.eyebrow) { color: var(--text-muted); }
 .sysadmin-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .sysadmin-dashboard-section { margin-top: 24px; }

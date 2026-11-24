@@ -77,7 +77,7 @@ class ProfileController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('login')->withErrors([
-            'email' => 'Account Deactivated. Your account was deactivated successfully. Contact the System Administrator to restore access.',
+            'email' => 'Account Deactivated. Your account was deactivated successfully. Contact the Account Admin to restore access.',
         ]);
     }
 }

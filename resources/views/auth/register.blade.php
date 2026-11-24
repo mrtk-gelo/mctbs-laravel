@@ -15,7 +15,7 @@
                 <img src="{{ asset('img/mctbs.png') }}" alt="MCTBS logo">
             </div>
 
-            <h1 class="left-heading">Motal and Conteros<br>Transient Booking System</h1>
+            <h1 class="left-heading">Motal and Contero's<br>Transient Booking System</h1>
             <span class="heading-accent"></span>
             <p class="left-subheader">A modern booking system designed for Baguio transient house services.</p>
         </div>
@@ -103,7 +103,7 @@
                             <i class="fa fa-eye"></i>
                         </button>
                     </div>
-                    <p class="field-hint">At least 8 characters, with uppercase and lowercase letters, a number, and a symbol.</p>
+                    <p class="field-hint">At least 8 characters, with uppercase (A-Z) and lowercase letters (a-z), a number (0-9), and a symbol (!@#$%^&*()-+).</p>
                     @error('password')
                         <div class="field-error">{{ $message }}</div>
                     @enderror
@@ -156,7 +156,7 @@
         <p class="terms-draft-notice">Draft terms for MCTBS. These are a starting point and will be replaced with the final terms.</p>
         <section>
             <h3>Using your account</h3>
-            <p>Provide accurate registration details, keep your password private, and use your account only for its intended purpose. You are responsible for activity carried out through your account and should contact the Account Manager if you believe it has been accessed without permission.</p>
+            <p>Provide accurate registration details, keep your password private, and use your account only for its intended purpose. You are responsible for activity carried out through your account and should contact the Account Admin if you believe it has been accessed without permission.</p>
         </section>
         <section>
             <h3>Transient listings and booking requests</h3>
@@ -172,7 +172,7 @@
         </section>
         <section>
             <h3>Changes and support</h3>
-            <p>These draft terms may be updated as the service changes. Contact the Account Manager or the property owner through the available channels if you have a question about your account or booking.</p>
+            <p>These draft terms may be updated as the service changes. Contact the Account Admin or the property owner through the available channels if you have a question about your account or booking.</p>
         </section>
     </div>
     <div class="terms-dialog-actions">
