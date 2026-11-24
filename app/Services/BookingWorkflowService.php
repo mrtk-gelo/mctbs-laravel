@@ -1640,8 +1640,8 @@ class BookingWorkflowService
         return DB::transaction(function () use ($booking, $method, $amount, $reference, $receiptPath, $notes): Payment {
             $lockedBooking = Booking::query()->whereKey($booking->booking_id)->lockForUpdate()->firstOrFail();
 
-            if ($lockedBooking->status !== BookingStatus::CHECKED_IN) {
-                throw ValidationException::withMessages(['booking' => 'Payments can only be recorded for checked-in bookings before checkout is completed.']);
+            if (! in_array($lockedBooking->status, [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN], true)) {
+                throw ValidationException::withMessages(['booking' => 'Payments can only be recorded for confirmed or checked-in bookings before checkout is completed.']);
             }
 
             $balanceDue = $lockedBooking->outstandingBalance();

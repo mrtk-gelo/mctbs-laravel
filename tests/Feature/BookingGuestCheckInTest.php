@@ -476,6 +476,7 @@ test('identity exceptions still require a reason and identity status does not ga
     ]);
     $guest = $guests->first();
     $this->travelTo('2026-11-11 10:15:00');
+    $booking->update(['check_in' => today(), 'check_out' => today()->addDay()]);
     $this->actingAs($owner)
         ->post(route('owner.guests.arrivals.store', [$booking->booking_id, $guest->booking_guest_id]))
         ->assertRedirect(route('owner.guests.check-in', $booking->booking_id));

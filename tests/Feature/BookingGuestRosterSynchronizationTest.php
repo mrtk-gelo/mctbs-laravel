@@ -499,7 +499,11 @@ test('checkout shows and refunds discounts only for active roster members', func
         ->assertSee('₱20.00')
         ->assertDontSee('₱30.00');
 
-    app(BookingWorkflowService::class)->completeCheckout($owner, $booking->booking_id);
+    app(BookingWorkflowService::class)->completeCheckout(
+        $owner,
+        $booking->booking_id,
+        'Guest left early due to an emergency.'
+    );
 
     expect(Refund::query()->where('booking_id', $booking->booking_id)->sum('amount'))->toBe(20)
         ->and($removedDiscount->fresh()->refund_amount)->toBe('0.00')

@@ -293,7 +293,7 @@ test('a guest cannot reuse a payment reference number from another payment', fun
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 3600,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
     Payment::create([
         'booking_id' => $previousBooking->booking_id,
@@ -883,7 +883,7 @@ test('booking form rejects active booking overlaps but allows turnover and cance
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 1800,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
     $cancelledCheckIn = now()->addDays(12);
     Booking::create([
@@ -4334,7 +4334,7 @@ test('owner can open a confirmed guest ID review modal outside the dashboard pre
 
 test('owner dashboard lists paid confirmed arrivals on all future dates', function () {
     ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
-    $arrivalDate = today()->addDay();
+    $arrivalDate = today();
     $nearTermBooking = Booking::create([
         'user_id' => $guest->user_id,
         'unit_id' => $unit->unit_id,
@@ -4379,16 +4379,16 @@ test('owner dashboard lists paid confirmed arrivals on all future dates', functi
         ->assertSee($futureArrival->format('M j, Y'))
         ->assertSee(route('owner.guests.check-in', $futureBooking->booking_id));
 
-    $this->post(route('owner.bookings.check-in', $futureBooking->booking_id), [
+    $this->post(route('owner.bookings.check-in', $nearTermBooking->booking_id), [
         'guest_details_confirmed' => '1',
     ])
         ->assertRedirect(route('owner.dashboard'))
         ->assertSessionHas('success', 'Guest checked in successfully.');
 
-    expect($futureBooking->fresh()->status)->toBe(BookingStatus::CHECKED_IN);
+    expect($nearTermBooking->fresh()->status)->toBe(BookingStatus::CHECKED_IN);
 });
 
-test('owner can check in a paid confirmed guest before a future arrival date', function () {
+test('owner cannot check in a paid confirmed guest before a future arrival date', function () {
     ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
     $arrivalDate = today()->addDays(14);
     $booking = Booking::create([
@@ -4413,11 +4413,10 @@ test('owner can check in a paid confirmed guest before a future arrival date', f
         ->post(route('owner.bookings.check-in', $booking->booking_id), [
             'guest_details_confirmed' => '1',
         ])
-        ->assertRedirect(route('owner.dashboard'))
-        ->assertSessionHas('success', 'Guest checked in successfully.');
+        ->assertSessionHasErrors('check_in');
 
-    expect($booking->fresh()->status)->toBe(BookingStatus::CHECKED_IN)
-        ->and($booking->fresh()->checked_in_at)->not->toBeNull();
+    expect($booking->fresh()->status)->toBe(BookingStatus::CONFIRMED)
+        ->and($booking->fresh()->checked_in_at)->toBeNull();
 });
 
 test('staff sees only assigned houses on guest dashboard sections', function () {
@@ -5239,10 +5238,10 @@ test('guest check-in page supports confirmed and checked-in bookings while check
         ->assertSee('Guest Headcount')
         ->assertDontSee('Guest Roster and Attendance')
         ->assertSee('Complete Booking Check-in');
+    $booking->update(['status' => BookingStatus::CHECKED_IN]);
     $this->get(route('owner.bookings.checkout', $booking->booking_id))
         ->assertOk();
 
-    $booking->update(['status' => BookingStatus::CHECKED_IN]);
     $checkInResponse = $this->get(route('owner.guests.check-in', $booking->booking_id))
         ->assertSee('Stay Details')
         ->assertSee('Booking reference')
@@ -5456,7 +5455,7 @@ test('booking add-on and damage prices remain unchanged when unit prices change'
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 3600,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
     $bookingAddon = BookingAddon::create([
         'booking_id' => $booking->booking_id,
@@ -5688,7 +5687,7 @@ test('owner can verify discounts, record checkout charges and payment, complete 
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 3600,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
     $bookingGuest = BookingGuest::create([
         'booking_id' => $booking->booking_id,
@@ -5781,7 +5780,7 @@ test('owner can verify discounts, record checkout charges and payment, complete 
     $this->actingAs($owner)
         ->post(route('owner.bookings.checkout.complete', $booking->booking_id))
         ->assertSessionHasErrors('booking');
-    expect($booking->fresh()->status)->toBe(BookingStatus::CONFIRMED);
+    expect($booking->fresh()->status)->toBe(BookingStatus::CHECKED_IN);
     $this->get(route('owner.bookings.checkout', $booking->booking_id))
         ->assertOk()
         ->assertSee('Pay the remaining balance before completing checkout.')
@@ -6275,7 +6274,7 @@ test('staff work queues and checkout actions are restricted to assigned properti
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 3600,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
 
     $this->actingAs($staff)
