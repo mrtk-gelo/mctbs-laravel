@@ -224,10 +224,10 @@
 
             </div>
 
-            <aside class="unit-booking-column" aria-label="Delux Unit Summary">
+            <aside class="unit-booking-column" aria-label="Unit Summary">
                 <div class="book-sidebar">
                     <div class="book-sidebar-header">
-                        <strong>Delux Unit Summary</strong>
+                        <strong>Unit Summary</strong>
                         <span>Unit details at a glance</span>
                     </div>
                     <div class="book-sidebar-body">
