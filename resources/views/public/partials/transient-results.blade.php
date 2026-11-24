@@ -44,4 +44,10 @@
             <p>{{ $search ? 'Try a different search term or location.' : 'No transient houses are available yet.' }}</p>
         </div>
     @endif
+
+    @if ($hasMoreHouses ?? false)
+        <div class="transient-results-more">
+            <a href="{{ route('public.transients') }}" class="btn btn-outline btn-sm">View More Transient</a>
+        </div>
+    @endif
 </div>

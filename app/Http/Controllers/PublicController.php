@@ -23,8 +23,10 @@ class PublicController extends Controller
     public function home(Request $request): View
     {
         $search = trim((string) $request->query('q', ''));
+        $houses = $this->availableHouses($search)->limit(4)->get();
         $data = [
-            'houses' => $this->availableHouses($search)->get(),
+            'houses' => $houses->take(3),
+            'hasMoreHouses' => $houses->count() > 3,
             'search' => $search,
         ];
 
