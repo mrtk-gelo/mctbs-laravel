@@ -218,6 +218,7 @@ class AdminController extends Controller
             Log::warning('Staff invitation email delivery failed.', [
                 'invitation_id' => $invitation->invitation_id,
                 'exception' => $exception::class,
+                'error' => $exception->getMessage(),
             ]);
 
             return redirect()->route('owner.admins.index')
@@ -248,6 +249,7 @@ class AdminController extends Controller
             Log::warning('Staff invitation resend failed.', [
                 'invitation_id' => $invitation->invitation_id,
                 'exception' => $exception::class,
+                'error' => $exception->getMessage(),
             ]);
 
             return redirect()->route('owner.admins.index')

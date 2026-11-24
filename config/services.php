@@ -19,6 +19,9 @@ return [
     ],
 
     'mctbs' => [
+        // Official MCTBS mailbox: the System Admin (Account Admin) account email.
+        // Falls back to the mail "From" address so both stay the same by default.
+        'sysad_email' => env('MCTBS_SYSAD_EMAIL', env('MAIL_FROM_ADDRESS')),
         'gcash_qr_image' => env('GCASH_QR_IMAGE'),
         'bank_name' => env('BANK_NAME', env('BDO_BANK_NAME', env('BDO_ACCOUNT_NAME') ? 'BDO' : null)),
         'bank_account_name' => env('BANK_ACCOUNT_NAME', env('BDO_ACCOUNT_NAME')),

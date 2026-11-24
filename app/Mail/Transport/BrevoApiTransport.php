@@ -61,8 +61,9 @@ class BrevoApiTransport extends AbstractTransport
             );
         }
 
-        Http::connectTimeout(5)
-            ->timeout(15)
+        Http::connectTimeout(20)
+            ->timeout(45)
+            ->withOptions(['force_ip_resolve' => 'v4'])
             ->withHeaders(['api-key' => $this->apiKey])
             ->acceptJson()
             ->post('https://api.brevo.com/v3/smtp/email', $payload)

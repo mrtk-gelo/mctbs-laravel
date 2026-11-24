@@ -12,9 +12,11 @@ use Carbon\CarbonPeriod;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Throwable;
 
 class PublicController extends Controller
 {
@@ -252,12 +254,25 @@ class PublicController extends Controller
             ]);
         }
 
-        Mail::to($owner->email)->send(new PropertyInquiry(
-            propertyName: $house->name,
-            unitName: $unit?->unit_type,
-            senderName: $data['name'],
-            senderEmail: $data['email'],
-            inquiryMessage: $data['message'],
-        ));
+        try {
+            Mail::to($owner->email)->send(new PropertyInquiry(
+                propertyName: $house->name,
+                unitName: $unit?->unit_type,
+                senderName: $data['name'],
+                senderEmail: $data['email'],
+                inquiryMessage: $data['message'],
+            ));
+        } catch (Throwable $exception) {
+            Log::warning('Property inquiry email delivery failed.', [
+                'house_id' => $house->getKey(),
+                'unit_id' => $unit?->getKey(),
+                'exception' => $exception::class,
+                'error' => $exception->getMessage(),
+            ]);
+
+            throw ValidationException::withMessages([
+                'inquiry' => 'Your inquiry could not be sent right now. Please try again in a few minutes.',
+            ]);
+        }
     }
 }
