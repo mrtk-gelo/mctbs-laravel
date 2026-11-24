@@ -84,6 +84,7 @@ class BookingTicketDeliveryService
             Log::warning('Booking ticket email delivery failed.', [
                 'booking_id' => $bookingId,
                 'exception' => $exception::class,
+                'error' => $exception->getMessage(),
             ]);
 
             return 'failed';

@@ -33,6 +33,7 @@ class PasswordResetController extends Controller
             Log::warning('Password reset email delivery failed.', [
                 'email_hash' => hash('sha256', strtolower($validated['email'])),
                 'exception' => $exception::class,
+                'error' => $exception->getMessage(),
             ]);
 
             return back()

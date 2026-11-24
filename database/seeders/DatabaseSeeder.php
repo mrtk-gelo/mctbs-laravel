@@ -17,7 +17,7 @@ class DatabaseSeeder extends Seeder
             'role_id' => $accountAdminRole->role_id,
             'first_name' => 'Account',
             'last_name' => 'Admin',
-            'email' => 'accadmin@mctbs.com',
+            'email' => config('services.mctbs.sysad_email') ?: 'accadmin@mctbs.com',
             'phone' => null,
             'password' => Hash::make('Admin@1234'),
             'email_verified_at' => now(),

@@ -232,6 +232,7 @@ class OwnerController extends Controller
             Log::warning('Owner invitation email delivery failed.', [
                 'invitation_id' => $invitation->invitation_id,
                 'exception' => $exception::class,
+                'error' => $exception->getMessage(),
             ]);
 
             return redirect()->route('accadmin.owners.index')
@@ -257,6 +258,7 @@ class OwnerController extends Controller
             Log::warning('Owner invitation resend failed.', [
                 'invitation_id' => $invitation->invitation_id,
                 'exception' => $exception::class,
+                'error' => $exception->getMessage(),
             ]);
 
             return redirect()->route('accadmin.owners.index')

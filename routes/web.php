@@ -25,9 +25,9 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [PublicController::class, 'home'])->name('home');
 Route::get('/transients', [PublicController::class, 'transients'])->name('public.transients');
 Route::get('/houses/{house}', [PublicController::class, 'house'])->name('public.house');
-Route::post('/houses/{house}/inquiries', [PublicController::class, 'sendHouseInquiry'])->name('public.houses.inquiries.store');
+Route::post('/houses/{house}/inquiries', [PublicController::class, 'sendHouseInquiry'])->middleware('throttle:5,1')->name('public.houses.inquiries.store');
 Route::get('/units/{unit}', [PublicController::class, 'unit'])->name('public.unit');
-Route::post('/units/{unit}/inquiries', [PublicController::class, 'sendInquiry'])->name('public.units.inquiries.store');
+Route::post('/units/{unit}/inquiries', [PublicController::class, 'sendInquiry'])->middleware('throttle:5,1')->name('public.units.inquiries.store');
 Route::get('/guest/feedback/{booking}/{token}', [GuestFeedbackController::class, 'show'])
     ->name('guest.feedback.show');
 Route::post('/guest/feedback/{booking}/{token}', [GuestFeedbackController::class, 'store'])
