@@ -265,7 +265,7 @@
             </td>
 
             <td>
-                <span class="field-label">Booking Status</span>
+                <span class="field-label">Booking status</span>
 
                 <span class="status">
                     Confirmed reservation
