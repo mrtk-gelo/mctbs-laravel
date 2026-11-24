@@ -28,10 +28,10 @@
     .policy-item:last-child { border-bottom: none; }
     .policy-icon { width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
     .cal-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-    .cal-top { background: var(--primary); color: #fff; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
-    .cal-top h3 { font-size: 15px; font-weight: 600; margin: 0; }
-    .cal-top button { background: rgba(255,255,255,.2); border: none; color: #fff; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
-    .cal-top button:hover { background: rgba(255,255,255,.3); }
+    .cal-top { background: #fef3c7; color: var(--primary-dk); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+    .cal-top h3 { color: var(--primary-dk); font-size: 15px; font-weight: 600; margin: 0; }
+    .cal-top button { background: rgba(146,64,14,.1); border: none; color: var(--primary-dk); border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+    .cal-top button:hover { background: rgba(146,64,14,.18); }
     .cal-body { padding: 16px; }
     .cal-days-header { display: grid; grid-template-columns: repeat(7,1fr); margin-bottom: 6px; }
     .cal-days-header span { text-align: center; font-size: 11px; font-weight: 700; color: var(--text-muted); padding: 4px 0; }
@@ -49,9 +49,9 @@
     .cal-legend-dot { width: 15px; height: 15px; border-radius: 3px; flex-shrink: 0; }
     .unit-booking-column { width: 300px; flex-shrink: 0; }
     .book-sidebar { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; position: sticky; top: 80px; box-shadow: 0 8px 24px rgba(17,24,39,.08); }
-    .book-sidebar-header { padding: 16px 20px; background: var(--primary); color: #fff; }
-    .book-sidebar-header strong { display: block; color: #fff; font-size: 15px; }
-    .book-sidebar-header span { display: block; margin-top: 3px; color: rgba(255,255,255,.88); font-size: 12px; }
+    .book-sidebar-header { padding: 16px 20px; background: #fef3c7; color: var(--primary-dk); border-bottom: 1px solid var(--border); }
+    .book-sidebar-header strong { display: block; color: var(--primary-dk); font-size: 15px; }
+    .book-sidebar-header span { display: block; margin-top: 3px; color: var(--text-muted); font-size: 12px; }
     .book-sidebar-body { padding: 20px; }
     .booking-price { padding-bottom: 16px; border-bottom: 1px solid var(--border); }
     .booking-price strong { color: var(--text); font-size: 28px; line-height: 1.1; }
@@ -224,11 +224,11 @@
 
             </div>
 
-            <aside class="unit-booking-column" aria-label="Booking summary">
+            <aside class="unit-booking-column" aria-label="Unit Summary">
                 <div class="book-sidebar">
                     <div class="book-sidebar-header">
-                        <strong>Booking summary</strong>
-                        <span>Everything you need before booking</span>
+                        <strong>Unit Summary</strong>
+                        <span>Unit details at a glance</span>
                     </div>
                     <div class="book-sidebar-body">
                         <div class="booking-price">
