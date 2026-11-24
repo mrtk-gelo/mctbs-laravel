@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Role;
+use App\Models\TransientHouse;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -44,4 +45,56 @@ test('guest navigation places transient browsing before bookings and keeps booki
         ->toBe(2)
         ->and($html)
         ->toContain('guest/dashboard');
+});
+
+test('the public home shows three transient houses and links to the complete listing', function () {
+    $owner = User::create([
+        'role_id' => Role::where('name', 'Owner')->firstOrFail()->role_id,
+        'first_name' => 'Listing',
+        'last_name' => 'Owner',
+        'email' => 'listing-owner@example.com',
+        'password' => 'OwnerPass123!',
+        'is_active' => true,
+    ]);
+
+    foreach (range(1, 4) as $number) {
+        TransientHouse::create([
+            'owner_id' => $owner->user_id,
+            'name' => "Listing House {$number}",
+            'address' => '10 Test Road',
+            'city' => 'Baguio',
+            'contact_number' => '5551234',
+            'is_active' => true,
+        ]);
+    }
+
+    $this->get(route('home'))
+        ->assertSee('Listing House 4')
+        ->assertSee('Listing House 3')
+        ->assertSee('Listing House 2')
+        ->assertDontSee('Listing House 1')
+        ->assertSee('View More Transient')
+        ->assertSee('href="'.route('public.transients').'"', false);
+
+    $this->withHeader('X-Requested-With', 'XMLHttpRequest')
+        ->get(route('home'))
+        ->assertSee('Listing House 4')
+        ->assertSee('Listing House 3')
+        ->assertSee('Listing House 2')
+        ->assertDontSee('Listing House 1')
+        ->assertSee('View More Transient');
+
+    $this->get(route('public.transients'))
+        ->assertSee('Listing House 1')
+        ->assertSee('Listing House 2')
+        ->assertSee('Listing House 3')
+        ->assertSee('Listing House 4');
+
+    TransientHouse::where('name', 'Listing House 1')->delete();
+
+    $this->get(route('home'))
+        ->assertSee('Listing House 2')
+        ->assertSee('Listing House 3')
+        ->assertSee('Listing House 4')
+        ->assertDontSee('View More Transient');
 });
