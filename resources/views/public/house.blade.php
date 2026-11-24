@@ -3,15 +3,15 @@
 
     <style>
     .house-hero { position: relative; height: 380px; background: var(--primary); overflow: hidden; }
-    .house-hero img { width: 100%; height: 100%; object-fit: cover; display: block; filter: brightness(.75); }
+    .house-hero img { width: 100%; height: 100%; object-fit: cover; display: block; filter: brightness(.7); }
     .house-hero-placeholder { width: 100%; height: 100%; background: linear-gradient(135deg, var(--primary), #1a252f); display: flex; align-items: center; justify-content: center; font-size: 80px; color: rgba(255,255,255,.2); }
-    .house-hero-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 24px 32px; background: linear-gradient(to top, rgba(0,0,0,.75), transparent); color: #fff; }
-    .house-hero-overlay h1 { font-size: 30px; font-weight: 800; margin-bottom: 6px; }
-    .house-hero-overlay .loc { font-size: 14px; opacity: .9; display: flex; align-items: center; gap: 6px; }
+    .house-hero-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 32px; background: linear-gradient(to top, rgba(17,24,39,.92), rgba(17,24,39,.54) 58%, rgba(17,24,39,.08)); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.65); }
+    .house-hero-overlay h1 { color: #fff; font-size: 30px; font-weight: 800; margin-bottom: 6px; }
+    .house-hero-overlay .loc { color: rgba(255,255,255,.96); font-size: 14px; display: flex; align-items: center; gap: 6px; }
     .stars { color: #f39c12; font-size: 14px; display: inline-flex; gap: 2px; }
     .rating-pill { display: inline-flex; align-items: center; gap: 6px; background: #fff8e1; border: 1px solid #ffe082; color: #7d5c00; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; }
     .section-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid var(--border); display: flex; align-items: center; gap: 10px; }
-    .section-title i { color: var(--accent); }
+    .section-title i { color: var(--primary); }
     .unit-row-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; transition: box-shadow .2s, transform .2s; text-decoration: none; color: inherit; }
     .unit-row-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.1); transform: translateY(-2px); text-decoration: none; }
     .unit-row-card-img { width: 200px; flex-shrink: 0; object-fit: cover; display: block; }
@@ -25,15 +25,15 @@
     .contact-link:hover { border-color: var(--accent); background: #fef5e7; text-decoration: none; }
     .contact-icon { width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
     .contact-email { min-width: 0; overflow-wrap: anywhere; }
-    .inquiry-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
-    .inquiry-box-header { background: var(--primary-lt); color: #fff; padding: 20px 24px; }
-    .inquiry-box-header h3 { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
-    .inquiry-box-header p  { font-size: 13px; opacity: .8; margin: 0; }
-    .inquiry-box-body { padding: 24px; }
     .house-policy-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
     .house-policy-card { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); line-height: 1.6; overflow-wrap: anywhere; }
     @media (max-width: 900px) { .house-policy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 560px) { .house-policy-grid { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 560px) {
+        .house-hero { height: 320px; }
+        .house-hero-overlay { padding: 20px; }
+        .house-hero-overlay h1 { font-size: 25px; }
+        .house-policy-grid { grid-template-columns: minmax(0, 1fr); }
+    }
     </style>
 
     <div class="house-hero">
@@ -117,7 +117,7 @@
                                             @endif
                                         </div>
                                         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-                                            <div style="font-size:20px;font-weight:800;color:var(--accent)">₱{{ number_format($u->price, 2) }}<span style="font-size:12px;font-weight:400;color:var(--text-muted)">/night</span></div>
+                                            <div style="font-size:20px;font-weight:800;color:var(--primary)">₱{{ number_format($u->price, 2) }}<span style="font-size:12px;font-weight:400;color:var(--text-muted)">/night</span></div>
                                             <span class="btn btn-primary btn-sm">View Unit <i class="fa fa-arrow-right"></i></span>
                                         </div>
                                     </div>
@@ -225,32 +225,6 @@
                     </div>
                 </div>
 
-                <div class="inquiry-box">
-                    <div class="inquiry-box-header">
-                        <h3><i class="fa fa-paper-plane"></i> Send an Inquiry</h3>
-                        <p>Your inquiry will be sent directly to the property owner.</p>
-                    </div>
-                    <div class="inquiry-box-body">
-                        <form method="POST" action="{{ route('public.houses.inquiries.store', $house) }}">
-                            @csrf
-                            <div class="form-group">
-                                <label for="inqName">Your name</label>
-                                <input id="inqName" type="text" name="name" required maxlength="150" value="{{ old('name', auth()->check() ? auth()->user()->first_name.' '.auth()->user()->last_name : '') }}">
-                            </div>
-                            <div class="form-group">
-                                <label for="inqEmail">Your email</label>
-                                <input id="inqEmail" type="email" name="email" required maxlength="191" value="{{ old('email', auth()->user()->email ?? '') }}">
-                            </div>
-                            <div class="form-group">
-                                <label for="inqMessage">Message to the property owner</label>
-                                <textarea id="inqMessage" name="message" rows="4" required maxlength="5000" placeholder="Ask the owner about availability, pricing, or other details.">{{ old('message') }}</textarea>
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-block">
-                                <i class="fa fa-paper-plane"></i> Email the owner
-                            </button>
-                        </form>
-                    </div>
-                </div>
             </div>
         </div>
     </div>

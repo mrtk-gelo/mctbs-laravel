@@ -12,7 +12,7 @@
     .unit-gallery-main img { display: block; width: 100%; height: 360px; border-radius: 14px; object-fit: cover; }
     .unit-gallery-thumbnails { display: flex; gap: 10px; margin-top: 10px; overflow-x: auto; padding: 2px 2px 8px; }
     .unit-gallery-thumbnail { flex: 0 0 82px; width: 82px; height: 62px; padding: 0; overflow: hidden; border: 2px solid transparent; border-radius: 8px; background: none; cursor: pointer; }
-    .unit-gallery-thumbnail[aria-current="true"] { border-color: var(--accent); }
+    .unit-gallery-thumbnail[aria-current="true"] { border-color: var(--primary); }
     .unit-gallery-thumbnail img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .unit-gallery-count { position: absolute; right: 12px; bottom: 12px; padding: 5px 10px; border-radius: 999px; background: rgba(0,0,0,.65); color: #fff; font-size: 12px; }
     .section-title {
@@ -20,15 +20,15 @@
         padding-bottom: 10px; border-bottom: 2px solid var(--border);
         display: flex; align-items: center; gap: 8px;
     }
-    .section-title i { color: var(--accent); }
+    .section-title i { color: var(--primary); }
     .detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
     .detail-item { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 12px; }
-    .detail-icon { width: 38px; height: 38px; border-radius: 8px; background: #fef5e7; color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+    .detail-icon { width: 38px; height: 38px; border-radius: 8px; background: #fef5e7; color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
     .policy-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
     .policy-item:last-child { border-bottom: none; }
     .policy-icon { width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
     .cal-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-    .cal-top { background: var(--primary-lt); color: #fff; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+    .cal-top { background: var(--primary); color: #fff; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
     .cal-top h3 { font-size: 15px; font-weight: 600; margin: 0; }
     .cal-top button { background: rgba(255,255,255,.2); border: none; color: #fff; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
     .cal-top button:hover { background: rgba(255,255,255,.3); }
@@ -38,7 +38,7 @@
     .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
     .cal-cell { aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; cursor: default; position: relative; }
     .cal-cell.other { opacity: .25; }
-    .cal-cell.today { font-weight: 800; color: var(--accent); }
+    .cal-cell.today { font-weight: 800; color: var(--primary); }
     .cal-cell.status-available   { background: #d4edda; color: #155724;  border: 1px solid #c3e6cb; }
     .cal-cell.status-booked      { background: #f8d7da; color: #721c24;  border: 1px solid #f5c6cb; text-decoration: line-through; }
     .cal-cell.status-unavailable { background: #fff3cd; color: #856404;  border: 1px solid #ffc107; }
@@ -47,13 +47,30 @@
     .cal-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
     .cal-legend-item { display: flex; align-items: center; gap: 7px; font-size: 14px; color: var(--text-muted); }
     .cal-legend-dot { width: 15px; height: 15px; border-radius: 3px; flex-shrink: 0; }
-    .inquiry-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
-    .inquiry-box-header { background: var(--primary-lt); color: #fff; padding: 18px 22px; }
-    .inquiry-box-header h3 { font-size: 16px; font-weight: 700; margin-bottom: 3px; }
-    .inquiry-box-header p  { font-size: 13px; opacity: .8; margin: 0; }
-    .inquiry-box-body { padding: 20px; }
-    .book-sidebar { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; position: sticky; top: 80px; }
+    .unit-booking-column { width: 300px; flex-shrink: 0; }
+    .book-sidebar { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; position: sticky; top: 80px; box-shadow: 0 8px 24px rgba(17,24,39,.08); }
+    .book-sidebar-header { padding: 16px 20px; background: var(--primary); color: #fff; }
+    .book-sidebar-header strong { display: block; color: #fff; font-size: 15px; }
+    .book-sidebar-header span { display: block; margin-top: 3px; color: rgba(255,255,255,.88); font-size: 12px; }
     .book-sidebar-body { padding: 20px; }
+    .booking-price { padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .booking-price strong { color: var(--text); font-size: 28px; line-height: 1.1; }
+    .booking-price span { color: var(--text-muted); font-size: 13px; }
+    .booking-price p { margin: 5px 0 0; color: var(--text-muted); font-size: 12px; }
+    .booking-facts { display: grid; gap: 14px; margin: 16px 0; }
+    .booking-fact { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    .booking-fact i { width: 18px; margin-top: 2px; color: var(--primary); text-align: center; }
+    .booking-fact div { min-width: 0; }
+    .booking-fact span { display: block; color: var(--text-muted); font-size: 11px; }
+    .booking-fact strong { display: block; color: var(--text); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+    .booking-note { margin: 14px 0 0; padding: 10px 11px; border-radius: 8px; background: #fffbeb; color: #713f12; font-size: 12px; line-height: 1.5; }
+    .booking-availability-link { display: block; margin-top: 14px; color: var(--primary); font-size: 13px; font-weight: 700; text-align: center; text-decoration: none; }
+    .booking-availability-link:hover { text-decoration: underline; }
+    @media (max-width: 900px) {
+        .unit-detail-column { order: 2; flex: 1 1 100%; }
+        .unit-booking-column { order: 1; width: 100%; flex-shrink: 1; }
+        .book-sidebar { position: static; }
+    }
     </style>
 
     <div class="container" style="margin-top:24px">
@@ -68,7 +85,7 @@
 
         <div class="row" style="align-items:flex-start">
 
-            <div class="col-2" style="display:flex;flex-direction:column;gap:28px">
+            <div class="col-2 unit-detail-column" style="display:flex;flex-direction:column;gap:28px">
 
                 <div>
                     @if ($unit->photos->isNotEmpty())
@@ -182,7 +199,7 @@
                 </div>
 
                 <div>
-                    <div class="section-title"><i class="fa fa-calendar-alt"></i> Availability Calendar</div>
+                    <div class="section-title" id="unit-availability"><i class="fa fa-calendar-alt"></i> Availability Calendar</div>
                     <div class="cal-wrap">
                         <div class="cal-top">
                             <button onclick="prevMonth()"><i class="fa fa-chevron-left"></i></button>
@@ -205,43 +222,68 @@
                     </div>
                 </div>
 
-                <div>
-                    <div class="section-title"><i class="fa fa-paper-plane"></i> Send an Inquiry</div>
-                    <div class="inquiry-box">
-                        <div class="inquiry-box-header">
-                            <h3>Have questions about this unit?</h3>
-                            <p>Your inquiry will be sent directly to the property owner.</p>
-                        </div>
-                        <div class="inquiry-box-body">
-                            <form method="POST" action="{{ route('public.units.inquiries.store', $unit) }}">
-                                @csrf
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="inqName">Your name</label>
-                                        <input id="inqName" type="text" name="name" maxlength="150" required value="{{ old('name', auth()->check() ? auth()->user()->first_name.' '.auth()->user()->last_name : '') }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="inqEmail">Your email</label>
-                                        <input id="inqEmail" type="email" name="email" maxlength="191" required value="{{ old('email', auth()->user()->email ?? '') }}">
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="inqMessage">Message to the property owner</label>
-                                    <textarea id="inqMessage" name="message" rows="4" maxlength="5000" required placeholder="Ask the owner about availability, pricing, or other details.">{{ old('message') }}</textarea>
-                                </div>
-                                <button type="submit" class="btn btn-primary btn-block">
-                                    <i class="fa fa-paper-plane"></i> Email the owner
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
             </div>
 
-            <div style="width:300px;flex-shrink:0">
+            <aside class="unit-booking-column" aria-label="Booking summary">
                 <div class="book-sidebar">
+                    <div class="book-sidebar-header">
+                        <strong>Booking summary</strong>
+                        <span>Everything you need before booking</span>
+                    </div>
                     <div class="book-sidebar-body">
+                        <div class="booking-price">
+                            <strong>₱{{ number_format($unit->price, 2) }}</strong>
+                            <span>/ night</span>
+                            <p>Listed nightly rate</p>
+                        </div>
+                        <div class="booking-facts">
+                            <div class="booking-fact">
+                                <i class="fa fa-building" aria-hidden="true"></i>
+                                <div>
+                                    <span>Property</span>
+                                    <strong>{{ $unit->house->name }} · {{ $unit->house->city }}</strong>
+                                </div>
+                            </div>
+                            <div class="booking-fact">
+                                <i class="fa fa-users" aria-hidden="true"></i>
+                                <div>
+                                    <span>Guest capacity</span>
+                                    <strong>{{ $unit->capacity }} standard · up to {{ $unit->maximum_capacity ?? $unit->capacity }} counted guests</strong>
+                                </div>
+                            </div>
+                            <div class="booking-fact">
+                                <i class="fa fa-sign-in-alt" aria-hidden="true"></i>
+                                <div>
+                                    <span>Check-in</span>
+                                    <strong>{{ \App\Support\UnitTimeFormatter::format((string) $unit->check_in_time) }}</strong>
+                                </div>
+                            </div>
+                            <div class="booking-fact">
+                                <i class="fa fa-sign-out-alt" aria-hidden="true"></i>
+                                <div>
+                                    <span>Check-out</span>
+                                    <strong>{{ \App\Support\UnitTimeFormatter::format((string) $unit->check_out_time) }}</strong>
+                                </div>
+                            </div>
+                            @if ($unit->child_free_through_age !== null)
+                                <div class="booking-fact">
+                                    <i class="fa fa-child" aria-hidden="true"></i>
+                                    <div>
+                                        <span>Free child age</span>
+                                        <strong>{{ $unit->child_free_through_age }} and under; not counted toward capacity</strong>
+                                    </div>
+                                </div>
+                            @endif
+                            @if ((int) ($unit->maximum_capacity ?? $unit->capacity) > (int) $unit->capacity)
+                                <div class="booking-fact">
+                                    <i class="fa fa-user-plus" aria-hidden="true"></i>
+                                    <div>
+                                        <span>Extra guest fee</span>
+                                        <strong>₱{{ number_format((float) $unit->extra_guest_fee, 2) }} per guest/night above standard capacity</strong>
+                                    </div>
+                                </div>
+                            @endif
+                        </div>
                         @auth
                             @if (auth()->user()->role?->name === 'Guest')
                                 <a href="{{ route('guest.book', $unit) }}" id="bookBtn" class="btn btn-primary btn-block btn-lg">
@@ -261,14 +303,16 @@
                             </div>
                         @endauth
 
-                        <div class="divider"></div>
-                        <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.6">
-                            <i class="fa fa-shield-alt" style="color:var(--success)"></i>
-                            Secure booking &bull; No hidden fees<br>Free cancellation before acceptance
-                        </div>
+                        <p class="booking-note">
+                            <i class="fa fa-info-circle" aria-hidden="true"></i>
+                            Choose your dates and guest count to review the booking total.
+                        </p>
+                        <a class="booking-availability-link" href="#unit-availability">
+                            <i class="fa fa-calendar-alt" aria-hidden="true"></i> Check the availability calendar
+                        </a>
                     </div>
                 </div>
-            </div>
+            </aside>
 
         </div>
     </div>

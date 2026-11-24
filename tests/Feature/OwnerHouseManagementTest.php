@@ -156,7 +156,9 @@ test('owner creates a house and unit that appear on public transient pages', fun
         ->assertSee('Queen Studio')
         ->assertSee('Capacity 3 standard; up to 5 counted guests')
         ->assertSee('Ages 3 and under are free and excluded')
-        ->assertSee('₱1,250.00/night');
+        ->assertSee('₱1,250.00/night')
+        ->assertDontSee('Send an Inquiry')
+        ->assertDontSee('Email the owner');
     $this->get(route('public.house', $house))
         ->assertSee('href="https://facebook.com/pine-retreat"', false)
         ->assertSee('href="https://m.me/pine-retreat"', false);
@@ -165,6 +167,15 @@ test('owner creates a house and unit that appear on public transient pages', fun
         ->assertSee('Capacity')
         ->assertDontSee('Rental packages')
         ->assertSee('₱1,250.00 / night')
+        ->assertSee('Booking summary')
+        ->assertSee('Check-in')
+        ->assertSee('2:00 PM')
+        ->assertSee('Check-out')
+        ->assertSee('12:00 NN')
+        ->assertSee('₱200.00 per guest/night above standard capacity')
+        ->assertSee('Check the availability calendar')
+        ->assertDontSee('Send an Inquiry')
+        ->assertDontSee('Email the owner')
         ->assertSee('.cal-cell.past { background: #e5e7eb;', false)
         ->assertDontSee('global-back-button', false);
 });
