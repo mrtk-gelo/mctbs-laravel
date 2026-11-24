@@ -13,4 +13,6 @@ class PaymentStatus
     public const MISSING = 'Missing';
 
     public const INCORRECT = 'Incorrect';
+
+    public const CANCELLED = 'Cancelled';
 }

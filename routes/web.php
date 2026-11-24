@@ -141,6 +141,7 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
     Route::post('/bookings/{bookingId}/accept', [BookingWorkflowController::class, 'accept'])->name('bookings.accept');
     Route::post('/bookings/{bookingId}/reject', [BookingWorkflowController::class, 'reject'])->name('bookings.reject');
     Route::post('/bookings/{bookingId}/cancel', [BookingWorkflowController::class, 'cancel'])->name('bookings.cancel');
+    Route::post('/bookings/{bookingId}/refunds', [BookingWorkflowController::class, 'refundBooking'])->name('bookings.refunds.store');
     Route::post('/bookings/calendar/blocks', [BookingWorkflowController::class, 'storeCalendarBlock'])->name('bookings.calendar-blocks.store');
     Route::delete('/bookings/calendar/blocks/{availabilityId}', [BookingWorkflowController::class, 'destroyCalendarBlock'])->name('bookings.calendar-blocks.destroy');
     Route::get('/bookings/{bookingId}/edit', [BookingWorkflowController::class, 'edit'])->name('bookings.edit');
@@ -202,6 +203,7 @@ Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->grou
     Route::post('/bookings/{bookingId}/accept', [BookingWorkflowController::class, 'accept'])->name('bookings.accept');
     Route::post('/bookings/{bookingId}/reject', [BookingWorkflowController::class, 'reject'])->name('bookings.reject');
     Route::post('/bookings/{bookingId}/cancel', [BookingWorkflowController::class, 'cancel'])->name('bookings.cancel');
+    Route::post('/bookings/{bookingId}/refunds', [BookingWorkflowController::class, 'refundBooking'])->name('bookings.refunds.store');
     Route::post('/bookings/calendar/blocks', [BookingWorkflowController::class, 'storeCalendarBlock'])->name('bookings.calendar-blocks.store');
     Route::delete('/bookings/calendar/blocks/{availabilityId}', [BookingWorkflowController::class, 'destroyCalendarBlock'])->name('bookings.calendar-blocks.destroy');
     Route::get('/bookings/{bookingId}/edit', [BookingWorkflowController::class, 'edit'])->name('bookings.edit');

@@ -1,7 +1,10 @@
 @php
     $indicatorMessage = null;
 
-    if ($booking->checkedOutEarly() && filled($booking->early_checkout_reason)) {
+    if ($booking->refunds->where('refund_status', 'Refunded')->sum('amount') > 0) {
+        $refundAmount = (float) $booking->refunds->where('refund_status', 'Refunded')->sum('amount');
+        $indicatorMessage = 'Refund issued: ₱'.number_format($refundAmount, 2);
+    } elseif ($booking->checkedOutEarly() && filled($booking->early_checkout_reason)) {
         $indicatorMessage = 'Early Check-out: '.$booking->early_checkout_reason;
     } elseif ($booking->status === \App\Support\BookingStatus::CANCELLED && filled($booking->cancellation_reason)) {
         $indicatorMessage = 'Cancellation reason: '.$booking->cancellation_reason;

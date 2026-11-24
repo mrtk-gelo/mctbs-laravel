@@ -476,7 +476,7 @@ test('owners and assigned staff can edit while unassigned staff cannot', functio
 
 test('checkout shows and refunds discounts only for active roster members', function () {
     ['owner' => $owner, 'booking' => $booking] = makeGuestRosterSyncScenario(
-        status: BookingStatus::CONFIRMED,
+        status: BookingStatus::CHECKED_IN,
         payingGuestCount: 2
     );
     $activeGuest = $booking->guests()->orderBy('booking_guest_id')->firstOrFail();

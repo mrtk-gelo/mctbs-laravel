@@ -23,6 +23,7 @@
                     $statusBadge = match ($booking->status) {
                         \App\Support\BookingStatus::PENDING => 'badge-pending',
                         \App\Support\BookingStatus::ACCEPTED, \App\Support\BookingStatus::CONFIRMED => 'badge-accepted',
+                        \App\Support\BookingStatus::CHECKED_IN => 'badge-accepted',
                         \App\Support\BookingStatus::REJECTED => 'badge-rejected',
                         default => \App\Support\BookingStatus::isTerminal($booking->status)
                             ? 'badge-completed'
@@ -209,6 +210,12 @@
                             <button type="button" class="btn btn-outline btn-block" data-modal-open="cancel-booking-modal">Cancel Booking</button>
                         @elseif (in_array($booking->status, [\App\Support\BookingStatus::ACCEPTED, \App\Support\BookingStatus::CONFIRMED], true))
                             <button type="button" class="btn btn-danger btn-block" data-modal-open="cancel-booking-modal">Cancel Booking</button>
+                        @elseif ($booking->status === \App\Support\BookingStatus::CANCELLED)
+                            @if ($refundAmountLimit > 0)
+                                <button type="button" class="btn btn-outline btn-block" data-modal-open="refund-booking-modal">Record Refund</button>
+                            @else
+                                <p class="text-muted mb-0">No verified payment balance is available to refund.</p>
+                            @endif
                         @else
                             <p class="text-muted mb-0">No booking actions are available for this status.</p>
                         @endif
@@ -290,6 +297,48 @@
                         </div>
                         <div class="btn-group">
                             <button type="submit" class="btn btn-danger">Confirm Cancel</button>
+                            <button type="button" class="btn btn-outline" data-modal-close>Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if ($booking->status === \App\Support\BookingStatus::CANCELLED && $refundAmountLimit > 0)
+        <div id="refund-booking-modal" class="modal-overlay" aria-hidden="true">
+            <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="refund-modal-title">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
+                    <strong id="refund-modal-title">Record a Refund</strong>
+                    <button type="button" class="btn btn-outline btn-sm" data-modal-close aria-label="Close">Close</button>
+                </div>
+                <div style="padding:20px">
+                    <div class="policy-box">Available refundable payment: ₱{{ number_format($refundAmountLimit, 2) }}.</div>
+                    <form method="POST" action="{{ route($dashboardPrefix.'.bookings.refunds.store', $booking->booking_id) }}">
+                        @csrf
+                        <div class="form-group">
+                            <label class="required" for="refund-amount">Refund amount (₱)</label>
+                            <input id="refund-amount" name="amount" type="number" min="0.01" max="{{ number_format($refundAmountLimit, 2, '.', '') }}" step="0.01" value="{{ old('amount') }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="required" for="refund-category">Category</label>
+                            <select id="refund-category" name="category" required>
+                                <option value="">Select a category</option>
+                                @foreach (['Early Departure', 'Cancellation', 'Senior/PWD Discount', 'Overpayment or Duplicate', 'Courtesy Refund', 'Other'] as $category)
+                                    <option value="{{ $category }}" @selected(old('category') === $category)>{{ $category }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="refund-reference">Payment or transfer reference</label>
+                            <input id="refund-reference" name="refund_reference" type="text" maxlength="100" value="{{ old('refund_reference') }}" placeholder="Optional">
+                        </div>
+                        <div class="form-group">
+                            <label class="required" for="refund-reason">Reason</label>
+                            <textarea id="refund-reason" name="reason" rows="3" maxlength="255" required>{{ old('reason') }}</textarea>
+                        </div>
+                        <div class="btn-group">
+                            <button type="submit" class="btn btn-primary">Confirm Refund</button>
                             <button type="button" class="btn btn-outline" data-modal-close>Cancel</button>
                         </div>
                     </form>
