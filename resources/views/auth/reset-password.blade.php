@@ -48,7 +48,7 @@
                             <i class="fa fa-eye" aria-hidden="true"></i>
                         </button>
                     </div>
-                    <span class="field-hint">At least 8 characters, including uppercase and lowercase letters, a number, and a symbol.</span>
+                    <span class="field-hint">At least 8 characters, with uppercase (A-Z) and lowercase letters (a-z), a number (0-9), and a symbol (!@#$%^&*()-+).</span>
                     @error('password')<div class="field-error" role="alert">{{ $message }}</div>@enderror
                 </div>
 

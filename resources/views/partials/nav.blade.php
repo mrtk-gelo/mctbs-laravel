@@ -12,9 +12,9 @@
     <div class="topnav-center">
         @if ($navUser)
             @switch($roleName)
-                @case('System Admin')
-                    <a href="{{ route('sysadmin.dashboard') }}" class="{{ ($activePage ?? '') === 'dashboard' ? 'active' : '' }}"><i class="fa fa-gauge"></i> Dashboard</a>
-                    <a href="{{ route('sysadmin.owners.index') }}" class="{{ ($activePage ?? '') === 'owners' ? 'active' : '' }}"><i class="fa fa-users"></i> Owners</a>
+                @case('Account Admin')
+                    <a href="{{ route('accadmin.dashboard') }}" class="{{ ($activePage ?? '') === 'dashboard' ? 'active' : '' }}"><i class="fa fa-gauge"></i> Dashboard</a>
+                    <a href="{{ route('accadmin.owners.index') }}" class="{{ ($activePage ?? '') === 'owners' ? 'active' : '' }}"><i class="fa fa-users"></i> Owners</a>
                     @break
 
                 @case('Owner')
@@ -48,7 +48,7 @@
 
     <div class="topnav-right">
         @if ($navUser)
-            @if (in_array($roleName, ['System Admin', 'Owner', 'Staff', 'Guest'], true))
+            @if (in_array($roleName, ['Account Admin', 'Owner', 'Staff', 'Guest'], true))
                 @include('partials.notification-bell')
             @endif
 

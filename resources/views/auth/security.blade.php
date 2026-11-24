@@ -1,8 +1,8 @@
 <x-shell title="Session &amp; Account | MCTBS">
     <x-slot:nav>
         @switch($user->role->name)
-            @case('System Admin')
-                @include('partials.sysadmin-nav', ['activePage' => 'profile'])
+            @case('Account Admin')
+                @include('partials.accadmin-nav', ['activePage' => 'profile'])
                 @break
             @case('Owner')
                 @include('partials.owner-nav', ['activePage' => 'profile'])
@@ -58,7 +58,7 @@
                 <div class="card-header"><span><i class="fa fa-user-slash"></i> Deactivate account</span></div>
                 <div class="card-body">
                     <p class="profile-section-intro">Deactivation immediately prevents account access. Your properties, units, and historical booking records remain intact.</p>
-                    <form method="POST" action="{{ route('profile.deactivate') }}" onsubmit="return confirm('Deactivate your account? You will be logged out and cannot access MCTBS until a System Administrator restores it.')">
+                    <form method="POST" action="{{ route('profile.deactivate') }}" onsubmit="return confirm('Deactivate your account? You will be logged out and cannot access MCTBS until an Account Admin restores it.')">
                         @csrf
                         <div class="form-group">
                             <label for="deactivate-current-password" class="required">Current password</label>

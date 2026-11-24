@@ -22,8 +22,8 @@ class NotificationController extends Controller
 
         $role = $request->user()->role?->name;
         if ($notification->type === 'invitation_expired') {
-            if ($role === 'System Admin') {
-                return redirect()->route('sysadmin.owners.index');
+            if ($role === 'Account Admin') {
+                return redirect()->route('accadmin.owners.index');
             }
 
             if ($role === 'Owner') {

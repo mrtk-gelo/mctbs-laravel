@@ -11,13 +11,13 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $systemAdminRole = Role::where('name', 'System Admin')->firstOrFail();
+        $accountAdminRole = Role::where('name', 'Account Admin')->firstOrFail();
 
         User::create([
-            'role_id' => $systemAdminRole->role_id,
-            'first_name' => 'System',
+            'role_id' => $accountAdminRole->role_id,
+            'first_name' => 'Account',
             'last_name' => 'Admin',
-            'email' => 'sysadmin@mctbs.com',
+            'email' => 'accadmin@mctbs.com',
             'phone' => null,
             'password' => Hash::make('Admin@1234'),
             'email_verified_at' => now(),

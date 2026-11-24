@@ -37,7 +37,7 @@ class LoginController extends Controller
 
         if (! $user->is_active) {
             $message = $user->role?->name === 'Owner'
-                ? 'Account Deactivated. Your account is currently deactivated and cannot access MCTBS. Contact the System Administrator to restore access.'
+                ? 'Account Deactivated. Your account is currently deactivated and cannot access MCTBS. Contact the Account Admin to restore access.'
                 : 'Account Deactivated. Your account is inactive. Contact your Owner to restore access.';
 
             throw ValidationException::withMessages(['email' => $message]);

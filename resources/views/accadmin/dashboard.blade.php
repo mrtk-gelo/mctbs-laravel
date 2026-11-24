@@ -1,5 +1,5 @@
-<x-shell title="Account Manager Dashboard | MCTBS">
-    <x-slot:nav>@include('partials.sysadmin-nav', ['activePage' => 'dashboard'])</x-slot:nav>
+<x-shell title="Account Admin Dashboard | MCTBS">
+    <x-slot:nav>@include('partials.accadmin-nav', ['activePage' => 'dashboard'])</x-slot:nav>
 
     <div class="container workspace-page">
         @if (session('success'))
@@ -11,10 +11,10 @@
 
         <section class="sysadmin-welcome">
             <div>
-                <h1>Account Manager Dashboard</h1>
+                <h1>Account Admin Dashboard</h1>
                 <p>Manage owner accounts and invitations. Property listings, bookings, and daily operations are handled by owners and their staff.</p>
             </div>
-            <a href="{{ route('sysadmin.owners.index') }}" class="btn btn-primary">
+            <a href="{{ route('accadmin.owners.index') }}" class="btn btn-primary">
                 <i class="fa fa-users"></i> Manage Owners
             </a>
         </section>
@@ -26,7 +26,7 @@
                     <strong>{{ $pendingOwnerInvitations }} owner {{ \Illuminate\Support\Str::plural('invitation', $pendingOwnerInvitations) }} awaiting registration</strong>
                     <p>Review outstanding owner invitations.</p>
                 </div>
-                <a href="{{ route('sysadmin.owners.index') }}#owner-invitations" class="btn btn-outline">
+                <a href="{{ route('accadmin.owners.index') }}#owner-invitations" class="btn btn-outline">
                     Review invitations <i class="fa fa-arrow-right"></i>
                 </a>
             </section>
@@ -73,7 +73,7 @@
         <section class="card personnel-table-card sysadmin-dashboard-section">
             <div class="card-header">
                 <span>Database backups</span>
-                <form method="POST" action="{{ route('sysadmin.backups.store') }}">
+                <form method="POST" action="{{ route('accadmin.backups.store') }}">
                     @csrf
                     <button type="submit" class="btn btn-primary"><i class="fa fa-database"></i> Backup</button>
                 </form>
@@ -88,7 +88,7 @@
                             <tr>
                                 <td>{{ $backup['created_at']->format('M j, Y g:i A') }}</td>
                                 <td>{{ $backup['size'] }}</td>
-                                <td><a class="btn btn-outline btn-sm" href="{{ route('sysadmin.backups.download', $backup['filename']) }}">Download</a></td>
+                                <td><a class="btn btn-outline btn-sm" href="{{ route('accadmin.backups.download', $backup['filename']) }}">Download</a></td>
                             </tr>
                         @empty
                             <tr><td colspan="3" class="empty-table-cell">No backups yet.</td></tr>

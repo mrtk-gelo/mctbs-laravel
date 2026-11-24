@@ -11,7 +11,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
     $this->sysadmin = User::create([
-        'role_id' => Role::query()->where('name', 'System Admin')->value('role_id'),
+        'role_id' => Role::query()->where('name', 'Account Admin')->value('role_id'),
         'first_name' => 'System',
         'last_name' => 'Admin',
         'email' => 'sysadmin@example.com',
@@ -48,7 +48,7 @@ it('shows registered owners and recent private backups on the dashboard', functi
     );
 
     $this->actingAs($this->sysadmin)
-        ->get(route('sysadmin.dashboard'))
+        ->get(route('accadmin.dashboard'))
         ->assertSee('Registered Owners')
         ->assertSee('Harbor Owner')
         ->assertSee('harbor@example.com')
@@ -57,7 +57,7 @@ it('shows registered owners and recent private backups on the dashboard', functi
         ->assertSee('Oct 25, 2026')
         ->assertSee('Database backups')
         ->assertSee('8 B')
-        ->assertSee(route('sysadmin.backups.download', $filename));
+        ->assertSee(route('accadmin.backups.download', $filename));
 });
 
 it('creates a backup immediately from the admin dashboard action', function (): void {
@@ -79,14 +79,14 @@ it('creates a backup immediately from the admin dashboard action', function (): 
     $this->app->instance(DatabaseBackupService::class, $backupService);
 
     $this->actingAs($this->sysadmin)
-        ->post(route('sysadmin.backups.store'))
-        ->assertRedirect(route('sysadmin.dashboard'))
+        ->post(route('accadmin.backups.store'))
+        ->assertRedirect(route('accadmin.dashboard'))
         ->assertSessionHas('success', 'Database backup created.');
 
     Storage::disk('backups')->assertExists($filename);
-    $this->get(route('sysadmin.dashboard'))
+    $this->get(route('accadmin.dashboard'))
         ->assertSee($filename)
-        ->assertSee(route('sysadmin.backups.download', $filename));
+        ->assertSee(route('accadmin.backups.download', $filename));
 });
 
 it('shows a useful error when the dashboard backup action fails', function (): void {
@@ -97,18 +97,18 @@ it('shows a useful error when the dashboard backup action fails', function (): v
     $this->app->instance(DatabaseBackupService::class, $backupService);
 
     $this->actingAs($this->sysadmin)
-        ->post(route('sysadmin.backups.store'))
-        ->assertRedirect(route('sysadmin.dashboard'))
+        ->post(route('accadmin.backups.store'))
+        ->assertRedirect(route('accadmin.dashboard'))
         ->assertSessionHas('error', 'The database backup failed. Check the application log.');
 });
 
-it('downloads a private backup only for system admins', function (): void {
+it('downloads a private backup only for account admins', function (): void {
     Storage::fake('backups');
     $filename = 'database_20261025_110000_1234abcd.sql';
     Storage::disk('backups')->put($filename, 'sql-data');
 
     $this->actingAs($this->sysadmin)
-        ->get(route('sysadmin.backups.download', $filename))
+        ->get(route('accadmin.backups.download', $filename))
         ->assertDownload($filename);
 
     $owner = User::create([
@@ -121,13 +121,13 @@ it('downloads a private backup only for system admins', function (): void {
     ]);
 
     $this->actingAs($owner)
-        ->get(route('sysadmin.backups.download', $filename))
+        ->get(route('accadmin.backups.download', $filename))
         ->assertForbidden();
 });
 
 it('rejects unsafe backup filenames', function (): void {
     $this->actingAs($this->sysadmin)
-        ->get(route('sysadmin.backups.download', 'outside.sql'))
+        ->get(route('accadmin.backups.download', 'outside.sql'))
         ->assertNotFound();
 });
 
@@ -153,6 +153,6 @@ it('does not allow non-admins to create backups', function (): void {
     ]);
 
     $this->actingAs($owner)
-        ->post(route('sysadmin.backups.store'))
+        ->post(route('accadmin.backups.store'))
         ->assertForbidden();
 });

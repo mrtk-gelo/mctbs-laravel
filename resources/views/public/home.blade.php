@@ -2,7 +2,7 @@
     <x-slot:nav>@include('partials.nav', ['activePage' => 'home'])</x-slot:nav>
 
     <section class="hero hero-home" id="home" data-scroll-section="home">
-        <h1>Your Home In The <br>City of Pines</h1>
+        <h1>Your Home in the <br>City of Pines</h1>
         <p>Escape to the cool breeze of Baguio City with a cozy, comfortable stay made for peaceful and memorable moments.</p>
         <div class="hero-actions">
             @auth

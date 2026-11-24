@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\Accadmin\BackupController as AccadminBackupController;
+use App\Http\Controllers\Accadmin\DashboardController as AccadminDashboardController;
+use App\Http\Controllers\Accadmin\OwnerController as AccadminOwnerController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\ProfileController;
@@ -14,9 +17,6 @@ use App\Http\Controllers\Owner\DashboardController as OwnerDashboardController;
 use App\Http\Controllers\Owner\HouseController as OwnerHouseController;
 use App\Http\Controllers\PublicController;
 use App\Http\Controllers\Staff\DashboardController as StaffDashboardController;
-use App\Http\Controllers\Sysadmin\BackupController as SysadminBackupController;
-use App\Http\Controllers\Sysadmin\DashboardController as SysadminDashboardController;
-use App\Http\Controllers\Sysadmin\OwnerController as SysadminOwnerController;
 use App\Livewire\Guest\BookingForm;
 use App\Livewire\Owner\WalkInBookingForm;
 use Illuminate\Support\Facades\Route;
@@ -81,20 +81,20 @@ Route::middleware(['auth', 'role:guest'])->group(function () {
     Route::get('/guest/bookings/{booking_id}/receipt/pdf', [GuestBookingController::class, 'receiptPdf'])->name('guest.bookings.receipt.pdf');
 });
 
-Route::middleware(['auth', 'role:sysadmin'])->prefix('sysadmin')->name('sysadmin.')->group(function () {
-    Route::get('/dashboard', [SysadminDashboardController::class, 'index'])->name('dashboard');
-    Route::post('/backups', [SysadminBackupController::class, 'store'])->name('backups.store');
-    Route::get('/backups/{filename}', [SysadminBackupController::class, 'download'])->name('backups.download');
-    Route::get('/owners', [SysadminOwnerController::class, 'index'])->name('owners.index');
-    Route::get('/owners/deactivated', [SysadminOwnerController::class, 'deactivated'])->name('owners.deactivated');
-    Route::post('/owners/invite', [SysadminOwnerController::class, 'invite'])->name('owners.invite');
-    Route::post('/owners/invitations/{invitation}/resend', [SysadminOwnerController::class, 'resendInvitation'])->name('owners.invitations.resend');
-    Route::post('/owners/deactivate-selected', [SysadminOwnerController::class, 'bulkDeactivate'])->name('owners.bulk-deactivate');
-    Route::post('/owners/reactivate-selected', [SysadminOwnerController::class, 'bulkReactivate'])->name('owners.bulk-reactivate');
-    Route::post('/owners/{ownerId}/deactivate', [SysadminOwnerController::class, 'deactivate'])->whereNumber('ownerId')->name('owners.deactivate');
-    Route::post('/owners/{ownerId}/reactivate', [SysadminOwnerController::class, 'reactivate'])->whereNumber('ownerId')->name('owners.reactivate');
-    Route::delete('/owners', [SysadminOwnerController::class, 'bulkDestroy'])->name('owners.bulk-destroy');
-    Route::delete('/owners/{ownerId}', [SysadminOwnerController::class, 'destroy'])->whereNumber('ownerId')->name('owners.destroy');
+Route::middleware(['auth', 'role:accadmin'])->prefix('accadmin')->name('accadmin.')->group(function () {
+    Route::get('/dashboard', [AccadminDashboardController::class, 'index'])->name('dashboard');
+    Route::post('/backups', [AccadminBackupController::class, 'store'])->name('backups.store');
+    Route::get('/backups/{filename}', [AccadminBackupController::class, 'download'])->name('backups.download');
+    Route::get('/owners', [AccadminOwnerController::class, 'index'])->name('owners.index');
+    Route::get('/owners/deactivated', [AccadminOwnerController::class, 'deactivated'])->name('owners.deactivated');
+    Route::post('/owners/invite', [AccadminOwnerController::class, 'invite'])->name('owners.invite');
+    Route::post('/owners/invitations/{invitation}/resend', [AccadminOwnerController::class, 'resendInvitation'])->name('owners.invitations.resend');
+    Route::post('/owners/deactivate-selected', [AccadminOwnerController::class, 'bulkDeactivate'])->name('owners.bulk-deactivate');
+    Route::post('/owners/reactivate-selected', [AccadminOwnerController::class, 'bulkReactivate'])->name('owners.bulk-reactivate');
+    Route::post('/owners/{ownerId}/deactivate', [AccadminOwnerController::class, 'deactivate'])->whereNumber('ownerId')->name('owners.deactivate');
+    Route::post('/owners/{ownerId}/reactivate', [AccadminOwnerController::class, 'reactivate'])->whereNumber('ownerId')->name('owners.reactivate');
+    Route::delete('/owners', [AccadminOwnerController::class, 'bulkDestroy'])->name('owners.bulk-destroy');
+    Route::delete('/owners/{ownerId}', [AccadminOwnerController::class, 'destroy'])->whereNumber('ownerId')->name('owners.destroy');
 });
 
 Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->group(function () {

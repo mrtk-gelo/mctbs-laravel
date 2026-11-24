@@ -28,7 +28,7 @@ class EnsureAccountActive
                 ->route('login')
                 ->withErrors([
                     'email' => $user->role?->name === 'Owner'
-                        ? 'Account Deactivated. Your account is currently deactivated. Contact the System Administrator to restore access.'
+                        ? 'Account Deactivated. Your account is currently deactivated. Contact the Account Admin to restore access.'
                         : 'Account Deactivated. Your account is inactive. Contact your Owner to restore access.',
                 ]);
         }
@@ -47,7 +47,7 @@ class EnsureAccountActive
                 return redirect()
                     ->route('login')
                     ->withErrors([
-                        'email' => 'Account Deactivated. Your Owner account is inactive. Contact the Owner or System Administrator.',
+                        'email' => 'Account Deactivated. Your Owner account is inactive. Contact the Owner or Account Admin.',
                     ]);
             }
         }

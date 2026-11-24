@@ -51,7 +51,7 @@ test('registration labels required fields and describes the enforced password re
         ->assertSee('field-requirement">Required', false)
         ->assertSee('Phone Number')
         ->assertSee('field-requirement">Optional', false)
-        ->assertSee('At least 8 characters, with uppercase and lowercase letters, a number, and a symbol.');
+        ->assertSee('At least 8 characters, with uppercase (A-Z) and lowercase letters (a-z), a number (0-9), and a symbol (!@#$%^&*()-+).', false);
 });
 
 test('registration rejects passwords that do not include a symbol', function () {
@@ -215,7 +215,7 @@ test('logging out ends the guest session and protected pages require authenticat
     $this->get(route('guest.dashboard'))->assertRedirect(route('login'));
     $this->get('/owner/dashboard')->assertRedirect(route('login'));
     $this->get('/staff/dashboard')->assertRedirect(route('login'));
-    $this->get('/sysadmin/dashboard')->assertRedirect(route('login'));
+    $this->get('/accadmin/dashboard')->assertRedirect(route('login'));
 });
 
 test('visiting logout does not end the session while posting logout does', function () {

@@ -87,7 +87,7 @@ class User extends Authenticatable
     public function dashboardPath(): string
     {
         return match ($this->role?->name) {
-            'System Admin' => '/sysadmin/dashboard',
+            'Account Admin' => '/accadmin/dashboard',
             'Owner' => '/owner/dashboard',
             'Staff' => '/staff/dashboard',
             default => '/',

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Sysadmin;
+namespace App\Http\Controllers\Accadmin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invitation;
@@ -13,7 +13,7 @@ class DashboardController extends Controller
 {
     public function index(DatabaseBackupService $backups): View
     {
-        return view('sysadmin.dashboard', [
+        return view('accadmin.dashboard', [
             'pendingOwnerInvitations' => Invitation::query()
                 ->where('role_id', Role::where('name', 'Owner')->value('role_id'))
                 ->whereNull('used_at')

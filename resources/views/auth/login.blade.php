@@ -47,8 +47,8 @@
                         <div class="field-error">{{ $message }}</div>
                                 @if (str_contains($message, 'Account Deactivated'))
                                     <div class="mt-2">
-                                        <button type="button" class="btn btn-outline btn-sm" onclick="alert('Please contact the System Administrator through your available MCTBS communication channel to request account reactivation.')">
-                                            Contact System Administrator
+                                        <button type="button" class="btn btn-outline btn-sm" onclick="alert('Please contact an Account Admin through your available MCTBS communication channel to request account reactivation.')">
+                                            Contact Account Admin
                                         </button>
                                     </div>
                                 @endif

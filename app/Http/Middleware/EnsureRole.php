@@ -23,7 +23,7 @@ class EnsureRole
                 ->route('login')
                 ->withErrors([
                     'email' => $user->role?->name === 'Owner'
-                        ? 'Account Deactivated. Your account is currently deactivated. Contact the System Administrator to restore access.'
+                        ? 'Account Deactivated. Your account is currently deactivated. Contact the Account Admin to restore access.'
                         : 'Account Deactivated. Your account is inactive. Contact your Owner to restore access.',
                 ]);
         }
@@ -41,7 +41,7 @@ class EnsureRole
 
                 return redirect()
                     ->route('login')
-                    ->withErrors(['email' => 'Account Deactivated. Your Owner account is inactive. Contact the Owner or System Administrator.']);
+                    ->withErrors(['email' => 'Account Deactivated. Your Owner account is inactive. Contact the Owner or Account Admin.']);
             }
         }
 
@@ -56,7 +56,7 @@ class EnsureRole
     {
         return array_map(function ($role) {
             return match ($role) {
-                'sysadmin' => 'System Admin',
+                'accadmin', 'accountadmin' => 'Account Admin',
                 'owner' => 'Owner',
                 'staff' => 'Staff',
                 'guest' => 'Guest',

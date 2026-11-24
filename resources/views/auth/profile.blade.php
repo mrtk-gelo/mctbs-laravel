@@ -1,8 +1,8 @@
 <x-shell title="Edit Profile | MCTBS">
     <x-slot:nav>
         @switch($user->role->name)
-            @case('System Admin')
-                @include('partials.sysadmin-nav', ['activePage' => 'profile'])
+            @case('Account Admin')
+                @include('partials.accadmin-nav', ['activePage' => 'profile'])
                 @break
             @case('Owner')
                 @include('partials.owner-nav', ['activePage' => 'profile'])
@@ -20,8 +20,6 @@
             <h1>Profile</h1>
             <p>Manage your personal information and contact details.</p>
         </div>
-
-
 
         <section class="card profile-settings-card" id="profile-information">
             <form method="POST" action="{{ route('profile.update') }}" class="profile-settings-form">
