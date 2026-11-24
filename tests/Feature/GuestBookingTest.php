@@ -3912,6 +3912,18 @@ test('accepted booking remains visible in the guest dashboard while downpayment 
         ->toEqual($booking->fresh()->accepted_at->copy()->addHours(config('booking.payment_deadline_hours')));
 });
 
+test('guest dashboard does not show booking list filters', function () {
+    ['guest' => $guest] = makeGuestBookingScenario();
+
+    $this->actingAs($guest)
+        ->get(route('guest.dashboard'))
+        ->assertDontSee('Search bookings')
+        ->assertDontSee('Stay overlaps from')
+        ->assertDontSee('Through')
+        ->assertDontSee('Newest first')
+        ->assertDontSee('Clear');
+});
+
 test('guest dashboard does not expire a legacy accepted booking with a past deadline', function () {
     ['unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
     $booking = Booking::create([
