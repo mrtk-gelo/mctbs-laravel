@@ -74,7 +74,7 @@ test('owner creates a per-head walk-in with free children and a Senior discount'
         pricingMode: 'Per Head',
         price: 1000
     );
-    [$checkIn, $checkOut] = walkInStayDates();
+    [$checkIn, $checkOut] = walkInStayDates(startOffset: 0);
     $this->actingAs($owner);
     $this->get(route('owner.bookings.create'))
         ->assertOk()
@@ -94,15 +94,16 @@ test('owner creates a per-head walk-in with free children and a Senior discount'
         ->set('paymentAmount', '4000')
         ->set('paymentMethod', 'Cash')
         ->set('paymentReference', 'WALKIN-PERHEAD-001')
+        ->set('checkInNow', true)
         ->call('submit')
         ->assertHasNoErrors()
-        ->assertRedirect(route('owner.bookings.show', 1));
+        ->assertRedirect(route('owner.guests.check-in', 1));
 
     $booking = Booking::query()->firstOrFail();
     expect($booking->user_id)->toBeNull()
         ->and($booking->walk_in_phone)->toBe('09170000000')
         ->and($booking->walk_in_email)->toBe('walk-in@example.com')
-        ->and($booking->status)->toBe(BookingStatus::CONFIRMED)
+        ->and($booking->status)->toBe(BookingStatus::CHECKED_IN)
         ->and($booking->pricing_mode)->toBe('Per Head')
         ->and($booking->total_price)->toBe('4000.00')
         ->and($booking->displayGuestName())->toBe('Walk-in Guest');

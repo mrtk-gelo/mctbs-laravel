@@ -306,6 +306,22 @@ test('check-in requires owner or staff confirmation of the ticket reference and 
         ->and($booking->fresh()->checked_in_at)->not->toBeNull();
 });
 
+test('check-in rejects a confirmed booking before its scheduled check-in date', function () {
+    ['owner' => $owner, 'booking' => $booking] = makeBookingGuestCheckInScenario([
+        ['full_name' => 'Future Guest'],
+    ]);
+    $booking->update(['check_in' => today()->addDay()]);
+
+    $this->actingAs($owner)
+        ->post(route('owner.bookings.check-in', $booking->booking_id), [
+            'guest_details_confirmed' => '1',
+        ])
+        ->assertSessionHasErrors('check_in');
+
+    expect($booking->fresh()->status)->toBe(BookingStatus::CONFIRMED)
+        ->and($booking->fresh()->checked_in_at)->toBeNull();
+});
+
 test('owner records one expected guest arrival with an append-only event', function () {
     ['owner' => $owner, 'booking' => $booking, 'guests' => $guests] = makeBookingGuestCheckInScenario([
         ['full_name' => 'Expected Guest'],
@@ -460,6 +476,7 @@ test('identity exceptions still require a reason and identity status does not ga
     ]);
     $guest = $guests->first();
     $this->travelTo('2026-11-11 10:15:00');
+    $booking->update(['check_in' => today(), 'check_out' => today()->addDay()]);
     $this->actingAs($owner)
         ->post(route('owner.guests.arrivals.store', [$booking->booking_id, $guest->booking_guest_id]))
         ->assertRedirect(route('owner.guests.check-in', $booking->booking_id));

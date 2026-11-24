@@ -98,7 +98,7 @@ class BookingWorkflowController extends Controller
         $search = trim($validated['q'] ?? '');
         $bookingsQuery = Booking::query()
             ->whereHas('unit', fn ($query) => $query->whereIn('house_id', $houseIds))
-            ->with(['unit.house', 'guest', 'guests', 'payments', 'discounts.guest', 'archive'])
+            ->with(['unit.house', 'guest', 'guests', 'payments', 'discounts.guest', 'refunds', 'archive'])
             ->orderByRaw('CASE status WHEN ? THEN 1 WHEN ? THEN 2 WHEN ? THEN 3 WHEN ? THEN 4 WHEN ? THEN 5 WHEN ? THEN 6 ELSE 7 END', [
                 BookingStatus::PENDING,
                 BookingStatus::ACCEPTED,
@@ -502,6 +502,7 @@ class BookingWorkflowController extends Controller
                 'guest',
                 'guests',
                 'payments',
+                'refunds',
                 'review.guest',
                 'legacyFeedback.user',
             ])
@@ -523,6 +524,13 @@ class BookingWorkflowController extends Controller
             'booking' => $booking,
             'dashboardPrefix' => strtolower($request->user()->role->name) === 'staff' ? 'staff' : 'owner',
             'verifiedPaymentTotal' => BookingFinancialContract::verifiedPayments($booking),
+            'refundAmountLimit' => $booking->status === BookingStatus::CANCELLED
+                ? max(0, round(
+                    BookingFinancialContract::verifiedPayments($booking)
+                    - BookingFinancialContract::completedRefunds($booking),
+                    2
+                ))
+                : $booking->refundableOverpayment(),
             'underReviewStatus' => PaymentStatus::UNDER_REVIEW,
             'isPaymentOverdue' => $workflow->isPaymentOverdue($booking),
         ]);
@@ -693,13 +701,17 @@ class BookingWorkflowController extends Controller
     {
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'gt:0'],
+            'category' => ['required', 'string', 'max:100'],
             'reason' => ['required', 'string', 'max:255'],
+            'refund_reference' => ['nullable', 'string', 'max:100'],
         ]);
         $workflow->refundCheckedInGuest(
             $request->user(),
             $bookingId,
             (float) $validated['amount'],
-            $validated['reason']
+            $validated['reason'],
+            $validated['category'],
+            $validated['refund_reference'] ?? null
         );
 
         $dashboardPrefix = strtolower($request->user()->role->name) === 'staff' ? 'staff' : 'owner';
@@ -707,6 +719,30 @@ class BookingWorkflowController extends Controller
         return redirect()
             ->route($dashboardPrefix.'.guests.check-in', $bookingId)
             ->with('success', 'The refund was recorded.');
+    }
+
+    public function refundBooking(Request $request, int $bookingId, BookingWorkflowService $workflow): RedirectResponse
+    {
+        $validated = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'category' => ['required', 'string', 'max:100'],
+            'reason' => ['required', 'string', 'max:255'],
+            'refund_reference' => ['nullable', 'string', 'max:100'],
+        ]);
+        $workflow->refundCheckedInGuest(
+            $request->user(),
+            $bookingId,
+            (float) $validated['amount'],
+            $validated['reason'],
+            $validated['category'],
+            $validated['refund_reference'] ?? null
+        );
+
+        $dashboardPrefix = strtolower($request->user()->role->name) === 'staff' ? 'staff' : 'owner';
+
+        return redirect()
+            ->route($dashboardPrefix.'.bookings.show', $bookingId)
+            ->with('success', 'The refund was recorded and the booking breakdown was recalculated.');
     }
 
     public function addBookingAddons(Request $request, int $bookingId, BookingWorkflowService $workflow): RedirectResponse
@@ -943,7 +979,6 @@ class BookingWorkflowController extends Controller
             ->findOrFail($bookingId);
         abort_unless($workflow->canManageHouse($request->user(), $booking->unit->house), 404);
         abort_unless(in_array($booking->status, [
-            BookingStatus::CONFIRMED,
             BookingStatus::CHECKED_IN,
             ...BookingStatus::completedStatuses(),
         ], true), 404);

@@ -3,6 +3,7 @@
     $statusBadge = match ($canonicalStatus) {
         \App\Support\BookingStatus::PENDING => 'badge-pending',
         \App\Support\BookingStatus::ACCEPTED, \App\Support\BookingStatus::CONFIRMED => 'badge-accepted',
+        \App\Support\BookingStatus::CHECKED_IN => 'badge-accepted',
         \App\Support\BookingStatus::COMPLETED => 'badge-completed',
         \App\Support\BookingStatus::REJECTED => 'badge-rejected',
         default => 'badge-cancelled',
@@ -21,8 +22,10 @@
         \App\Support\BookingStatus::PENDING => 2,
         \App\Support\BookingStatus::ACCEPTED => 3,
         \App\Support\BookingStatus::CONFIRMED => 4,
+        \App\Support\BookingStatus::CHECKED_IN => 5,
         \App\Support\BookingStatus::COMPLETED => 5,
-        default => 2,
+        \App\Support\BookingStatus::CANCELLED,
+        \App\Support\BookingStatus::REJECTED => 1,
     };
     $isStayComplete = \App\Support\BookingStatus::isTerminal($booking->status);
 @endphp

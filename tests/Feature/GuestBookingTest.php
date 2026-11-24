@@ -293,7 +293,7 @@ test('a guest cannot reuse a payment reference number from another payment', fun
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 3600,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
     Payment::create([
         'booking_id' => $previousBooking->booking_id,
@@ -626,8 +626,8 @@ test('free children count toward maximum capacity but are not charged', function
     ]);
 
     $booking = app(BookingService::class)->createBooking($guest, $unit, [
-        'check_in' => now()->addDays(3)->toDateString(),
-        'check_out' => now()->addDays(5)->toDateString(),
+        'check_in' => today()->toDateString(),
+        'check_out' => today()->addDays(2)->toDateString(),
         'adult_count' => 1,
         'child_count' => 2,
         'senior_count' => 0,
@@ -883,7 +883,7 @@ test('booking form rejects active booking overlaps but allows turnover and cance
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 1800,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
     $cancelledCheckIn = now()->addDays(12);
     Booking::create([
@@ -1074,6 +1074,13 @@ test('owner booking details keep status actions and omit edit and checkout butto
     $this->post(route('owner.bookings.accept', $booking->booking_id))
         ->assertRedirect(route('owner.bookings.show', $booking->booking_id));
     expect($booking->fresh()->status)->toBe(BookingStatus::ACCEPTED);
+    $pendingPayment = Payment::create([
+        'booking_id' => $booking->booking_id,
+        'payment_method' => 'GCash',
+        'amount' => $booking->downpaymentAmount(),
+        'payment_status' => PaymentStatus::UNDER_REVIEW,
+        'payment_date' => now(),
+    ]);
 
     $this->get(route('owner.bookings.show', $booking->booking_id))
         ->assertSee('Actions')
@@ -1091,7 +1098,8 @@ test('owner booking details keep status actions and omit edit and checkout butto
     $this->post(route('owner.bookings.cancel', $booking->booking_id), ['reason' => 'Unit maintenance'])
         ->assertRedirect(route('owner.bookings.show', $booking->booking_id));
     expect($booking->fresh()->status)->toBe(BookingStatus::CANCELLED)
-        ->and($booking->fresh()->cancellation_reason)->toBe('Unit maintenance');
+        ->and($booking->fresh()->cancellation_reason)->toBe('Unit maintenance')
+        ->and($pendingPayment->fresh()->payment_status)->toBe(PaymentStatus::CANCELLED);
     $this->actingAs($guest)
         ->get(route('guest.bookings.show', $booking->booking_id))
         ->assertSee('data-status-tooltip="Cancellation reason: Unit maintenance"', false);
@@ -1817,12 +1825,54 @@ test('checkout does not automatically send feedback mail', function () {
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 0,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
 
     app(BookingWorkflowService::class)->completeCheckout($owner, $booking->booking_id);
 
     Mail::assertNothingSent();
+});
+
+test('owner can record a categorized refund for a cancelled booking', function () {
+    ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
+    $booking = Booking::create([
+        'user_id' => $guest->user_id,
+        'unit_id' => $unit->unit_id,
+        'check_in' => now()->addDays(5)->toDateString(),
+        'check_out' => now()->addDays(7)->toDateString(),
+        'adult_count' => 1,
+        'child_count' => 0,
+        'total_price' => 3600,
+        'status' => BookingStatus::CANCELLED,
+        'cancellation_reason' => 'Emergency cancellation.',
+    ]);
+    Payment::create([
+        'booking_id' => $booking->booking_id,
+        'payment_method' => 'GCash',
+        'amount' => 3600,
+        'payment_status' => PaymentStatus::VERIFIED,
+        'payment_date' => now(),
+    ]);
+
+    $this->actingAs($owner)
+        ->post(route('owner.bookings.refunds.store', $booking->booking_id), [
+            'amount' => 1200,
+            'category' => 'Cancellation',
+            'reason' => 'Emergency cancellation approved by the owner.',
+            'refund_reference' => 'GCASH-CANCEL-1200',
+        ])
+        ->assertRedirect(route('owner.bookings.show', $booking->booking_id))
+        ->assertSessionHas('success');
+
+    $refund = $booking->fresh()->refunds()->firstOrFail();
+    expect($refund->amount)->toBe('1200.00')
+        ->and($refund->refund_category)->toBe('Cancellation')
+        ->and($refund->refund_reference)->toBe('GCASH-CANCEL-1200')
+        ->and($refund->refund_status)->toBe('Refunded')
+        ->and($refund->processedBy->is($owner))->toBeTrue();
+
+    $this->get(route('owner.bookings.show', $booking->booking_id))
+        ->assertSee('Refund issued: ₱1,200.00');
 });
 
 test('guest feedback saves a review and notifies the owner and assigned staff', function () {
@@ -4284,7 +4334,7 @@ test('owner can open a confirmed guest ID review modal outside the dashboard pre
 
 test('owner dashboard lists paid confirmed arrivals on all future dates', function () {
     ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
-    $arrivalDate = today()->addDay();
+    $arrivalDate = today();
     $nearTermBooking = Booking::create([
         'user_id' => $guest->user_id,
         'unit_id' => $unit->unit_id,
@@ -4329,16 +4379,16 @@ test('owner dashboard lists paid confirmed arrivals on all future dates', functi
         ->assertSee($futureArrival->format('M j, Y'))
         ->assertSee(route('owner.guests.check-in', $futureBooking->booking_id));
 
-    $this->post(route('owner.bookings.check-in', $futureBooking->booking_id), [
+    $this->post(route('owner.bookings.check-in', $nearTermBooking->booking_id), [
         'guest_details_confirmed' => '1',
     ])
         ->assertRedirect(route('owner.dashboard'))
         ->assertSessionHas('success', 'Guest checked in successfully.');
 
-    expect($futureBooking->fresh()->status)->toBe(BookingStatus::CHECKED_IN);
+    expect($nearTermBooking->fresh()->status)->toBe(BookingStatus::CHECKED_IN);
 });
 
-test('owner can check in a paid confirmed guest before a future arrival date', function () {
+test('owner cannot check in a paid confirmed guest before a future arrival date', function () {
     ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
     $arrivalDate = today()->addDays(14);
     $booking = Booking::create([
@@ -4363,11 +4413,10 @@ test('owner can check in a paid confirmed guest before a future arrival date', f
         ->post(route('owner.bookings.check-in', $booking->booking_id), [
             'guest_details_confirmed' => '1',
         ])
-        ->assertRedirect(route('owner.dashboard'))
-        ->assertSessionHas('success', 'Guest checked in successfully.');
+        ->assertSessionHasErrors('check_in');
 
-    expect($booking->fresh()->status)->toBe(BookingStatus::CHECKED_IN)
-        ->and($booking->fresh()->checked_in_at)->not->toBeNull();
+    expect($booking->fresh()->status)->toBe(BookingStatus::CONFIRMED)
+        ->and($booking->fresh()->checked_in_at)->toBeNull();
 });
 
 test('staff sees only assigned houses on guest dashboard sections', function () {
@@ -4731,7 +4780,9 @@ test('refunds for checked-in guests cannot exceed payments after previous refund
     $this->actingAs($owner)
         ->post(route('owner.guests.refunds.store', $booking->booking_id), [
             'amount' => '1000.00',
+            'category' => 'Early Departure',
             'reason' => 'Guest needs to go home early',
+            'refund_reference' => 'GCASH-REF-100',
         ])
         ->assertRedirect()
         ->assertSessionHas('success');
@@ -4739,6 +4790,8 @@ test('refunds for checked-in guests cannot exceed payments after previous refund
     $refund = $booking->fresh()->refunds()->firstOrFail();
     expect($refund->amount)->toBe('1000.00')
         ->and($refund->payment_id)->toBe($payment->payment_id)
+        ->and($refund->refund_category)->toBe('Early Departure')
+        ->and($refund->refund_reference)->toBe('GCASH-REF-100')
         ->and($refund->processed_by)->toBe($owner->user_id)
         ->and($refund->processed_at)->not->toBeNull()
         ->and($refund->refund_status)->toBe('Refunded');
@@ -4746,6 +4799,7 @@ test('refunds for checked-in guests cannot exceed payments after previous refund
     $this->from(route('owner.guests.check-in', $booking->booking_id))
         ->post(route('owner.guests.refunds.store', $booking->booking_id), [
             'amount' => '200.01',
+            'category' => 'Other',
             'reason' => 'Another refund',
         ])
         ->assertRedirect(route('owner.guests.check-in', $booking->booking_id))
@@ -5184,10 +5238,10 @@ test('guest check-in page supports confirmed and checked-in bookings while check
         ->assertSee('Guest Headcount')
         ->assertDontSee('Guest Roster and Attendance')
         ->assertSee('Complete Booking Check-in');
+    $booking->update(['status' => BookingStatus::CHECKED_IN]);
     $this->get(route('owner.bookings.checkout', $booking->booking_id))
         ->assertOk();
 
-    $booking->update(['status' => BookingStatus::CHECKED_IN]);
     $checkInResponse = $this->get(route('owner.guests.check-in', $booking->booking_id))
         ->assertSee('Stay Details')
         ->assertSee('Booking reference')
@@ -5401,7 +5455,7 @@ test('booking add-on and damage prices remain unchanged when unit prices change'
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 3600,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
     $bookingAddon = BookingAddon::create([
         'booking_id' => $booking->booking_id,
@@ -5633,7 +5687,7 @@ test('owner can verify discounts, record checkout charges and payment, complete 
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 3600,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
     $bookingGuest = BookingGuest::create([
         'booking_id' => $booking->booking_id,
@@ -5726,7 +5780,7 @@ test('owner can verify discounts, record checkout charges and payment, complete 
     $this->actingAs($owner)
         ->post(route('owner.bookings.checkout.complete', $booking->booking_id))
         ->assertSessionHasErrors('booking');
-    expect($booking->fresh()->status)->toBe(BookingStatus::CONFIRMED);
+    expect($booking->fresh()->status)->toBe(BookingStatus::CHECKED_IN);
     $this->get(route('owner.bookings.checkout', $booking->booking_id))
         ->assertOk()
         ->assertSee('Pay the remaining balance before completing checkout.')
@@ -5998,8 +6052,8 @@ test('verified checkout discount refunds the excess from a full downpayment paym
     Mail::fake();
     ['owner' => $owner, 'unit' => $unit, 'guest' => $guest] = makeGuestBookingScenario();
     $booking = app(BookingService::class)->createBooking($guest, $unit, [
-        'check_in' => now()->addDays(3)->toDateString(),
-        'check_out' => now()->addDays(5)->toDateString(),
+        'check_in' => today()->toDateString(),
+        'check_out' => today()->addDays(2)->toDateString(),
         'adult_count' => 1,
         'child_count' => 0,
         'guests' => [['full_name' => 'Senior Guest']],
@@ -6023,6 +6077,8 @@ test('verified checkout discount refunds the excess from a full downpayment paym
         ])
         ->assertSessionHas('success');
     expect($booking->fresh()->status)->toBe(BookingStatus::CONFIRMED);
+    app(BookingWorkflowService::class)->checkInGuest($owner, $booking->booking_id, true);
+    expect($booking->fresh()->status)->toBe(BookingStatus::CHECKED_IN);
 
     $bookingGuest = BookingGuest::where('booking_id', $booking->booking_id)->firstOrFail();
     $discount = BookingDiscount::create([
@@ -6054,7 +6110,9 @@ test('verified checkout discount refunds the excess from a full downpayment paym
         ->assertOk()
         ->assertDontSee('class="card-header">Refunds', false);
 
-    $this->post(route('owner.bookings.checkout.complete', $booking->booking_id))
+    $this->post(route('owner.bookings.checkout.complete', $booking->booking_id), [
+        'early_checkout_reason' => 'Guest completed the stay early due to an emergency.',
+    ])
         ->assertRedirect(route('owner.bookings.checkout', $booking->booking_id))
         ->assertSessionHas('success', 'Checkout completed. The refund is ready to return to the Guest from the bill breakdown.');
     $refund = Refund::where('booking_id', $booking->booking_id)->firstOrFail();
@@ -6216,7 +6274,7 @@ test('staff work queues and checkout actions are restricted to assigned properti
         'adult_count' => 1,
         'child_count' => 0,
         'total_price' => 3600,
-        'status' => BookingStatus::CONFIRMED,
+        'status' => BookingStatus::CHECKED_IN,
     ]);
 
     $this->actingAs($staff)

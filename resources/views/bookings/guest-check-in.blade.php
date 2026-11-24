@@ -295,6 +295,19 @@
                     <input id="refund-amount" name="amount" type="number" min="0.01" max="{{ number_format($refundAmountLimit, 2, '.', '') }}" step="0.01" value="{{ old('amount') }}" required>
                 </div>
                 <div class="form-group">
+                    <label class="required" for="refund-category">Category</label>
+                    <select id="refund-category" name="category" required>
+                        <option value="">Select a category</option>
+                        @foreach (['Early Departure', 'Cancellation', 'Senior/PWD Discount', 'Overpayment or Duplicate', 'Courtesy Refund', 'Other'] as $category)
+                            <option value="{{ $category }}" @selected(old('category') === $category)>{{ $category }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="refund-reference">Payment or transfer reference</label>
+                    <input id="refund-reference" name="refund_reference" type="text" maxlength="100" value="{{ old('refund_reference') }}" placeholder="Optional">
+                </div>
+                <div class="form-group">
                     <label class="required" for="refund-reason">Reason</label>
                     <textarea id="refund-reason" name="reason" rows="3" maxlength="255" placeholder="Example: Guest needs to go home early" required>{{ old('reason') }}</textarea>
                 </div>

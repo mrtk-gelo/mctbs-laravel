@@ -476,7 +476,7 @@ test('owners and assigned staff can edit while unassigned staff cannot', functio
 
 test('checkout shows and refunds discounts only for active roster members', function () {
     ['owner' => $owner, 'booking' => $booking] = makeGuestRosterSyncScenario(
-        status: BookingStatus::CONFIRMED,
+        status: BookingStatus::CHECKED_IN,
         payingGuestCount: 2
     );
     $activeGuest = $booking->guests()->orderBy('booking_guest_id')->firstOrFail();
@@ -499,7 +499,11 @@ test('checkout shows and refunds discounts only for active roster members', func
         ->assertSee('₱20.00')
         ->assertDontSee('₱30.00');
 
-    app(BookingWorkflowService::class)->completeCheckout($owner, $booking->booking_id);
+    app(BookingWorkflowService::class)->completeCheckout(
+        $owner,
+        $booking->booking_id,
+        'Guest left early due to an emergency.'
+    );
 
     expect(Refund::query()->where('booking_id', $booking->booking_id)->sum('amount'))->toBe(20)
         ->and($removedDiscount->fresh()->refund_amount)->toBe('0.00')

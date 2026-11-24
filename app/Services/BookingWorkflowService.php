@@ -226,6 +226,12 @@ class BookingWorkflowService
             $booking->status = BookingStatus::CANCELLED;
             $booking->cancellation_reason = $reason;
             $booking->save();
+            $booking->payments()
+                ->where('payment_status', PaymentStatus::UNDER_REVIEW)
+                ->update([
+                    'payment_status' => PaymentStatus::CANCELLED,
+                    'notes' => 'Payment review cancelled because the booking was cancelled.',
+                ]);
             $this->releaseCalendarDates($unit, $booking);
             $booking->load(['guest', 'unit.house']);
 
@@ -275,6 +281,12 @@ class BookingWorkflowService
             $booking->status = BookingStatus::CANCELLED;
             $booking->cancellation_reason = 'Cancelled by guest: '.$reason;
             $booking->save();
+            $booking->payments()
+                ->where('payment_status', PaymentStatus::UNDER_REVIEW)
+                ->update([
+                    'payment_status' => PaymentStatus::CANCELLED,
+                    'notes' => 'Payment review cancelled because the guest cancelled the booking.',
+                ]);
 
             $this->releaseCalendarDates($unit, $booking);
 
@@ -479,6 +491,12 @@ class BookingWorkflowService
             if ($lockedBooking->status !== BookingStatus::CONFIRMED) {
                 throw ValidationException::withMessages([
                     'check_in' => 'Only confirmed bookings can be checked in.',
+                ]);
+            }
+
+            if ($lockedBooking->check_in->copy()->startOfDay()->gt(today()->startOfDay())) {
+                throw ValidationException::withMessages([
+                    'check_in' => 'Check-in can only be completed on or after the booking check-in date.',
                 ]);
             }
 
@@ -1243,23 +1261,33 @@ class BookingWorkflowService
         });
     }
 
-    public function refundCheckedInGuest(User $actor, int $bookingId, float $amount, string $reason): Refund
-    {
+    public function refundCheckedInGuest(
+        User $actor,
+        int $bookingId,
+        float $amount,
+        string $reason,
+        ?string $category = null,
+        ?string $reference = null
+    ): Refund {
         $booking = Booking::query()
             ->with(['unit.house', 'guest'])
             ->findOrFail($bookingId);
         $this->authorizeHouse($actor, $booking->unit->house);
 
-        return DB::transaction(function () use ($actor, $booking, $amount, $reason): Refund {
+        return DB::transaction(function () use ($actor, $booking, $amount, $reason, $category, $reference): Refund {
             $lockedBooking = Booking::query()
                 ->whereKey($booking->booking_id)
                 ->lockForUpdate()
                 ->with('guest')
                 ->firstOrFail();
 
-            if ($lockedBooking->status !== BookingStatus::CHECKED_IN) {
+            if (! in_array($lockedBooking->status, [
+                BookingStatus::CONFIRMED,
+                BookingStatus::CHECKED_IN,
+                BookingStatus::CANCELLED,
+            ], true)) {
                 throw ValidationException::withMessages([
-                    'refund' => 'A refund can only be recorded while the guest is checked in.',
+                    'refund' => 'A refund can only be recorded for confirmed, checked-in, or cancelled bookings.',
                 ]);
             }
 
@@ -1271,7 +1299,17 @@ class BookingWorkflowService
             $pendingRefundTotal = (float) $lockedBooking->refunds()
                 ->where('refund_status', 'Pending')
                 ->sum('amount');
-            $refundableCredit = max(0, round($lockedBooking->refundableOverpayment() - $pendingRefundTotal, 2));
+            $refundableCredit = $lockedBooking->status === BookingStatus::CANCELLED
+                ? max(0, round(
+                    (float) $lockedBooking->payments()
+                        ->where('payment_status', PaymentStatus::VERIFIED)
+                        ->sum('amount')
+                        - (float) $lockedBooking->refunds()
+                            ->where('refund_status', 'Refunded')
+                            ->sum('amount'),
+                    2
+                ))
+                : max(0, round($lockedBooking->refundableOverpayment() - $pendingRefundTotal, 2));
             if ($verifiedPayments->isEmpty() || $refundableCredit <= 0) {
                 throw ValidationException::withMessages([
                     'amount' => 'There is no refundable overpayment from verified payments.',
@@ -1308,8 +1346,10 @@ class BookingWorkflowService
                 'payment_id' => $payment->payment_id,
                 'processed_by' => $actor->user_id,
                 'amount' => $amountCents / 100,
+                'refund_category' => $category,
                 'reason' => $reason,
                 'refund_status' => 'Refunded',
+                'refund_reference' => $reference,
                 'processed_at' => now(),
                 'created_at' => now(),
             ]);
@@ -1334,7 +1374,7 @@ class BookingWorkflowService
         return DB::transaction(function () use ($actor, $booking, $description, $quantity, $unitPrice): AdditionalCharge {
             $lockedBooking = Booking::query()->whereKey($booking->booking_id)->lockForUpdate()->firstOrFail();
 
-            if (! in_array($lockedBooking->status, [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN], true)) {
+            if ($lockedBooking->status !== BookingStatus::CHECKED_IN) {
                 throw ValidationException::withMessages(['booking' => 'Charges can only be added before checkout is completed.']);
             }
 
@@ -1360,7 +1400,7 @@ class BookingWorkflowService
         DB::transaction(function () use ($actor, $booking, $items): void {
             $lockedBooking = Booking::query()->whereKey($booking->booking_id)->lockForUpdate()->firstOrFail();
 
-            if (! in_array($lockedBooking->status, [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN], true)) {
+            if ($lockedBooking->status !== BookingStatus::CHECKED_IN) {
                 throw ValidationException::withMessages(['booking' => 'Damage or missing items can only be added before checkout is completed.']);
             }
 
@@ -1423,7 +1463,7 @@ class BookingWorkflowService
         DB::transaction(function () use ($actor, $booking, $description, $quantity, $unitPrice): void {
             $lockedBooking = Booking::query()->whereKey($booking->booking_id)->lockForUpdate()->firstOrFail();
 
-            if (! in_array($lockedBooking->status, [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN], true)) {
+            if ($lockedBooking->status !== BookingStatus::CHECKED_IN) {
                 throw ValidationException::withMessages(['booking' => 'Damage or missing items can only be added before checkout is completed.']);
             }
 
@@ -1473,7 +1513,7 @@ class BookingWorkflowService
                 ->firstOrFail();
             $this->authorizeHouse($actor, $lockedBooking->unit->house);
 
-            if (! in_array($lockedBooking->status, [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN], true)) {
+            if ($lockedBooking->status !== BookingStatus::CHECKED_IN) {
                 throw ValidationException::withMessages([
                     'quantity' => 'Damage quantities can only be changed before checkout is completed.',
                 ]);
@@ -1509,7 +1549,7 @@ class BookingWorkflowService
         DB::transaction(function () use ($booking, $damageId): void {
             $lockedBooking = Booking::query()->whereKey($booking->booking_id)->lockForUpdate()->firstOrFail();
 
-            if (! in_array($lockedBooking->status, [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN], true)) {
+            if ($lockedBooking->status !== BookingStatus::CHECKED_IN) {
                 throw ValidationException::withMessages(['booking' => 'Damage or missing items can only be removed before checkout is completed.']);
             }
 
@@ -1535,7 +1575,7 @@ class BookingWorkflowService
             $lockedBooking = Booking::query()->whereKey($booking->booking_id)->lockForUpdate()->firstOrFail();
             $lockedCharge = AdditionalCharge::query()->whereKey($charge->additional_charge_id)->lockForUpdate()->firstOrFail();
 
-            if (! in_array($lockedBooking->status, [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN], true)) {
+            if ($lockedBooking->status !== BookingStatus::CHECKED_IN) {
                 throw ValidationException::withMessages(['booking' => 'Checkout charges can only be removed before checkout is completed.']);
             }
 
@@ -1560,7 +1600,7 @@ class BookingWorkflowService
                 ->firstOrFail();
             $this->authorizeHouse($actor, $lockedBooking->unit->house);
 
-            if (! in_array($lockedBooking->status, [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN], true)) {
+            if ($lockedBooking->status !== BookingStatus::CHECKED_IN) {
                 throw ValidationException::withMessages([
                     'quantity' => 'Charge quantities can only be changed before checkout is completed.',
                 ]);
@@ -1601,7 +1641,7 @@ class BookingWorkflowService
             $lockedBooking = Booking::query()->whereKey($booking->booking_id)->lockForUpdate()->firstOrFail();
 
             if (! in_array($lockedBooking->status, [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN], true)) {
-                throw ValidationException::withMessages(['booking' => 'Payments can only be recorded before checkout is completed.']);
+                throw ValidationException::withMessages(['booking' => 'Payments can only be recorded for confirmed or checked-in bookings before checkout is completed.']);
             }
 
             $balanceDue = $lockedBooking->outstandingBalance();
@@ -1643,7 +1683,7 @@ class BookingWorkflowService
         $receipt = DB::transaction(function () use ($booking, $earlyCheckoutReason): BookingReceipt {
             $lockedBooking = Booking::query()->whereKey($booking->booking_id)->lockForUpdate()->firstOrFail();
 
-            if (! in_array($lockedBooking->status, [BookingStatus::CONFIRMED, BookingStatus::CHECKED_IN], true)) {
+            if ($lockedBooking->status !== BookingStatus::CHECKED_IN) {
                 throw ValidationException::withMessages(['booking' => 'Only active bookings can be checked out.']);
             }
 
@@ -1889,6 +1929,7 @@ class BookingWorkflowService
                     'booking_id' => $booking->booking_id,
                     'payment_id' => $payment->payment_id,
                     'amount' => $paymentRefund,
+                    'refund_category' => 'Senior/PWD Discount',
                     'reason' => $discount->discount_type.' discount approved after payment.',
                     'refund_status' => 'Pending',
                     'created_at' => now(),
