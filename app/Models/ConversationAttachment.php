@@ -13,6 +13,7 @@ class ConversationAttachment extends Model
 
     protected $fillable = [
         'message_id',
+        'disk',
         'path',
         'original_name',
         'mime_type',

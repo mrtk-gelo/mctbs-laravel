@@ -1,5 +1,7 @@
 <?php
 
+use App\Support\R2AclCompatibility;
+
 return [
 
     /*
@@ -14,6 +16,7 @@ return [
     */
 
     'default' => env('FILESYSTEM_DISK', 'local'),
+    'conversation_attachments' => env('CONVERSATION_ATTACHMENT_DISK', 'local'),
 
     /*
     |--------------------------------------------------------------------------
@@ -65,6 +68,23 @@ return [
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'throw' => false,
             'report' => false,
+        ],
+
+        'r2' => [
+            'driver' => 's3',
+            'key' => env('R2_ACCESS_KEY_ID'),
+            'secret' => env('R2_SECRET_ACCESS_KEY'),
+            'region' => env('R2_REGION', 'auto'),
+            'bucket' => env('R2_BUCKET'),
+            'endpoint' => env('R2_ENDPOINT'),
+            'use_path_style_endpoint' => false,
+            'visibility' => 'private',
+            'options' => [
+                'before_upload' => [R2AclCompatibility::class, 'removeAcl'],
+                'mup_threshold' => 10485760,
+            ],
+            'throw' => true,
+            'report' => true,
         ],
 
     ],

@@ -4,6 +4,8 @@ use App\Models\Role;
 use App\Models\TransientHouse;
 use App\Models\User;
 use App\Services\ConversationService;
+use App\Support\R2AclCompatibility;
+use Aws\Command;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -12,8 +14,19 @@ use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
+test('R2 upload configuration omits unsupported ACL headers', function () {
+    $command = new Command('PutObject', ['ACL' => 'private']);
+    $beforeUpload = config('filesystems.disks.r2.options.before_upload');
+
+    $beforeUpload($command);
+
+    expect(isset($command['ACL']))->toBeFalse()
+        ->and($beforeUpload)->toBe([R2AclCompatibility::class, 'removeAcl']);
+});
+
 test('conversation participants can upload and download private attachments', function () {
-    Storage::fake('local');
+    config(['filesystems.conversation_attachments' => 'r2']);
+    Storage::fake('r2');
     Mail::fake();
     $owner = attachmentUser('Owner', 'attachment-owner@example.com');
     $guest = attachmentUser('Guest', 'attachment-guest@example.com');
@@ -36,7 +49,8 @@ test('conversation participants can upload and download private attachments', fu
 
     $message = $conversation->messages()->where('message', 'Here is the requested document.')->firstOrFail();
     $attachment = $message->attachments()->firstOrFail();
-    Storage::disk('local')->assertExists($attachment->path);
+    expect($attachment->disk)->toBe('r2');
+    Storage::disk('r2')->assertExists($attachment->path);
 
     $this->actingAs($guest)
         ->get(route('guest.conversations.attachments.download', [
@@ -86,6 +100,14 @@ test('invalid and cross-property attachment requests are rejected', function () 
         'mime_type' => 'application/pdf',
         'size' => 100,
     ]);
+    Storage::disk('local')->put($attachment->path, 'private file');
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.attachments.download', [
+            $conversation->conversation_id,
+            $attachment->attachment_id,
+        ]))
+        ->assertOk();
 
     $this->actingAs($otherOwner)
         ->get(route('owner.conversations.attachments.download', [
@@ -98,6 +120,7 @@ test('invalid and cross-property attachment requests are rejected', function () 
 });
 
 test('a storage failure does not persist a message without its attachment', function () {
+    config(['filesystems.conversation_attachments' => 'r2']);
     Mail::fake();
     $owner = attachmentUser('Owner', 'attachment-failure-owner@example.com');
     $guest = attachmentUser('Guest', 'attachment-failure-guest@example.com');
@@ -105,7 +128,7 @@ test('a storage failure does not persist a message without its attachment', func
     $conversation = app(ConversationService::class)->createForGuest($guest, $house->house_id);
     $disk = Mockery::mock(FilesystemAdapter::class);
     $disk->shouldReceive('putFileAs')->once()->andReturn(false);
-    Storage::shouldReceive('disk')->once()->with('local')->andReturn($disk);
+    Storage::shouldReceive('disk')->once()->with('r2')->andReturn($disk);
 
     expect(fn () => app(ConversationService::class)->sendMessage(
         $guest,
