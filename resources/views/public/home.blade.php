@@ -1,4 +1,4 @@
-<x-shell title="Welcome | MCTBS">
+<x-shell title="Welcome | MCTBS" :footer="true">
     <x-slot:nav>@include('partials.nav', ['activePage' => 'home'])</x-slot:nav>
 
     <section class="hero hero-home" id="home" data-scroll-section="home">

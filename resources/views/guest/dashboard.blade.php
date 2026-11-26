@@ -34,7 +34,7 @@
                                 @php
                                     $canonicalStatus = \App\Support\BookingStatus::canonical($b->status);
                                 @endphp
-                                <div class="card mb-3" data-booking-item data-created-at="{{ $b->created_at?->timestamp ?? 0 }}" data-check-in="{{ \Illuminate\Support\Carbon::parse($b->check_in)->toDateString() }}" data-check-out="{{ \Illuminate\Support\Carbon::parse($b->check_out)->toDateString() }}">
+                                <div class="card mb-3" data-booking-item @if ($loop->iteration > 3) hidden data-booking-extra @endif data-created-at="{{ $b->created_at?->timestamp ?? 0 }}" data-check-in="{{ \Illuminate\Support\Carbon::parse($b->check_in)->toDateString() }}" data-check-out="{{ \Illuminate\Support\Carbon::parse($b->check_out)->toDateString() }}">
                                     <div class="card-body flex-between" style="flex-wrap:wrap;gap:12px">
                                         <div>
                                             <div class="fw-bold" style="font-size:16px">{{ $b->unit->unit_type }}</div>
@@ -57,6 +57,11 @@
                                 </div>
                             @endforeach
                         </div>
+                        @if ($list->count() > 3)
+                            <div class="mb-3" style="text-align:right">
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-view-more>View more</button>
+                            </div>
+                        @endif
                     </div>
                     <div class="empty-state" data-filter-empty hidden><i class="fa fa-filter"></i><h3>No bookings match these filters</h3></div>
                 @endif
@@ -71,6 +76,12 @@
                 document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
                 btn.classList.add('active');
                 document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+        document.querySelectorAll('[data-view-more]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.closest('[data-booking-list]').querySelectorAll('[data-booking-extra]').forEach(el => el.hidden = false);
+                btn.remove();
             });
         });
     </script>
