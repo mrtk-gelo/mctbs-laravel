@@ -165,9 +165,10 @@ class ConversationController extends Controller
             ->whereHas('message', fn ($query) => $query->where('conversation_id', $conversation->conversation_id))
             ->findOrFail($attachmentId);
 
-        abort_unless(Storage::disk('local')->exists($attachment->path), 404);
+        $disk = Storage::disk($attachment->disk ?: 'local');
+        abort_unless($disk->exists($attachment->path), 404);
 
-        return Storage::disk('local')->download(
+        return $disk->download(
             $attachment->path,
             $attachment->original_name,
             ['X-Content-Type-Options' => 'nosniff']

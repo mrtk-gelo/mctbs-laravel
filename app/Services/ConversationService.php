@@ -129,10 +129,11 @@ class ConversationService
             ]);
         }
 
-        $storedPaths = [];
+        /** @var list<array{disk: string, path: string}> $storedAttachments */
+        $storedAttachments = [];
 
         try {
-            return DB::transaction(function () use ($sender, $conversation, $body, $clientToken, $attachments, &$storedPaths): Message {
+            return DB::transaction(function () use ($sender, $conversation, $body, $clientToken, $attachments, &$storedAttachments): Message {
                 $message = $clientToken === null
                     ? $conversation->messages()->create([
                         'sender_id' => $sender->user_id,
@@ -161,7 +162,11 @@ class ConversationService
                     ])->save();
 
                     foreach ($attachments as $file) {
-                        $storedPaths[] = $this->addAttachment($sender, $conversation, $message, $file)->path;
+                        $attachment = $this->addAttachment($sender, $conversation, $message, $file);
+                        $storedAttachments[] = [
+                            'disk' => $attachment->disk,
+                            'path' => $attachment->path,
+                        ];
                     }
 
                     $this->addParticipant($conversation, $sender);
@@ -189,8 +194,12 @@ class ConversationService
                 return $message;
             });
         } catch (Throwable $exception) {
-            foreach ($storedPaths as $path) {
-                $this->deleteStoredAttachment($conversation->conversation_id, $path);
+            foreach ($storedAttachments as $attachment) {
+                $this->deleteStoredAttachment(
+                    $conversation->conversation_id,
+                    $attachment['disk'],
+                    $attachment['path']
+                );
             }
 
             throw $exception;
@@ -242,13 +251,19 @@ class ConversationService
         abort_unless($this->canAccess($sender, $conversation), 403);
         abort_unless($message->conversation_id === $conversation->conversation_id, 404);
 
-        $path = $file->store('conversation-attachments/'.$conversation->conversation_id, 'local');
+        $disk = config('filesystems.conversation_attachments', 'local');
+        if (! is_string($disk) || $disk === '') {
+            throw new RuntimeException('The conversation attachment storage disk is not configured.');
+        }
+
+        $path = $file->store('conversation-attachments/'.$conversation->conversation_id, $disk);
         if (! is_string($path) || $path === '') {
             throw new RuntimeException('The conversation attachment could not be stored.');
         }
 
         try {
             return $message->attachments()->create([
+                'disk' => $disk,
                 'path' => $path,
                 'original_name' => Str::limit(
                     basename(str_replace('\\', '/', $file->getClientOriginalName())) ?: 'attachment',
@@ -259,7 +274,7 @@ class ConversationService
                 'size' => (int) $file->getSize(),
             ]);
         } catch (Throwable $exception) {
-            $this->deleteStoredAttachment($conversation->conversation_id, $path);
+            $this->deleteStoredAttachment($conversation->conversation_id, $disk, $path);
 
             throw $exception;
         }
@@ -306,11 +321,12 @@ class ConversationService
         ]);
     }
 
-    private function deleteStoredAttachment(int $conversationId, string $path): void
+    private function deleteStoredAttachment(int $conversationId, string $disk, string $path): void
     {
-        if (! Storage::disk('local')->delete($path)) {
+        if (! Storage::disk($disk)->delete($path)) {
             Log::error('Conversation attachment cleanup failed.', [
                 'conversation_id' => $conversationId,
+                'disk' => $disk,
                 'path' => $path,
             ]);
         }
