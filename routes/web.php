@@ -3,11 +3,13 @@
 use App\Http\Controllers\Accadmin\BackupController as AccadminBackupController;
 use App\Http\Controllers\Accadmin\DashboardController as AccadminDashboardController;
 use App\Http\Controllers\Accadmin\OwnerController as AccadminOwnerController;
+use App\Http\Controllers\AssistanceController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\ProfileController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BookingWorkflowController;
+use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\Guest\BookingController as GuestBookingController;
 use App\Http\Controllers\Guest\DashboardController as GuestDashboardController;
 use App\Http\Controllers\Guest\FeedbackController as GuestFeedbackController;
@@ -15,10 +17,12 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Owner\AdminController as OwnerAdminController;
 use App\Http\Controllers\Owner\DashboardController as OwnerDashboardController;
 use App\Http\Controllers\Owner\HouseController as OwnerHouseController;
+use App\Http\Controllers\PostmarkInboundController;
 use App\Http\Controllers\PublicController;
 use App\Http\Controllers\Staff\DashboardController as StaffDashboardController;
 use App\Livewire\Guest\BookingForm;
 use App\Livewire\Owner\WalkInBookingForm;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 // Public browsing — no auth required
@@ -67,8 +71,26 @@ Route::middleware('auth')->group(function () {
     Route::get('/payments/{paymentId}/proof', [BookingWorkflowController::class, 'downloadProof'])->name('payments.proof');
 });
 
+Route::post('/webhooks/postmark/inbound', PostmarkInboundController::class)
+    ->withoutMiddleware([ValidateCsrfToken::class])
+    ->name('webhooks.postmark.inbound');
+
 Route::middleware(['auth', 'role:guest'])->group(function () {
     Route::get('/guest/dashboard', [GuestDashboardController::class, 'index'])->name('guest.dashboard');
+    Route::get('/guest/conversations', [ConversationController::class, 'guestIndex'])->name('guest.conversations.index');
+    Route::post('/guest/conversations', [ConversationController::class, 'guestStore'])->name('guest.conversations.store');
+    Route::get('/guest/conversations/{conversationId}', [ConversationController::class, 'guestShow'])
+        ->whereNumber('conversationId')
+        ->name('guest.conversations.show');
+    Route::post('/guest/conversations/{conversationId}/reply', [ConversationController::class, 'guestReply'])
+        ->whereNumber('conversationId')
+        ->name('guest.conversations.reply');
+    Route::get('/guest/conversations/{conversationId}/attachments/{attachmentId}', [ConversationController::class, 'downloadAttachment'])
+        ->whereNumber(['conversationId', 'attachmentId'])
+        ->name('guest.conversations.attachments.download');
+    Route::post('/guest/conversations/{conversationId}/reopen', [ConversationController::class, 'reopen'])
+        ->whereNumber('conversationId')
+        ->name('guest.conversations.reopen');
     Route::get('/units/{unit}/book', BookingForm::class)->name('guest.book');
 
     Route::get('/guest/bookings/{booking_id}', [GuestBookingController::class, 'show'])->name('guest.bookings.show');
@@ -99,6 +121,22 @@ Route::middleware(['auth', 'role:accadmin'])->prefix('accadmin')->name('accadmin
 
 Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->group(function () {
     Route::get('/dashboard', [OwnerDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/messages', [ConversationController::class, 'staffIndex'])->name('conversations.index');
+    Route::get('/messages/{conversationId}', [ConversationController::class, 'staffShow'])->whereNumber('conversationId')->name('conversations.show');
+    Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
+    Route::get('/messages/{conversationId}/attachments/{attachmentId}', [ConversationController::class, 'downloadAttachment'])
+        ->whereNumber(['conversationId', 'attachmentId'])
+        ->name('conversations.attachments.download');
+    Route::post('/messages/{conversationId}/assign', [ConversationController::class, 'assign'])->whereNumber('conversationId')->name('conversations.assign');
+    Route::post('/messages/{conversationId}/resolve', [ConversationController::class, 'resolve'])->whereNumber('conversationId')->name('conversations.resolve');
+    Route::post('/messages/{conversationId}/reopen', [ConversationController::class, 'reopen'])->whereNumber('conversationId')->name('conversations.reopen');
+    Route::post('/messages/{conversationId}/notes', [ConversationController::class, 'noteStore'])->whereNumber('conversationId')->name('conversations.notes.store');
+    Route::get('/messages/assistance', [AssistanceController::class, 'index'])->name('assistance.index');
+    Route::post('/messages/assistance/settings', [AssistanceController::class, 'updateSettings'])->name('assistance.settings.update');
+    Route::post('/messages/assistance/faqs', [AssistanceController::class, 'storeFaq'])->name('assistance.faqs.store');
+    Route::put('/messages/assistance/faqs/{faq}', [AssistanceController::class, 'updateFaq'])->name('assistance.faqs.update');
+    Route::post('/messages/assistance/quick-replies', [AssistanceController::class, 'storeQuickReply'])->name('assistance.quick-replies.store');
+    Route::put('/messages/assistance/quick-replies/{quickReply}', [AssistanceController::class, 'updateQuickReply'])->name('assistance.quick-replies.update');
     Route::get('/houses', [OwnerHouseController::class, 'index'])->name('houses.index');
     Route::get('/houses/archive', [OwnerHouseController::class, 'archiveIndex'])->name('houses.archive.index');
     Route::get('/houses/archive/export', [OwnerHouseController::class, 'exportArchive'])->name('houses.archive.export');
@@ -174,6 +212,22 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
 
 Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->group(function () {
     Route::get('/dashboard', [StaffDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/messages', [ConversationController::class, 'staffIndex'])->name('conversations.index');
+    Route::get('/messages/{conversationId}', [ConversationController::class, 'staffShow'])->whereNumber('conversationId')->name('conversations.show');
+    Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
+    Route::get('/messages/{conversationId}/attachments/{attachmentId}', [ConversationController::class, 'downloadAttachment'])
+        ->whereNumber(['conversationId', 'attachmentId'])
+        ->name('conversations.attachments.download');
+    Route::post('/messages/{conversationId}/assign', [ConversationController::class, 'assign'])->whereNumber('conversationId')->name('conversations.assign');
+    Route::post('/messages/{conversationId}/resolve', [ConversationController::class, 'resolve'])->whereNumber('conversationId')->name('conversations.resolve');
+    Route::post('/messages/{conversationId}/reopen', [ConversationController::class, 'reopen'])->whereNumber('conversationId')->name('conversations.reopen');
+    Route::post('/messages/{conversationId}/notes', [ConversationController::class, 'noteStore'])->whereNumber('conversationId')->name('conversations.notes.store');
+    Route::get('/messages/assistance', [AssistanceController::class, 'index'])->name('assistance.index');
+    Route::post('/messages/assistance/settings', [AssistanceController::class, 'updateSettings'])->name('assistance.settings.update');
+    Route::post('/messages/assistance/faqs', [AssistanceController::class, 'storeFaq'])->name('assistance.faqs.store');
+    Route::put('/messages/assistance/faqs/{faq}', [AssistanceController::class, 'updateFaq'])->name('assistance.faqs.update');
+    Route::post('/messages/assistance/quick-replies', [AssistanceController::class, 'storeQuickReply'])->name('assistance.quick-replies.store');
+    Route::put('/messages/assistance/quick-replies/{quickReply}', [AssistanceController::class, 'updateQuickReply'])->name('assistance.quick-replies.update');
     Route::get('/houses', [OwnerHouseController::class, 'index'])->name('houses.index');
     Route::get('/houses/archive', [OwnerHouseController::class, 'archiveIndex'])->name('houses.archive.index');
     Route::get('/houses/archive/export', [OwnerHouseController::class, 'exportArchive'])->name('houses.archive.export');

@@ -17,10 +17,12 @@ class ConversationParticipant extends Model
         'conversation_id',
         'user_id',
         'joined_at',
+        'last_read_message_id',
     ];
 
     protected $casts = [
         'joined_at' => 'datetime',
+        'last_read_message_id' => 'integer',
     ];
 
     public function conversation(): BelongsTo

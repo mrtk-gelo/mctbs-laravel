@@ -14,6 +14,7 @@ use App\Models\UnitCalendar;
 use App\Services\BookingReportService;
 use App\Services\BookingService;
 use App\Services\BookingWorkflowService;
+use App\Services\ConversationReportService;
 use App\Support\BookingFinancialContract;
 use App\Support\BookingStatus;
 use App\Support\PaymentStatus;
@@ -298,6 +299,14 @@ class BookingWorkflowController extends Controller
             $houseIds,
             $this->resolvedReportFilters($filters, $houseIds)
         );
+        $conversationMetrics = app(ConversationReportService::class)->generate(
+            $houseIds,
+            [
+                'house_id' => $report['selectedHouseId'],
+                'from_date' => $report['fromDate'],
+                'to_date' => $report['toDate'],
+            ]
+        );
         $transactions = $report['transactions'];
         $search = trim((string) ($filters['transaction_search'] ?? ''));
         $type = $filters['transaction_type'] ?? 'All';
@@ -346,6 +355,7 @@ class BookingWorkflowController extends Controller
 
         return view('bookings.reports', [
             ...$report,
+            'conversationMetrics' => $conversationMetrics,
             'dashboardPrefix' => $dashboardPrefix,
             'houses' => TransientHouse::query()->whereIn('house_id', $houseIds)->orderBy('name')->get(),
             'transactions' => $transactionPaginator,

@@ -84,6 +84,16 @@ class User extends Authenticatable
         return $this->hasMany(Notification::class, 'user_id', 'user_id');
     }
 
+    public function guestConversations(): HasMany
+    {
+        return $this->hasMany(Conversation::class, 'guest_user_id', 'user_id');
+    }
+
+    public function assignedConversations(): HasMany
+    {
+        return $this->hasMany(Conversation::class, 'assigned_to', 'user_id');
+    }
+
     public function dashboardPath(): string
     {
         return match ($this->role?->name) {

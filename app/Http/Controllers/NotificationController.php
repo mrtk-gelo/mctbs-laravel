@@ -41,6 +41,14 @@ class NotificationController extends Controller
             return redirect()->route($prefix.'.bookings.show', $notification->booking_id);
         }
 
+        if ($notification->conversation_id && $role === 'Guest') {
+            return redirect()->route('guest.conversations.show', $notification->conversation_id);
+        }
+
+        if ($notification->conversation_id && in_array($role, ['Owner', 'Staff'], true)) {
+            return redirect()->route(strtolower($role).'.conversations.show', $notification->conversation_id);
+        }
+
         return redirect()->to($request->user()->dashboardPath());
     }
 

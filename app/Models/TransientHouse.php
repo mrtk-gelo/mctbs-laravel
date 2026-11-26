@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TransientHouse extends Model
 {
@@ -41,6 +43,23 @@ class TransientHouse extends Model
     public function units()
     {
         return $this->hasMany(Unit::class, 'house_id', 'house_id');
+    }
+
+    public function amenities(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Amenity::class,
+            'house_amenities',
+            'house_id',
+            'amenity_id',
+            'house_id',
+            'amenity_id'
+        )->withPivot('house_amenity_id');
+    }
+
+    public function conversations(): HasMany
+    {
+        return $this->hasMany(Conversation::class, 'house_id', 'house_id');
     }
 
     public function invitations()
