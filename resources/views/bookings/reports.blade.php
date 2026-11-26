@@ -150,6 +150,30 @@
                 </article>
             </div>
 
+            <section class="card analytics-secondary-card mt-3">
+                <div class="analytics-card-header">
+                    <div>
+                        <span class="analytics-card-kicker">MCTBS Connect</span>
+                        <h2>Conversation assistance</h2>
+                    </div>
+                    <span class="text-muted fs-sm">{{ $conversationMetrics['conversationCount'] }} conversations</span>
+                </div>
+                <div class="analytics-kpis">
+                    <article class="analytics-kpi">
+                        <div><span>Resolved</span><strong>{{ $conversationMetrics['resolutionRate'] }}%</strong><small>{{ $conversationMetrics['resolvedCount'] }} conversations</small></div>
+                    </article>
+                    <article class="analytics-kpi">
+                        <div><span>Human handoff</span><strong>{{ $conversationMetrics['handoffRate'] }}%</strong><small>{{ $conversationMetrics['handoffCount'] }} conversations</small></div>
+                    </article>
+                    <article class="analytics-kpi">
+                        <div><span>First staff response</span><strong>{{ $conversationMetrics['averageFirstResponseMinutes'] === null ? '—' : number_format($conversationMetrics['averageFirstResponseMinutes'], 1).' min' }}</strong><small>{{ $conversationMetrics['respondedConversationCount'] }} conversations answered</small></div>
+                    </article>
+                    <article class="analytics-kpi">
+                        <div><span>Automated assistance</span><strong>{{ $conversationMetrics['faqResponseCount'] + $conversationMetrics['contextResponseCount'] }}</strong><small>{{ $conversationMetrics['faqResponseCount'] }} FAQ · {{ $conversationMetrics['contextResponseCount'] }} booking context</small></div>
+                    </article>
+                </div>
+            </section>
+
             <div class="analytics-secondary-grid">
                 <section class="card analytics-secondary-card">
                     <div class="analytics-card-header">
