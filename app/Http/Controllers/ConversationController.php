@@ -49,6 +49,11 @@ class ConversationController extends Controller
 
         return view('conversations.guest-show', [
             'conversation' => $conversation,
+            'conversations' => $this->conversations->conversationQueryFor($request->user())
+                ->with(['house', 'unit', 'latestMessage'])
+                ->latest('last_message_at')
+                ->latest('created_at')
+                ->get(),
             'settings' => $this->assistance->settingsFor($conversation->house_id),
             'faqs' => $this->assistance->activeFaqsForGuest($conversation->house_id, $conversation->unit_id),
             'context' => $this->bookingContext->forConversation($request->user(), $conversation),
@@ -145,6 +150,11 @@ class ConversationController extends Controller
 
         return view('conversations.staff-show', [
             'conversation' => $conversation->load(['guest', 'house', 'unit', 'assignee', 'messages.sender', 'notes.author']),
+            'conversations' => $this->conversations->conversationQueryFor($request->user())
+                ->with(['guest', 'house', 'unit', 'assignee', 'latestMessage'])
+                ->latest('last_message_at')
+                ->latest('created_at')
+                ->get(),
             'assignees' => $this->assignees($conversation),
             'quickReplies' => $this->assistance->quickRepliesFor($request->user(), $conversation->house_id),
             'context' => $this->bookingContext->forConversation($request->user(), $conversation),

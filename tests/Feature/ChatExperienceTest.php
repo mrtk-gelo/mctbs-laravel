@@ -72,6 +72,8 @@ test('public unit pages show only FAQs for that unit and answer matching questio
     $this->get(route('public.unit', $unitA))
         ->assertOk()
         ->assertSee('guest-chat-launcher')
+        ->assertSee('public-chat-card', false)
+        ->assertSee('public-chat-message--assistant', false)
         ->assertSee('Breakfast is included in Suite A.')
         ->assertDontSee('Breakfast is not included in Suite B.');
 
@@ -122,9 +124,48 @@ test('guest unit questions keep unit context and automatic FAQs out of staff att
     $this->actingAs($guest)
         ->get(route('guest.conversations.index'))
         ->assertOk()
+        ->assertSee('chat-workspace--guest', false)
         ->assertSee('guest-chat-launcher')
         ->assertSee('Breakfast question')
         ->assertDontSee('Messages</a>');
+});
+
+test('guest and staff see the conversation as a message thread beside their chat list', function () {
+    Mail::fake();
+    $owner = chatExperienceUser('Owner', 'thread-owner@example.com');
+    $staff = chatExperienceUser('Staff', 'thread-staff@example.com');
+    $guest = chatExperienceUser('Guest', 'thread-guest@example.com');
+    $house = chatExperienceHouse($owner, 'Thread House');
+    $owner->invitationsSent()->create([
+        'house_id' => $house->house_id,
+        'role_id' => Role::query()->where('name', 'Staff')->firstOrFail()->role_id,
+        'email' => $staff->email,
+        'token' => 'thread-staff-token',
+        'used_at' => now(),
+        'expires_at' => now()->addDay(),
+    ]);
+
+    $conversation = app(ConversationService::class)->createForGuest($guest, $house->house_id, 'Check-in question');
+    app(ConversationService::class)->sendMessage($guest, $conversation, 'What time can I check in?');
+    app(ConversationService::class)->sendMessage($staff, $conversation, 'Check-in starts at 3 PM.');
+
+    $this->actingAs($guest)
+        ->get(route('guest.conversations.show', $conversation->conversation_id))
+        ->assertSee('chat-workspace--thread', false)
+        ->assertSee('chat-list-item', false)
+        ->assertSee('chat-message-row--outgoing', false)
+        ->assertSee('chat-message-row--incoming', false)
+        ->assertSee('What time can I check in?')
+        ->assertSee('Check-in starts at 3 PM.');
+
+    $this->actingAs($staff)
+        ->get(route('staff.conversations.show', $conversation->conversation_id))
+        ->assertSee('chat-workspace--staff chat-workspace--thread', false)
+        ->assertSee('chat-details', false)
+        ->assertSee('chat-message-row--incoming', false)
+        ->assertSee('chat-message-row--outgoing', false)
+        ->assertSee('Booking context')
+        ->assertSee('Check-in starts at 3 PM.');
 });
 
 test('unit questions without a matched FAQ are not saved until a guest signs in', function () {
@@ -211,6 +252,7 @@ test('staff inbox navigation shows unread conversations only within authorized p
     $this->actingAs($staff)
         ->get(route('staff.conversations.index'))
         ->assertOk()
+        ->assertSee('chat-workspace--staff', false)
         ->assertSee('title="1 unread conversations"', false)
         ->assertSee('Needs staff');
 
