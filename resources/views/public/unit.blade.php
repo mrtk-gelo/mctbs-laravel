@@ -1,4 +1,4 @@
-<x-shell title="{{ $unit->unit_type }} | MCTBS">
+<x-shell title="{{ $unit->unit_type }} | MCTBS" :chat-unit="$unit">
     <x-slot:nav>@include('partials.nav', ['activePage' => 'transients'])</x-slot:nav>
 
     <style>
@@ -168,6 +168,71 @@
                     </div>
                 @endif
 
+                <section id="unit-faqs" class="card">
+                    <div class="card-body">
+                        <div class="section-title"><i class="fa fa-comments"></i> Questions about this unit?</div>
+                        @if (session('unitFaqAnswer'))
+                            <div class="alert alert-success mb-3" role="status">
+                                <strong>{{ session('unitFaqAnswer.question') }}</strong>
+                                <p class="mb-1 mt-2" style="white-space:pre-wrap">{{ session('unitFaqAnswer.answer') }}</p>
+                                @if (session('unitFaqAnswer.related_url'))
+                                    <a href="{{ session('unitFaqAnswer.related_url') }}" target="_blank" rel="noopener noreferrer">More information</a>
+                                @endif
+                            </div>
+                        @elseif (session('unitFaqUnanswered'))
+                            <div class="alert alert-info mb-3" role="status">
+                                We could not find an approved answer for “{{ session('unitFaqQuestion') }}”.
+                                @guest
+                                    <a href="{{ route('login') }}">Sign in as a guest</a> to send this question to the property team.
+                                @else
+                                    @if (auth()->user()->role?->name === 'Guest')
+                                        <a href="#unit-chat">Send it to the property team</a>.
+                                    @else
+                                        Ask using a guest account to start a conversation with the property team.
+                                    @endif
+                                @endguest
+                            </div>
+                        @endif
+
+                        @if ($faqs->isNotEmpty())
+                            <div class="mb-3">
+                                @foreach ($faqs as $faq)
+                                    <details style="padding:12px 0;border-bottom:1px solid var(--border)">
+                                        <summary style="cursor:pointer;font-weight:600">{{ $faq->question }}</summary>
+                                        <p class="mb-0 mt-2" style="white-space:pre-wrap">{{ $faq->answer }}</p>
+                                        @if ($faq->related_url)
+                                            <a href="{{ $faq->related_url }}" target="_blank" rel="noopener noreferrer">More information</a>
+                                        @endif
+                                    </details>
+                                @endforeach
+                            </div>
+                        @else
+                            <p class="text-muted">The property has not published any FAQs for this unit yet.</p>
+                        @endif
+
+                        @if (auth()->user()?->role?->name === 'Guest')
+                            <form id="unit-chat" method="POST" action="{{ route('guest.conversations.store') }}">
+                                @csrf
+                                <input type="hidden" name="house_id" value="{{ $unit->house_id }}">
+                                <input type="hidden" name="unit_id" value="{{ $unit->unit_id }}">
+                                <input type="hidden" name="subject" value="Question about {{ $unit->unit_type }}">
+                                <label class="form-label" for="unit-question">Ask the property team</label>
+                                <textarea class="form-control" id="unit-question" name="message" rows="3" maxlength="5000" required>{{ old('message', $questionPrefill ?? session('unitFaqQuestion')) }}</textarea>
+                                @error('message')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
+                                <button class="btn btn-primary mt-3" type="submit"><i class="fa fa-paper-plane"></i> Send in chat</button>
+                            </form>
+                        @else
+                            <form id="unit-chat" method="POST" action="{{ route('public.units.questions.store', $unit) }}">
+                                @csrf
+                                <label class="form-label" for="unit-question">Ask a question</label>
+                                <textarea class="form-control" id="unit-question" name="question" rows="3" maxlength="5000" required>{{ old('question', $questionPrefill ?? session('unitFaqQuestion')) }}</textarea>
+                                @error('question')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
+                                <button class="btn btn-outline-primary mt-3" type="submit"><i class="fa fa-search"></i> Find an answer</button>
+                            </form>
+                        @endif
+                    </div>
+                </section>
+
                 <div>
                     <div class="section-title"><i class="fa fa-star"></i> Reviews</div>
                     <div class="card" style="padding:16px">
@@ -303,6 +368,9 @@
                             </div>
                         @endauth
 
+                        <a class="btn btn-outline-primary btn-block mt-2" href="#unit-faqs">
+                            <i class="fa fa-comments" aria-hidden="true"></i> Ask about this unit
+                        </a>
                         <p class="booking-note">
                             <i class="fa fa-info-circle" aria-hidden="true"></i>
                             Choose your dates and guest count to review the booking total.

@@ -6,7 +6,6 @@ use App\Models\Conversation;
 use App\Models\Message as ConversationMessageModel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Address;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -18,8 +17,7 @@ class ConversationMessage extends Mailable
 
     public function __construct(
         public Conversation $conversation,
-        public ConversationMessageModel $message,
-        public ?string $replyAddress
+        public ConversationMessageModel $message
     ) {}
 
     /**
@@ -28,7 +26,6 @@ class ConversationMessage extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            replyTo: $this->replyAddress ? [new Address($this->replyAddress)] : [],
             subject: 'New MCTBS Connect message',
         );
     }

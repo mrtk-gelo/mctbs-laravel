@@ -15,12 +15,11 @@ class Conversation extends Model
 
     protected $fillable = [
         'house_id',
+        'unit_id',
         'guest_user_id',
         'assigned_to',
         'status',
         'subject',
-        'external_channel',
-        'external_token',
         'last_message_at',
         'resolved_at',
     ];
@@ -33,6 +32,11 @@ class Conversation extends Model
     public function house(): BelongsTo
     {
         return $this->belongsTo(TransientHouse::class, 'house_id', 'house_id');
+    }
+
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class, 'unit_id', 'unit_id');
     }
 
     public function guest(): BelongsTo

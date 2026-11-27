@@ -26,7 +26,8 @@ test('opening a conversation clears unread messages for that user only', functio
     $this->actingAs($owner)
         ->get(route('owner.conversations.index'))
         ->assertOk()
-        ->assertSee('2 unread');
+        ->assertSee('1 unread')
+        ->assertSee('title="1 unread conversations"', false);
 
     $this->actingAs($owner)
         ->get(route('owner.conversations.show', $conversation->conversation_id))
@@ -35,10 +36,14 @@ test('opening a conversation clears unread messages for that user only', functio
     $ownerParticipant = $conversation->participants()->where('user_id', $owner->user_id)->firstOrFail();
     expect($ownerParticipant->last_read_message_id)->toBe($conversation->messages()->max('message_id'));
 
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.index'))
+        ->assertDontSee('title="1 unread conversations"', false);
+
     $this->actingAs($guest)
         ->get(route('guest.conversations.index'))
         ->assertOk()
-        ->assertSee('1 unread');
+        ->assertDontSee('1 unread');
 
     $this->actingAs($owner)
         ->post(route('owner.conversations.store', $conversation->conversation_id), [
@@ -49,7 +54,7 @@ test('opening a conversation clears unread messages for that user only', functio
     $this->actingAs($guest)
         ->get(route('guest.conversations.index'))
         ->assertOk()
-        ->assertSee('2 unread');
+        ->assertSee('1 unread');
 
     $this->actingAs($guest)
         ->get(route('guest.conversations.show', $conversation->conversation_id))
@@ -58,7 +63,7 @@ test('opening a conversation clears unread messages for that user only', functio
     $this->actingAs($guest)
         ->get(route('guest.conversations.index'))
         ->assertOk()
-        ->assertDontSee('2 unread');
+        ->assertDontSee('1 unread');
 });
 
 test('opening another property conversation does not advance a read cursor', function () {

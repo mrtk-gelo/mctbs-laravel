@@ -47,6 +47,13 @@
                             <div><label class="form-label" for="category">Category</label><input class="form-control" id="category" name="category" placeholder="Payments" required></div>
                             <div><label class="form-label" for="question">Question</label><input class="form-control" id="question" name="question" placeholder="How do I submit payment?" required></div>
                         </div>
+                        <label class="form-label mt-3" for="faq_unit_id">Applies to</label>
+                        <select class="form-control" id="faq_unit_id" name="unit_id">
+                            <option value="">All units in {{ $selectedHouse->name }}</option>
+                            @foreach ($units as $unit)
+                                <option value="{{ $unit->unit_id }}">{{ $unit->unit_type }}</option>
+                            @endforeach
+                        </select>
                         <label class="form-label mt-3" for="answer">Approved answer</label>
                         <textarea class="form-control" id="answer" name="answer" rows="3" required></textarea>
                         <label class="form-label mt-3" for="keywords">Matching keywords <span class="text-muted">(optional, comma-separated)</span></label>
@@ -65,6 +72,13 @@
                                     <input class="form-control" name="category" value="{{ $faq->category }}" required>
                                     <input class="form-control" name="question" value="{{ $faq->question }}" required>
                                 </div>
+                                <label class="form-label mt-2">Applies to</label>
+                                <select class="form-control" name="unit_id">
+                                    <option value="">All units in {{ $selectedHouse->name }}</option>
+                                    @foreach ($units as $unit)
+                                        <option value="{{ $unit->unit_id }}" @selected((int) $faq->unit_id === $unit->unit_id)>{{ $unit->unit_type }}</option>
+                                    @endforeach
+                                </select>
                                 <textarea class="form-control mt-2" name="answer" rows="3" required>{{ $faq->answer }}</textarea>
                                 <input class="form-control mt-2" name="keywords" value="{{ $faq->keywords }}" placeholder="Keywords">
                                 <input class="form-control mt-2" type="url" name="related_url" value="{{ $faq->related_url }}" placeholder="Related link">

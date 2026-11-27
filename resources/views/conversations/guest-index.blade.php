@@ -3,8 +3,8 @@
 
     <div class="container">
         <div class="page-header mt-3">
-            <h1>MCTBS Connect</h1>
-            <p>Ask a property question or continue an existing conversation.</p>
+            <h1>My conversations</h1>
+            <p>Ask a property question or continue a previous conversation.</p>
         </div>
 
         @if ($conversations->isNotEmpty())
@@ -21,7 +21,7 @@
                                     <span class="badge">{{ str_replace('_', ' ', ucfirst($conversation->status)) }}</span>
                                 </span>
                             </div>
-                            <div class="text-muted fs-sm mt-1">{{ $conversation->house->name }}</div>
+                            <div class="text-muted fs-sm mt-1">{{ $conversation->house->name }}{{ $conversation->unit ? ' · '.$conversation->unit->unit_type : '' }}</div>
                             @if ($conversation->latestMessage)
                                 <p class="mt-2 mb-0">{{ \Illuminate\Support\Str::limit($conversation->latestMessage->message, 120) }}</p>
                                 <div class="text-muted fs-sm mt-1">{{ $conversation->latestMessage->sent_at->diffForHumans() }}</div>
@@ -38,7 +38,7 @@
             </div>
         @endif
 
-        <div class="card">
+        <div class="card" id="start-conversation">
             <div class="card-body">
                 <h2>Start a conversation</h2>
                 <form method="POST" action="{{ route('guest.conversations.store') }}">

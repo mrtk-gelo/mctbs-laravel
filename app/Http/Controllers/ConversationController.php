@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Conversation;
-use App\Models\ConversationAttachment;
 use App\Models\TransientHouse;
+use App\Models\Unit;
 use App\Models\User;
 use App\Services\AssistanceService;
 use App\Services\BookingContextService;
@@ -12,9 +12,7 @@ use App\Services\ConversationService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ConversationController extends Controller
 {
@@ -27,7 +25,7 @@ class ConversationController extends Controller
     public function guestIndex(Request $request): View
     {
         $conversations = $this->conversations->conversationQueryFor($request->user())
-            ->with(['house', 'latestMessage'])
+            ->with(['house', 'unit', 'latestMessage'])
             ->latest('last_message_at')
             ->latest('created_at')
             ->get();
@@ -36,6 +34,8 @@ class ConversationController extends Controller
             'conversations' => $conversations,
             'houses' => TransientHouse::query()
                 ->where('is_active', true)
+                ->whereNull('archived_at')
+                ->whereHas('owner', fn ($query) => $query->where('is_active', true))
                 ->orderBy('name')
                 ->get(),
         ]);
@@ -45,12 +45,12 @@ class ConversationController extends Controller
     {
         $conversation = $this->conversation($request->user(), $conversationId);
         $this->conversations->markRead($request->user(), $conversation);
-        $conversation->load(['house', 'messages.sender', 'messages.attachments']);
+        $conversation->load(['house', 'unit', 'messages.sender']);
 
         return view('conversations.guest-show', [
             'conversation' => $conversation,
             'settings' => $this->assistance->settingsFor($conversation->house_id),
-            'faqs' => $this->assistance->activeFaqsForGuest($conversation->house_id),
+            'faqs' => $this->assistance->activeFaqsForGuest($conversation->house_id, $conversation->unit_id),
             'context' => $this->bookingContext->forConversation($request->user(), $conversation),
         ]);
     }
@@ -59,17 +59,33 @@ class ConversationController extends Controller
     {
         $data = $request->validate([
             'house_id' => ['required', 'integer', 'exists:transient_houses,house_id'],
+            'unit_id' => ['nullable', 'integer', 'exists:units,unit_id'],
             'subject' => ['nullable', 'string', 'max:255'],
             'message' => ['required', 'string', 'max:5000'],
+            'attachments' => ['prohibited'],
         ]);
 
         $house = TransientHouse::query()
             ->where('is_active', true)
+            ->whereNull('archived_at')
+            ->whereHas('owner', fn ($query) => $query->where('is_active', true))
             ->findOrFail($data['house_id']);
+        $unitId = null;
+        if (! empty($data['unit_id'])) {
+            $unitId = Unit::query()
+                ->where('house_id', $house->house_id)
+                ->where('unit_id', $data['unit_id'])
+                ->where('status', 'Available')
+                ->whereNull('archived_at')
+                ->whereHas('house', fn ($query) => $query->where('is_active', true)->whereNull('archived_at'))
+                ->value('unit_id');
+            abort_if($unitId === null, 422, 'The selected unit is not available for questions.');
+        }
         $conversation = $this->conversations->createForGuest(
             $request->user(),
             $house->house_id,
-            $data['subject'] ?? null
+            $data['subject'] ?? null,
+            $unitId
         );
         $this->conversations->sendMessage($request->user(), $conversation, $data['message']);
 
@@ -81,16 +97,10 @@ class ConversationController extends Controller
     {
         $data = $request->validate([
             'message' => ['required', 'string', 'max:5000'],
-            'attachments' => ['nullable', 'array', 'max:3'],
-            'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+            'attachments' => ['prohibited'],
         ]);
         $conversation = $this->conversation($request->user(), $conversationId);
-        $this->conversations->sendMessage(
-            $request->user(),
-            $conversation,
-            $data['message'],
-            attachments: $data['attachments'] ?? []
-        );
+        $this->conversations->sendMessage($request->user(), $conversation, $data['message']);
 
         return back()->with('success', 'Your message has been sent.');
     }
@@ -98,12 +108,15 @@ class ConversationController extends Controller
     public function staffIndex(Request $request): View
     {
         $query = $this->conversations->conversationQueryFor($request->user())
-            ->with(['guest', 'house', 'assignee', 'latestMessage'])
+            ->with(['guest', 'house', 'unit', 'assignee', 'latestMessage'])
             ->latest('last_message_at')
             ->latest('created_at');
 
-        if ($request->filled('status') && in_array($request->string('status')->toString(), ['open', 'pending_staff', 'assigned', 'resolved'], true)) {
-            $query->where('status', $request->string('status')->toString());
+        $status = $request->string('status')->toString();
+        if ($status === 'attention' || $status === '') {
+            $query->whereIn('status', ['open', 'pending_staff', 'assigned']);
+        } elseif ($status !== 'all' && in_array($status, ['open', 'pending_staff', 'assigned', 'resolved'], true)) {
+            $query->where('status', $status);
         }
 
         if ($request->filled('search')) {
@@ -131,7 +144,7 @@ class ConversationController extends Controller
         $this->conversations->markRead($request->user(), $conversation);
 
         return view('conversations.staff-show', [
-            'conversation' => $conversation->load(['guest', 'house', 'assignee', 'messages.sender', 'messages.attachments', 'notes.author']),
+            'conversation' => $conversation->load(['guest', 'house', 'unit', 'assignee', 'messages.sender', 'notes.author']),
             'assignees' => $this->assignees($conversation),
             'quickReplies' => $this->assistance->quickRepliesFor($request->user(), $conversation->house_id),
             'context' => $this->bookingContext->forConversation($request->user(), $conversation),
@@ -143,36 +156,12 @@ class ConversationController extends Controller
         $conversation = $this->conversation($request->user(), $conversationId);
         $data = $request->validate([
             'message' => ['required', 'string', 'max:5000'],
-            'attachments' => ['nullable', 'array', 'max:3'],
-            'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+            'attachments' => ['prohibited'],
         ]);
 
-        $this->conversations->sendMessage(
-            $request->user(),
-            $conversation,
-            $data['message'],
-            attachments: $data['attachments'] ?? []
-        );
+        $this->conversations->sendMessage($request->user(), $conversation, $data['message']);
 
         return back()->with('success', 'Your reply has been sent.');
-    }
-
-    public function downloadAttachment(Request $request, int $conversationId, int $attachmentId): StreamedResponse
-    {
-        $conversation = Conversation::query()->findOrFail($conversationId);
-        abort_unless($this->conversations->canAccess($request->user(), $conversation), 404);
-        $attachment = ConversationAttachment::query()
-            ->whereHas('message', fn ($query) => $query->where('conversation_id', $conversation->conversation_id))
-            ->findOrFail($attachmentId);
-
-        $disk = Storage::disk($attachment->disk ?: 'local');
-        abort_unless($disk->exists($attachment->path), 404);
-
-        return $disk->download(
-            $attachment->path,
-            $attachment->original_name,
-            ['X-Content-Type-Options' => 'nosniff']
-        );
     }
 
     public function noteStore(Request $request, int $conversationId): RedirectResponse

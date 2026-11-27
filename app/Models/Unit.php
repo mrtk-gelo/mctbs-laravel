@@ -55,6 +55,16 @@ class Unit extends Model
         return $this->hasMany(Booking::class, 'unit_id', 'unit_id');
     }
 
+    public function conversations(): HasMany
+    {
+        return $this->hasMany(Conversation::class, 'unit_id', 'unit_id');
+    }
+
+    public function chatFaqs(): HasMany
+    {
+        return $this->hasMany(ChatFaq::class, 'unit_id', 'unit_id');
+    }
+
     public function availability()
     {
         return $this->hasMany(UnitCalendar::class, 'unit_id', 'unit_id');

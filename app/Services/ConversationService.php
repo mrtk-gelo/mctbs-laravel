@@ -4,23 +4,17 @@ namespace App\Services;
 
 use App\Mail\ConversationMessage as ConversationMessageMail;
 use App\Models\Conversation;
-use App\Models\ConversationAttachment;
 use App\Models\Invitation;
 use App\Models\Message;
 use App\Models\Notification;
 use App\Models\Role;
+use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
-use Throwable;
 
 class ConversationService
 {
@@ -65,7 +59,12 @@ class ConversationService
 
         return $query->withCount([
             'messages as unread_message_count' => function (Builder $messageQuery) use ($user): void {
+                if ($user->role?->name !== 'Guest') {
+                    $messageQuery->whereIn('conversations.status', ['open', 'pending_staff', 'assigned']);
+                }
+
                 $messageQuery
+                    ->whereNotIn('sender_type', ['assistant', 'system'])
                     ->where(function (Builder $query) use ($user): void {
                         $query->whereNull('sender_id')
                             ->orWhere('sender_id', '!=', $user->user_id);
@@ -92,15 +91,51 @@ class ConversationService
         }
     }
 
-    public function createForGuest(User $guest, int $houseId, ?string $subject = null): Conversation
+    public function unreadConversationCountFor(User $user): int
     {
+        $query = $user->role?->name === 'Guest'
+            ? Conversation::query()->where('guest_user_id', $user->user_id)
+            : Conversation::query()
+                ->whereIn('house_id', $this->accessibleHouseIds($user))
+                ->whereIn('status', ['open', 'pending_staff', 'assigned']);
+
+        return $query
+            ->whereHas('messages', function (Builder $messageQuery) use ($user): void {
+                $messageQuery
+                    ->whereNotIn('sender_type', ['assistant', 'system'])
+                    ->where(function (Builder $query) use ($user): void {
+                        $query->whereNull('sender_id')
+                            ->orWhere('sender_id', '!=', $user->user_id);
+                    })
+                    ->whereRaw(
+                        'messages.message_id > COALESCE((SELECT last_read_message_id FROM conversation_participants WHERE conversation_participants.conversation_id = messages.conversation_id AND conversation_participants.user_id = ?), 0)',
+                        [$user->user_id]
+                    );
+            })
+            ->count();
+    }
+
+    public function createForGuest(User $guest, int $houseId, ?string $subject = null, ?int $unitId = null): Conversation
+    {
+        if ($unitId !== null) {
+            abort_unless(
+                Unit::query()
+                    ->where('house_id', $houseId)
+                    ->where('unit_id', $unitId)
+                    ->where('status', 'Available')
+                    ->whereNull('archived_at')
+                    ->exists(),
+                422,
+                'The selected unit is not available for questions.'
+            );
+        }
+
         $conversation = Conversation::query()->create([
             'house_id' => $houseId,
+            'unit_id' => $unitId,
             'guest_user_id' => $guest->user_id,
             'status' => 'open',
             'subject' => $subject,
-            'external_channel' => 'postmark',
-            'external_token' => Str::random(48),
         ]);
 
         $conversation->participants()->create([
@@ -110,16 +145,8 @@ class ConversationService
         return $conversation;
     }
 
-    /**
-     * @param  list<UploadedFile>  $attachments
-     */
-    public function sendMessage(
-        User $sender,
-        Conversation $conversation,
-        string $body,
-        ?string $clientToken = null,
-        array $attachments = []
-    ): Message {
+    public function sendMessage(User $sender, Conversation $conversation, string $body, ?string $clientToken = null): Message
+    {
         abort_unless($this->canAccess($sender, $conversation), 403);
 
         $body = trim($body);
@@ -129,155 +156,65 @@ class ConversationService
             ]);
         }
 
-        /** @var list<array{disk: string, path: string}> $storedAttachments */
-        $storedAttachments = [];
-
-        try {
-            return DB::transaction(function () use ($sender, $conversation, $body, $clientToken, $attachments, &$storedAttachments): Message {
-                $message = $clientToken === null
-                    ? $conversation->messages()->create([
+        return DB::transaction(function () use ($sender, $conversation, $body, $clientToken): Message {
+            $message = $clientToken === null
+                ? $conversation->messages()->create([
+                    'sender_id' => $sender->user_id,
+                    'message' => $body,
+                    'message_type' => 'user',
+                    'sent_at' => now(),
+                ])
+                : $conversation->messages()->firstOrCreate(
+                    ['client_token' => $clientToken],
+                    [
                         'sender_id' => $sender->user_id,
                         'message' => $body,
                         'message_type' => 'user',
                         'sent_at' => now(),
-                    ])
-                    : $conversation->messages()->firstOrCreate(
-                        ['client_token' => $clientToken],
-                        [
-                            'sender_id' => $sender->user_id,
-                            'message' => $body,
-                            'message_type' => 'user',
-                            'sent_at' => now(),
-                        ]
-                    );
-
-                if ($message->wasRecentlyCreated) {
-                    $conversation->forceFill([
-                        'last_message_at' => $message->sent_at,
-                        'status' => $sender->role?->name === 'Guest' ? 'open' : 'assigned',
-                        'assigned_to' => $sender->role?->name === 'Guest'
-                            ? $conversation->assigned_to
-                            : $sender->user_id,
-                        'resolved_at' => null,
-                    ])->save();
-
-                    foreach ($attachments as $file) {
-                        $attachment = $this->addAttachment($sender, $conversation, $message, $file);
-                        $storedAttachments[] = [
-                            'disk' => $attachment->disk,
-                            'path' => $attachment->path,
-                        ];
-                    }
-
-                    $this->addParticipant($conversation, $sender);
-                    $this->notifyRecipients($sender, $conversation, $message);
-
-                    if ($sender->role?->name === 'Guest') {
-                        $assistance = app(AssistanceService::class);
-                        $faq = $assistance->findFaq($conversation->house_id, $body);
-
-                        if ($faq) {
-                            $assistance->addFaqResponse($conversation, $faq);
-                        } elseif ($contextualAnswer = $this->bookingContext->answerGuestQuestion($conversation, $body)) {
-                            $conversation->messages()->create([
-                                'message' => $contextualAnswer,
-                                'message_type' => 'context',
-                                'sender_type' => 'assistant',
-                                'sent_at' => now(),
-                            ]);
-                        } else {
-                            $assistance->handoff($conversation);
-                        }
-                    }
-                }
-
-                return $message;
-            });
-        } catch (Throwable $exception) {
-            foreach ($storedAttachments as $attachment) {
-                $this->deleteStoredAttachment(
-                    $conversation->conversation_id,
-                    $attachment['disk'],
-                    $attachment['path']
+                    ]
                 );
-            }
-
-            throw $exception;
-        }
-    }
-
-    public function receiveGuestEmail(
-        Conversation $conversation,
-        string $fromEmail,
-        string $body,
-        string $externalMessageId
-    ): Message {
-        $guest = $conversation->guest;
-        abort_unless($guest && strcasecmp((string) $guest->email, trim($fromEmail)) === 0, 403);
-
-        return DB::transaction(function () use ($conversation, $guest, $body, $externalMessageId): Message {
-            $message = $conversation->messages()->firstOrCreate(
-                ['external_message_id' => $externalMessageId],
-                [
-                    'sender_id' => $guest->user_id,
-                    'sender_type' => 'external_email',
-                    'message' => trim($body),
-                    'message_type' => 'user',
-                    'client_token' => 'postmark:'.$externalMessageId,
-                    'sent_at' => now(),
-                ]
-            );
 
             if ($message->wasRecentlyCreated) {
                 $conversation->forceFill([
                     'last_message_at' => $message->sent_at,
-                    'status' => 'open',
+                    'status' => $sender->role?->name === 'Guest' ? 'open' : 'assigned',
+                    'assigned_to' => $sender->role?->name === 'Guest'
+                        ? $conversation->assigned_to
+                        : $sender->user_id,
                     'resolved_at' => null,
                 ])->save();
-                $this->addParticipant($conversation, $guest);
-                $this->notifyRecipients($guest, $conversation, $message);
+
+                $this->addParticipant($conversation, $sender);
+
+                if ($sender->role?->name === 'Guest') {
+                    $assistance = app(AssistanceService::class);
+                    $faq = $assistance->findFaq($conversation->house_id, $body, $conversation->unit_id);
+
+                    if ($faq) {
+                        $assistance->addFaqResponse($conversation, $faq);
+                    } elseif ($contextualAnswer = $this->bookingContext->answerGuestQuestion($conversation, $body)) {
+                        $assistantMessage = $conversation->messages()->create([
+                            'message' => $contextualAnswer,
+                            'message_type' => 'context',
+                            'sender_type' => 'assistant',
+                            'sent_at' => now(),
+                        ]);
+                        $conversation->update([
+                            'last_message_at' => $assistantMessage->sent_at,
+                            'status' => 'resolved',
+                            'resolved_at' => now(),
+                        ]);
+                    } else {
+                        $assistance->handoff($conversation);
+                        $this->notifyRecipients($sender, $conversation, $message);
+                    }
+                } else {
+                    $this->notifyRecipients($sender, $conversation, $message);
+                }
             }
 
             return $message;
         });
-    }
-
-    public function addAttachment(
-        User $sender,
-        Conversation $conversation,
-        Message $message,
-        UploadedFile $file
-    ): ConversationAttachment {
-        abort_unless($this->canAccess($sender, $conversation), 403);
-        abort_unless($message->conversation_id === $conversation->conversation_id, 404);
-
-        $disk = config('filesystems.conversation_attachments', 'local');
-        if (! is_string($disk) || $disk === '') {
-            throw new RuntimeException('The conversation attachment storage disk is not configured.');
-        }
-
-        $path = $file->store('conversation-attachments/'.$conversation->conversation_id, $disk);
-        if (! is_string($path) || $path === '') {
-            throw new RuntimeException('The conversation attachment could not be stored.');
-        }
-
-        try {
-            return $message->attachments()->create([
-                'disk' => $disk,
-                'path' => $path,
-                'original_name' => Str::limit(
-                    basename(str_replace('\\', '/', $file->getClientOriginalName())) ?: 'attachment',
-                    255,
-                    ''
-                ),
-                'mime_type' => $file->getMimeType() ?: 'application/octet-stream',
-                'size' => (int) $file->getSize(),
-            ]);
-        } catch (Throwable $exception) {
-            $this->deleteStoredAttachment($conversation->conversation_id, $disk, $path);
-
-            throw $exception;
-        }
     }
 
     public function assign(User $actor, Conversation $conversation, User $assignee): void
@@ -321,26 +258,6 @@ class ConversationService
         ]);
     }
 
-    private function deleteStoredAttachment(int $conversationId, string $disk, string $path): void
-    {
-        if (! Storage::disk($disk)->delete($path)) {
-            Log::error('Conversation attachment cleanup failed.', [
-                'conversation_id' => $conversationId,
-                'disk' => $disk,
-                'path' => $path,
-            ]);
-        }
-    }
-
-    public function externalReplyAddress(Conversation $conversation): ?string
-    {
-        $domain = trim((string) config('services.postmark.inbound_domain'));
-
-        return $domain !== '' && $conversation->external_token
-            ? 'reply+'.$conversation->external_token.'@'.$domain
-            : null;
-    }
-
     private function notifyRecipients(User $sender, Conversation $conversation, Message $message): void
     {
         $recipientIds = $sender->role?->name === 'Guest'
@@ -366,8 +283,7 @@ class ConversationService
                 ]);
                 Mail::to($recipient->email)->send(new ConversationMessageMail(
                     $conversation->loadMissing('house'),
-                    $message,
-                    $this->externalReplyAddress($conversation)
+                    $message
                 ));
             });
     }

@@ -5,9 +5,9 @@
         <div class="page-header mt-3 flex-between">
             <div>
                 <h1>{{ $conversation->subject ?: 'Conversation' }}</h1>
-                <p>{{ $conversation->house->name }} · {{ str_replace('_', ' ', ucfirst($conversation->status)) }}</p>
+                <p>{{ $conversation->house->name }}{{ $conversation->unit ? ' · '.$conversation->unit->unit_type : '' }} · {{ str_replace('_', ' ', ucfirst($conversation->status)) }}</p>
             </div>
-            <a class="btn btn-outline-primary" href="{{ route('guest.conversations.index') }}">All messages</a>
+            <a class="btn btn-outline-primary" href="{{ route('guest.conversations.index') }}">All conversations</a>
         </div>
 
         <div class="card">
@@ -58,12 +58,6 @@
                             · {{ $message->sent_at->format('M j, Y g:i A') }}
                         </div>
                         <div class="mt-1" style="white-space:pre-wrap">{{ $message->message }}</div>
-                        @foreach ($message->attachments as $attachment)
-                            <a class="btn btn-outline-primary btn-sm mt-2" href="{{ route('guest.conversations.attachments.download', [$conversation->conversation_id, $attachment->attachment_id]) }}">
-                                <i class="fa fa-paperclip"></i> {{ $attachment->original_name }}
-                                <span class="text-muted">({{ number_format($attachment->size / 1024, 0) }} KB)</span>
-                            </a>
-                        @endforeach
                     </div>
                 @empty
                     <div class="empty-state"><h3>No messages yet</h3></div>
@@ -74,19 +68,14 @@
                         @csrf
                         <button class="btn btn-outline-primary" type="submit">Reopen conversation</button>
                     </form>
-                @else
-                    <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}" class="mt-4" enctype="multipart/form-data">
-                        @csrf
-                        <label class="form-label" for="message">Reply</label>
-                        <textarea class="form-control" id="message" name="message" rows="4" maxlength="5000" required></textarea>
-                        @error('message')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
-                        <label class="form-label mt-3" for="attachments">Attachments <span class="text-muted">(up to 3 JPG, PNG, or PDF files; 5 MB each)</span></label>
-                        <input class="form-control" id="attachments" name="attachments[]" type="file" accept=".jpg,.jpeg,.png,.pdf" multiple>
-                        @error('attachments')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
-                        @error('attachments.*')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
-                        <button class="btn btn-primary mt-3" type="submit"><i class="fa fa-paper-plane"></i> Send reply</button>
-                    </form>
                 @endif
+                <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}" class="mt-4">
+                    @csrf
+                    <label class="form-label" for="message">Reply</label>
+                    <textarea class="form-control" id="message" name="message" rows="4" maxlength="5000" required></textarea>
+                    @error('message')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
+                    <button class="btn btn-primary mt-3" type="submit"><i class="fa fa-paper-plane"></i> Send reply</button>
+                </form>
 
                 @if ($faqs->isNotEmpty())
                     <div class="mt-4">

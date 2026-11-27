@@ -17,12 +17,10 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Owner\AdminController as OwnerAdminController;
 use App\Http\Controllers\Owner\DashboardController as OwnerDashboardController;
 use App\Http\Controllers\Owner\HouseController as OwnerHouseController;
-use App\Http\Controllers\PostmarkInboundController;
 use App\Http\Controllers\PublicController;
 use App\Http\Controllers\Staff\DashboardController as StaffDashboardController;
 use App\Livewire\Guest\BookingForm;
 use App\Livewire\Owner\WalkInBookingForm;
-use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 // Public browsing — no auth required
@@ -31,6 +29,9 @@ Route::get('/transients', [PublicController::class, 'transients'])->name('public
 Route::get('/houses/{house}', [PublicController::class, 'house'])->name('public.house');
 Route::post('/houses/{house}/inquiries', [PublicController::class, 'sendHouseInquiry'])->middleware('throttle:5,1')->name('public.houses.inquiries.store');
 Route::get('/units/{unit}', [PublicController::class, 'unit'])->name('public.unit');
+Route::post('/units/{unit}/questions', [PublicController::class, 'unitQuestion'])
+    ->middleware('throttle:10,1')
+    ->name('public.units.questions.store');
 Route::post('/units/{unit}/inquiries', [PublicController::class, 'sendInquiry'])->middleware('throttle:5,1')->name('public.units.inquiries.store');
 Route::get('/guest/feedback/{booking}/{token}', [GuestFeedbackController::class, 'show'])
     ->name('guest.feedback.show');
@@ -71,10 +72,6 @@ Route::middleware('auth')->group(function () {
     Route::get('/payments/{paymentId}/proof', [BookingWorkflowController::class, 'downloadProof'])->name('payments.proof');
 });
 
-Route::post('/webhooks/postmark/inbound', PostmarkInboundController::class)
-    ->withoutMiddleware([ValidateCsrfToken::class])
-    ->name('webhooks.postmark.inbound');
-
 Route::middleware(['auth', 'role:guest'])->group(function () {
     Route::get('/guest/dashboard', [GuestDashboardController::class, 'index'])->name('guest.dashboard');
     Route::get('/guest/conversations', [ConversationController::class, 'guestIndex'])->name('guest.conversations.index');
@@ -85,9 +82,6 @@ Route::middleware(['auth', 'role:guest'])->group(function () {
     Route::post('/guest/conversations/{conversationId}/reply', [ConversationController::class, 'guestReply'])
         ->whereNumber('conversationId')
         ->name('guest.conversations.reply');
-    Route::get('/guest/conversations/{conversationId}/attachments/{attachmentId}', [ConversationController::class, 'downloadAttachment'])
-        ->whereNumber(['conversationId', 'attachmentId'])
-        ->name('guest.conversations.attachments.download');
     Route::post('/guest/conversations/{conversationId}/reopen', [ConversationController::class, 'reopen'])
         ->whereNumber('conversationId')
         ->name('guest.conversations.reopen');
@@ -124,9 +118,6 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
     Route::get('/messages', [ConversationController::class, 'staffIndex'])->name('conversations.index');
     Route::get('/messages/{conversationId}', [ConversationController::class, 'staffShow'])->whereNumber('conversationId')->name('conversations.show');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
-    Route::get('/messages/{conversationId}/attachments/{attachmentId}', [ConversationController::class, 'downloadAttachment'])
-        ->whereNumber(['conversationId', 'attachmentId'])
-        ->name('conversations.attachments.download');
     Route::post('/messages/{conversationId}/assign', [ConversationController::class, 'assign'])->whereNumber('conversationId')->name('conversations.assign');
     Route::post('/messages/{conversationId}/resolve', [ConversationController::class, 'resolve'])->whereNumber('conversationId')->name('conversations.resolve');
     Route::post('/messages/{conversationId}/reopen', [ConversationController::class, 'reopen'])->whereNumber('conversationId')->name('conversations.reopen');
@@ -215,9 +206,6 @@ Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->grou
     Route::get('/messages', [ConversationController::class, 'staffIndex'])->name('conversations.index');
     Route::get('/messages/{conversationId}', [ConversationController::class, 'staffShow'])->whereNumber('conversationId')->name('conversations.show');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
-    Route::get('/messages/{conversationId}/attachments/{attachmentId}', [ConversationController::class, 'downloadAttachment'])
-        ->whereNumber(['conversationId', 'attachmentId'])
-        ->name('conversations.attachments.download');
     Route::post('/messages/{conversationId}/assign', [ConversationController::class, 'assign'])->whereNumber('conversationId')->name('conversations.assign');
     Route::post('/messages/{conversationId}/resolve', [ConversationController::class, 'resolve'])->whereNumber('conversationId')->name('conversations.resolve');
     Route::post('/messages/{conversationId}/reopen', [ConversationController::class, 'reopen'])->whereNumber('conversationId')->name('conversations.reopen');

@@ -1,4 +1,4 @@
-@props(['title' => 'MCTBS', 'footer' => false])
+@props(['title' => 'MCTBS', 'footer' => false, 'chatUnit' => null])
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -20,6 +20,10 @@
 </div>
 
 @include('partials.system-interface')
+
+@if (auth()->user()?->role?->name === 'Guest' || (! auth()->check() && $chatUnit))
+    @include('partials.guest-chat-launcher', ['unit' => $chatUnit])
+@endif
 
 @if ($footer)
 <footer class="site-footer" id="contact">

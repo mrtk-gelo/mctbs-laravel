@@ -9,6 +9,7 @@ use App\Models\Conversation;
 use App\Models\ConversationNote;
 use App\Models\Invitation;
 use App\Models\Role;
+use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
@@ -65,7 +66,7 @@ class AssistanceService
         return $settings->fresh();
     }
 
-    public function findFaq(int $houseId, string $question): ?ChatFaq
+    public function findFaq(int $houseId, string $question, ?int $unitId = null): ?ChatFaq
     {
         $tokens = $this->tokens($question);
         if ($tokens === []) {
@@ -77,6 +78,14 @@ class AssistanceService
             ->where(function ($query) use ($houseId): void {
                 $query->where('house_id', $houseId)->orWhereNull('house_id');
             })
+            ->where(function ($query) use ($unitId): void {
+                if ($unitId === null) {
+                    $query->whereNull('unit_id');
+                } else {
+                    $query->where('unit_id', $unitId)->orWhereNull('unit_id');
+                }
+            })
+            ->when($unitId !== null, fn ($query) => $query->orderByRaw('CASE WHEN unit_id = ? THEN 0 ELSE 1 END', [$unitId]))
             ->orderByRaw('CASE WHEN house_id = ? THEN 0 ELSE 1 END', [$houseId])
             ->get();
 
@@ -92,13 +101,21 @@ class AssistanceService
     /**
      * @return Collection<int, ChatFaq>
      */
-    public function activeFaqsForGuest(int $houseId): Collection
+    public function activeFaqsForGuest(int $houseId, ?int $unitId = null): Collection
     {
         return ChatFaq::query()
             ->where('is_active', true)
             ->where(function ($query) use ($houseId): void {
                 $query->where('house_id', $houseId)->orWhereNull('house_id');
             })
+            ->where(function ($query) use ($unitId): void {
+                if ($unitId === null) {
+                    $query->whereNull('unit_id');
+                } else {
+                    $query->where('unit_id', $unitId)->orWhereNull('unit_id');
+                }
+            })
+            ->when($unitId !== null, fn ($query) => $query->orderByRaw('CASE WHEN unit_id = ? THEN 0 ELSE 1 END', [$unitId]))
             ->orderBy('category')
             ->orderBy('question')
             ->get();
@@ -106,24 +123,30 @@ class AssistanceService
 
     public function addFaqResponse(Conversation $conversation, ChatFaq $faq): void
     {
-        $conversation->messages()->create([
+        $message = $conversation->messages()->create([
             'message' => $faq->answer.($faq->related_url ? "\n\n".$faq->related_url : ''),
             'message_type' => 'assistant',
             'sender_type' => 'assistant',
             'sent_at' => now(),
+        ]);
+        $conversation->update([
+            'last_message_at' => $message->sent_at,
+            'status' => 'resolved',
+            'resolved_at' => now(),
         ]);
     }
 
     public function handoff(Conversation $conversation): void
     {
         $settings = $this->settingsFor($conversation->house_id);
-        $conversation->messages()->create([
+        $message = $conversation->messages()->create([
             'message' => $settings->handoff_message,
             'message_type' => 'system',
             'sender_type' => 'system',
             'sent_at' => now(),
         ]);
         $conversation->update([
+            'last_message_at' => $message->sent_at,
             'status' => 'pending_staff',
             'resolved_at' => null,
         ]);
@@ -146,7 +169,7 @@ class AssistanceService
     {
         abort_unless($this->canManage($user, $houseId), 403);
 
-        return ChatFaq::query()->where('house_id', $houseId)->latest()->get();
+        return ChatFaq::query()->with('unit')->where('house_id', $houseId)->latest()->get();
     }
 
     /**
@@ -166,6 +189,7 @@ class AssistanceService
     public function createFaq(User $user, int $houseId, array $data): ChatFaq
     {
         abort_unless($this->canManage($user, $houseId), 403);
+        $this->ensureFaqUnitBelongsToHouse($houseId, $data['unit_id'] ?? null);
 
         return ChatFaq::query()->create($data + [
             'house_id' => $houseId,
@@ -176,6 +200,7 @@ class AssistanceService
     public function updateFaq(User $user, ChatFaq $faq, array $data): ChatFaq
     {
         abort_unless($faq->house_id !== null && $this->canManage($user, $faq->house_id), 403);
+        $this->ensureFaqUnitBelongsToHouse($faq->house_id, $data['unit_id'] ?? $faq->unit_id);
         $faq->update($data);
 
         return $faq->fresh();
@@ -197,6 +222,19 @@ class AssistanceService
         $quickReply->update($data);
 
         return $quickReply->fresh();
+    }
+
+    private function ensureFaqUnitBelongsToHouse(int $houseId, mixed $unitId): void
+    {
+        if ($unitId === null) {
+            return;
+        }
+
+        abort_unless(
+            Unit::query()->where('house_id', $houseId)->where('unit_id', $unitId)->exists(),
+            422,
+            'The selected unit does not belong to this property.'
+        );
     }
 
     /**
