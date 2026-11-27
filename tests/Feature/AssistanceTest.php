@@ -58,7 +58,8 @@ test('a guest receives an approved FAQ response without staff impersonation', fu
         ->and($assistantMessage->sender_id)->toBeNull()
         ->and($assistantMessage->sender_type)->toBe('assistant')
         ->and($assistantMessage->message)->toContain('Submit Payment')
-        ->and($conversation->fresh()->status)->toBe('open');
+        ->and($conversation->fresh()->status)->toBe('resolved')
+        ->and($conversation->fresh()->last_message_at)->toEqual($assistantMessage->sent_at);
 });
 
 test('an unsupported guest question creates a human handoff message', function () {

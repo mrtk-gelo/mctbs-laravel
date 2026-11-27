@@ -13,6 +13,7 @@ class ChatFaq extends Model
 
     protected $fillable = [
         'house_id',
+        'unit_id',
         'created_by',
         'category',
         'question',
@@ -29,6 +30,11 @@ class ChatFaq extends Model
     public function house(): BelongsTo
     {
         return $this->belongsTo(TransientHouse::class, 'house_id', 'house_id');
+    }
+
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class, 'unit_id', 'unit_id');
     }
 
     public function creator(): BelongsTo

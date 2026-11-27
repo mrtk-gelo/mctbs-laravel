@@ -5,7 +5,7 @@
         <div class="page-header mt-3 flex-between">
             <div>
                 <h1>{{ $conversation->guest->first_name }} {{ $conversation->guest->last_name }}</h1>
-                <p>{{ $conversation->house->name }} · {{ str_replace('_', ' ', ucfirst($conversation->status)) }}</p>
+                <p>{{ $conversation->house->name }}{{ $conversation->unit ? ' · '.$conversation->unit->unit_type : '' }} · {{ str_replace('_', ' ', ucfirst($conversation->status)) }}</p>
             </div>
             <a class="btn btn-outline-primary" href="{{ route(auth()->user()->role->name === 'Staff' ? 'staff.conversations.index' : 'owner.conversations.index') }}">Inbox</a>
         </div>
@@ -20,15 +20,9 @@
                                 · {{ $message->sent_at->format('M j, Y g:i A') }}
                             </div>
                             <div class="mt-1" style="white-space:pre-wrap">{{ $message->message }}</div>
-                            @foreach ($message->attachments as $attachment)
-                                <a class="btn btn-outline-primary btn-sm mt-2" href="{{ route(auth()->user()->role->name === 'Staff' ? 'staff.conversations.attachments.download' : 'owner.conversations.attachments.download', [$conversation->conversation_id, $attachment->attachment_id]) }}">
-                                    <i class="fa fa-paperclip"></i> {{ $attachment->original_name }}
-                                    <span class="text-muted">({{ number_format($attachment->size / 1024, 0) }} KB)</span>
-                                </a>
-                            @endforeach
                         </div>
                     @endforeach
-                    <form method="POST" action="{{ route(auth()->user()->role->name === 'Staff' ? 'staff.conversations.store' : 'owner.conversations.store', $conversation->conversation_id) }}" class="mt-4" enctype="multipart/form-data">
+                    <form method="POST" action="{{ route(auth()->user()->role->name === 'Staff' ? 'staff.conversations.store' : 'owner.conversations.store', $conversation->conversation_id) }}" class="mt-4">
                         @csrf
                         @if ($quickReplies->isNotEmpty())
                             <label class="form-label" for="quick_reply">Quick reply</label>
@@ -42,10 +36,6 @@
                         <label class="form-label" for="message">Reply</label>
                         <textarea class="form-control" id="message" name="message" rows="4" maxlength="5000" required data-message-composer></textarea>
                         @error('message')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
-                        <label class="form-label mt-3" for="attachments">Attachments <span class="text-muted">(up to 3 JPG, PNG, or PDF files; 5 MB each)</span></label>
-                        <input class="form-control" id="attachments" name="attachments[]" type="file" accept=".jpg,.jpeg,.png,.pdf" multiple>
-                        @error('attachments')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
-                        @error('attachments.*')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
                         <button class="btn btn-primary mt-3" type="submit"><i class="fa fa-paper-plane"></i> Send reply</button>
                     </form>
                 </div>

@@ -16,9 +16,6 @@ return [
 
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
-        'inbound_username' => env('POSTMARK_INBOUND_USERNAME'),
-        'inbound_password' => env('POSTMARK_INBOUND_PASSWORD'),
-        'inbound_domain' => env('POSTMARK_INBOUND_DOMAIN'),
     ],
 
     'mctbs' => [

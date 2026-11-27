@@ -27,6 +27,7 @@ class AssistanceController extends Controller
             'selectedHouse' => $house,
             'settings' => $house ? $this->assistance->settingsFor($house->house_id) : null,
             'faqs' => $house ? $this->assistance->faqsFor($request->user(), $house->house_id) : collect(),
+            'units' => $house ? $house->units()->whereNull('archived_at')->orderBy('unit_type')->get() : collect(),
             'quickReplies' => $house ? $this->assistance->quickRepliesFor($request->user(), $house->house_id) : collect(),
         ]);
     }
@@ -53,6 +54,7 @@ class AssistanceController extends Controller
         $data = $request->validate([
             'house_id' => ['required', 'integer', 'exists:transient_houses,house_id'],
             'category' => ['required', 'string', 'max:100'],
+            'unit_id' => ['nullable', 'integer', 'exists:units,unit_id'],
             'question' => ['required', 'string', 'max:255'],
             'answer' => ['required', 'string', 'max:10000'],
             'keywords' => ['nullable', 'string', 'max:1000'],
@@ -67,6 +69,7 @@ class AssistanceController extends Controller
     {
         $data = $request->validate([
             'category' => ['required', 'string', 'max:100'],
+            'unit_id' => ['nullable', 'integer', 'exists:units,unit_id'],
             'question' => ['required', 'string', 'max:255'],
             'answer' => ['required', 'string', 'max:10000'],
             'keywords' => ['nullable', 'string', 'max:1000'],

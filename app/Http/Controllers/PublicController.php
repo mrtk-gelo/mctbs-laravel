@@ -6,6 +6,7 @@ use App\Mail\PropertyInquiry;
 use App\Models\Booking;
 use App\Models\TransientHouse;
 use App\Models\Unit;
+use App\Services\AssistanceService;
 use App\Support\BookingStatus;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -80,6 +81,19 @@ class PublicController extends Controller
             ->latest('house_id');
     }
 
+    private function ensurePublicUnit(Unit $unit): void
+    {
+        abort_unless(
+            $unit->status === 'Available' &&
+            $unit->archived_at === null &&
+            $unit->house &&
+            $unit->house->is_active &&
+            $unit->house->archived_at === null &&
+            $unit->house->owner()->where('is_active', true)->exists(),
+            404
+        );
+    }
+
     public function house(TransientHouse $house): View
     {
         abort_unless($house->is_active && $house->archived_at === null, 404);
@@ -102,17 +116,38 @@ class PublicController extends Controller
         ]);
     }
 
-    public function unit(Unit $unit): View
+    public function unitQuestion(Request $request, Unit $unit, AssistanceService $assistance): RedirectResponse
     {
-        abort_unless(
-            $unit->status === 'Available' &&
-            $unit->archived_at === null &&
-            $unit->house &&
-            $unit->house->is_active &&
-            $unit->house->archived_at === null &&
-            $unit->house->owner()->where('is_active', true)->exists(),
-            404
-        );
+        $this->ensurePublicUnit($unit);
+        $data = $request->validate([
+            'question' => ['required', 'string', 'max:5000'],
+        ]);
+        $question = trim($data['question']);
+        $faq = $assistance->findFaq($unit->house_id, $question, $unit->unit_id);
+
+        if ($faq === null) {
+            if ($request->user() === null && ! $request->session()->has('url.intended')) {
+                $request->session()->put(
+                    'url.intended',
+                    route('public.unit', $unit).'?'.http_build_query(['question' => $question]).'#unit-chat'
+                );
+            }
+
+            return back()
+                ->with('unitFaqQuestion', $question)
+                ->with('unitFaqUnanswered', true);
+        }
+
+        return back()->with('unitFaqAnswer', [
+            'question' => $question,
+            'answer' => $faq->answer,
+            'related_url' => $faq->related_url,
+        ]);
+    }
+
+    public function unit(Request $request, Unit $unit, AssistanceService $assistance): View
+    {
+        $this->ensurePublicUnit($unit);
 
         $unit->load(['house', 'photos', 'reviews.guest', 'reviews.booking.guests']);
         $today = Carbon::today('Asia/Manila');
@@ -158,6 +193,8 @@ class PublicController extends Controller
 
         return view('public.unit', [
             'unit' => $unit,
+            'faqs' => $assistance->activeFaqsForGuest($unit->house_id, $unit->unit_id),
+            'questionPrefill' => $request->query('question'),
             'reviews' => $reviews,
             'averageRating' => $reviews->avg('rating'),
             'reviewCount' => $reviews->count(),

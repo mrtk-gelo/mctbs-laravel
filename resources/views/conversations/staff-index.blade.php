@@ -11,7 +11,8 @@
             <div class="card-body flex-between" style="gap:12px;flex-wrap:wrap">
                 <input class="form-control" style="max-width:320px" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search conversations">
                 <select class="form-control" style="max-width:220px" name="status">
-                    <option value="">All statuses</option>
+                    <option value="attention" @selected(in_array(($filters['status'] ?? ''), ['', 'attention'], true))>Needs attention</option>
+                    <option value="all" @selected(($filters['status'] ?? '') === 'all')>All statuses</option>
                     @foreach (['open', 'pending_staff', 'assigned', 'resolved'] as $status)
                         <option value="{{ $status }}" @selected(($filters['status'] ?? '') === $status)>{{ str_replace('_', ' ', ucfirst($status)) }}</option>
                     @endforeach
@@ -34,7 +35,10 @@
                                     <span class="badge">{{ str_replace('_', ' ', ucfirst($conversation->status)) }}</span>
                                 </span>
                             </div>
-                            <div class="text-muted fs-sm">{{ $conversation->house->name }} · {{ $conversation->assignee ? 'Assigned to '.$conversation->assignee->first_name : 'Unassigned' }}</div>
+                            @if ($conversation->subject)
+                                <div class="fs-sm mt-1"><strong>{{ $conversation->subject }}</strong></div>
+                            @endif
+                            <div class="text-muted fs-sm">{{ $conversation->house->name }}{{ $conversation->unit ? ' · '.$conversation->unit->unit_type : '' }} · {{ $conversation->assignee ? 'Assigned to '.$conversation->assignee->first_name : 'Unassigned' }}</div>
                             @if ($conversation->latestMessage)
                                 <p class="mb-0 mt-1">{{ \Illuminate\Support\Str::limit($conversation->latestMessage->message, 140) }}</p>
                             @endif
