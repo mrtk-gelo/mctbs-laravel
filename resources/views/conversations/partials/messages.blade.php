@@ -1,0 +1,19 @@
+@foreach ($messages as $message)
+    @php
+        $isSystemMessage = in_array($message->sender_type, ['assistant', 'system'], true);
+        $isOutgoing = ! $isSystemMessage && (int) $message->sender_id === (int) $viewerUserId;
+        $senderName = match ($message->sender_type) {
+            'assistant' => 'MCTBS Connect · automated answer',
+            'system' => 'MCTBS Connect',
+            default => trim(($message->sender?->first_name ?? '').' '.($message->sender?->last_name ?? '')) ?: 'Property team',
+        };
+    @endphp
+
+    <article class="chat-message-row{{ $isSystemMessage ? ' chat-message-row--system' : ($isOutgoing ? ' chat-message-row--outgoing' : ' chat-message-row--incoming') }}">
+        <div class="chat-message-meta">
+            <span>{{ $senderName }}</span>
+            <time datetime="{{ $message->sent_at->toIso8601String() }}">{{ $message->sent_at->format('M j, g:i A') }}</time>
+        </div>
+        <div class="chat-message-bubble">{{ $message->message }}</div>
+    </article>
+@endforeach

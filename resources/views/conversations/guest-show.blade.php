@@ -1,38 +1,74 @@
 <x-shell title="Conversation | MCTBS">
     <x-slot:nav>@include('partials.nav', ['activePage' => 'messages'])</x-slot:nav>
 
-    <div class="container">
-        <div class="page-header mt-3 flex-between">
+    <div class="container chat-page">
+        <header class="chat-page-heading">
             <div>
-                <h1>{{ $conversation->subject ?: 'Conversation' }}</h1>
-                <p>{{ $conversation->house->name }}{{ $conversation->unit ? ' · '.$conversation->unit->unit_type : '' }} · {{ str_replace('_', ' ', ucfirst($conversation->status)) }}</p>
+                <span class="chat-eyebrow">MCTBS Connect</span>
+                <h1>Your conversations</h1>
+                <p>Messages with {{ $conversation->house->name }} are kept here.</p>
             </div>
-            <a class="btn btn-outline-primary" href="{{ route('guest.conversations.index') }}">All conversations</a>
-        </div>
+            <a class="chat-header-link" href="{{ route('guest.conversations.index') }}">
+                <i class="fa fa-arrow-left" aria-hidden="true"></i> All conversations
+            </a>
+        </header>
 
-        <div class="card">
-            <div class="card-body">
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <strong>MCTBS Connect</strong>
-                        <p class="mb-0 mt-1">{{ $settings->welcome_message }}</p>
+        <div class="chat-workspace chat-workspace--guest chat-workspace--thread">
+            <aside class="chat-sidebar" aria-label="Your conversations">
+                <div class="chat-sidebar-header">
+                    <div>
+                        <h2>Chats</h2>
+                        <p>{{ $conversations->count() }} {{ \Illuminate\Support\Str::plural('conversation', $conversations->count()) }}</p>
                     </div>
+                    <a class="chat-new-button" href="{{ route('guest.conversations.index') }}#start-conversation" aria-label="Start a new conversation" title="Start a new conversation">
+                        <i class="fa fa-pen-to-square" aria-hidden="true"></i>
+                    </a>
                 </div>
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <strong>Your booking context</strong>
+                <nav class="chat-conversation-list" aria-label="Conversation list">
+                    @forelse ($conversations as $thread)
+                        @include('conversations.partials.list-item', [
+                            'conversation' => $thread,
+                            'conversationRoute' => 'guest.conversations.show',
+                            'listType' => 'guest',
+                            'activeConversationId' => $conversation->conversation_id,
+                        ])
+                    @empty
+                        <div class="chat-list-empty">
+                            <span class="chat-empty-icon"><i class="fa fa-comments" aria-hidden="true"></i></span>
+                            <strong>No chats yet</strong>
+                            <span>Your messages with property teams will appear here.</span>
+                        </div>
+                    @endforelse
+                </nav>
+            </aside>
+
+            <main class="chat-thread">
+                <header class="chat-thread-header">
+                    <a class="chat-back-link" href="{{ route('guest.conversations.index') }}" aria-label="Back to conversations">
+                        <i class="fa fa-arrow-left" aria-hidden="true"></i>
+                    </a>
+                    <span class="chat-thread-avatar" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($conversation->house->name, 0, 1)) }}</span>
+                    <div class="chat-thread-heading">
+                        <span class="chat-eyebrow">Property conversation</span>
+                        <h2>{{ $conversation->subject ?: $conversation->house->name }}</h2>
+                        <p>{{ $conversation->house->name }}{{ $conversation->unit ? ' · '.$conversation->unit->unit_type : '' }}</p>
+                    </div>
+                    <span class="chat-status chat-status--{{ $conversation->status }}">{{ str_replace('_', ' ', ucfirst($conversation->status)) }}</span>
+                </header>
+
+                <div class="chat-thread-welcome">
+                    <span class="chat-welcome-avatar"><i class="fa fa-headset" aria-hidden="true"></i></span>
+                    <p><strong>MCTBS Connect</strong><br>{{ $settings->welcome_message }}</p>
+                </div>
+
+                <details class="chat-context">
+                    <summary><i class="fa fa-circle-info" aria-hidden="true"></i> Booking and property information</summary>
+                    <div class="chat-context-body">
                         @if ($context['booking'])
-                            <p class="fs-sm mb-1 mt-2">
-                                {{ $context['booking']->unit->house->name }} · {{ $context['booking']->unit->unit_type }}
-                            </p>
-                            <p class="fs-sm mb-1">
-                                {{ $context['booking']->check_in->format('M j, Y') }} - {{ $context['booking']->check_out->format('M j, Y') }}
-                            </p>
-                            <p class="fs-sm mb-1">
-                                Booking {{ $context['booking']->booking_reference ?: '#'.$context['booking']->booking_id }}
-                                · {{ $context['booking']->status }}
-                            </p>
-                            <p class="fs-sm mb-2">Payment: {{ $context['paymentStatus'] ?: 'No payment record' }}</p>
+                            <p><strong>{{ $context['booking']->unit->house->name }} · {{ $context['booking']->unit->unit_type }}</strong></p>
+                            <p>{{ $context['booking']->check_in->format('M j, Y') }} - {{ $context['booking']->check_out->format('M j, Y') }}</p>
+                            <p>Booking {{ $context['booking']->booking_reference ?: '#'.$context['booking']->booking_id }} · {{ $context['booking']->status }}</p>
+                            <p>Payment: {{ $context['paymentStatus'] ?: 'No payment record' }}</p>
                             @if ($context['bookingUrl'])
                                 <a href="{{ $context['bookingUrl'] }}" class="btn btn-outline-primary btn-sm">View booking</a>
                             @endif
@@ -40,65 +76,93 @@
                                 <a href="{{ $context['ticketUrl'] }}" class="btn btn-outline-primary btn-sm">View ticket</a>
                             @endif
                         @else
-                            <p class="text-muted fs-sm mb-0 mt-2">No booking is linked to this property yet.</p>
+                            <p>No booking is linked to this property yet.</p>
                         @endif
-                        <p class="fs-sm mb-0 mt-2">{{ $conversation->house->address }}{{ $conversation->house->contact_number ? ' · '.$conversation->house->contact_number : '' }}</p>
+                        <p>{{ $conversation->house->address }}{{ $conversation->house->contact_number ? ' · '.$conversation->house->contact_number : '' }}</p>
                         @if ($context['policies'])
-                            <p class="fs-sm mb-0 mt-1" style="white-space:pre-wrap">{{ $context['policies'] }}</p>
+                            <p class="chat-context-prewrap">{{ $context['policies'] }}</p>
                         @endif
                         @if ($context['amenities']->isNotEmpty())
-                            <p class="fs-sm mb-0 mt-1">Amenities: {{ $context['amenities']->pluck('name')->join(', ') }}</p>
+                            <p>Amenities: {{ $context['amenities']->pluck('name')->join(', ') }}</p>
                         @endif
                     </div>
-                </div>
-                @forelse ($conversation->messages as $message)
-                    <div class="mb-3" style="max-width:760px">
-                        <div class="text-muted fs-sm">
-                            {{ $message->sender_type === 'assistant' ? 'Automated assistance' : ($message->sender_type === 'system' ? 'MCTBS Connect' : $message->sender->first_name) }}
-                            · {{ $message->sent_at->format('M j, Y g:i A') }}
+                </details>
+
+                <section class="chat-message-list" aria-label="Conversation messages" aria-live="polite">
+                    @if ($conversation->messages->isNotEmpty())
+                        @include('conversations.partials.messages', [
+                            'messages' => $conversation->messages,
+                            'viewerUserId' => auth()->id(),
+                        ])
+                    @else
+                        <div class="chat-list-empty">
+                            <span class="chat-empty-icon"><i class="fa fa-message" aria-hidden="true"></i></span>
+                            <strong>Start the conversation</strong>
+                            <span>Send a message to the property team below.</span>
                         </div>
-                        <div class="mt-1" style="white-space:pre-wrap">{{ $message->message }}</div>
-                    </div>
-                @empty
-                    <div class="empty-state"><h3>No messages yet</h3></div>
-                @endforelse
+                    @endif
+                </section>
 
                 @if ($conversation->status === 'resolved')
-                    <form method="POST" action="{{ route('guest.conversations.reopen', $conversation->conversation_id) }}">
+                    <form method="POST" action="{{ route('guest.conversations.reopen', $conversation->conversation_id) }}" class="chat-resolved-notice">
                         @csrf
-                        <button class="btn btn-outline-primary" type="submit">Reopen conversation</button>
+                        <span>This conversation is marked resolved.</span>
+                        <button class="btn btn-outline-primary btn-sm" type="submit">Reopen</button>
                     </form>
                 @endif
-                <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}" class="mt-4">
-                    @csrf
-                    <label class="form-label" for="message">Reply</label>
-                    <textarea class="form-control" id="message" name="message" rows="4" maxlength="5000" required></textarea>
-                    @error('message')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
-                    <button class="btn btn-primary mt-3" type="submit"><i class="fa fa-paper-plane"></i> Send reply</button>
-                </form>
 
-                @if ($faqs->isNotEmpty())
-                    <div class="mt-4">
-                        <div class="text-muted fs-sm mb-2">Common questions</div>
-                        @foreach ($faqs->take(5) as $faq)
-                            <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}" style="display:inline-block;margin:0 6px 6px 0">
-                                @csrf
-                                <input type="hidden" name="message" value="{{ $faq->question }}">
-                                <button class="btn btn-outline-primary btn-sm" type="submit">{{ $faq->question }}</button>
-                            </form>
-                        @endforeach
-                    </div>
-                @endif
+                <div class="chat-composer">
+                    @if ($faqs->isNotEmpty())
+                        <details class="chat-quick-questions">
+                            <summary>Quick questions</summary>
+                            <div class="chat-quick-question-list">
+                                @foreach ($faqs->take(5) as $faq)
+                                    <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}">
+                                        @csrf
+                                        <input type="hidden" name="message" value="{{ $faq->question }}">
+                                        <button class="chat-quick-question" type="submit">{{ $faq->question }}</button>
+                                    </form>
+                                @endforeach
+                            </div>
+                        </details>
+                    @endif
 
-                @if ($conversation->status !== 'pending_staff' && $conversation->status !== 'resolved')
-                    <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}" class="mt-3">
+                    @if ($conversation->status !== 'pending_staff' && $conversation->status !== 'resolved')
+                        <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}" class="chat-human-handoff">
+                            @csrf
+                            <input type="hidden" name="message" value="I would like to talk to a real person.">
+                            <button type="submit"><i class="fa fa-user" aria-hidden="true"></i> Talk to a person</button>
+                        </form>
+                    @endif
+
+                    <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}" class="chat-composer-form">
                         @csrf
-                        <input type="hidden" name="message" value="I would like to talk to a real person.">
-                        <button class="btn btn-outline-primary" type="submit">Talk to a real person</button>
+                        <label class="sr-only" for="message">Write a reply</label>
+                        <textarea class="form-control" id="message" name="message" rows="2" maxlength="5000" required placeholder="Write a message..." data-message-composer></textarea>
+                        @error('message')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
+                        <button class="btn btn-primary" type="submit" aria-label="Send reply">
+                            <i class="fa fa-paper-plane" aria-hidden="true"></i> Send
+                        </button>
                     </form>
-                @endif
-            </div>
+                    <p class="chat-composer-note"><i class="fa fa-lock" aria-hidden="true"></i> Your reply is visible only to you and the property team.</p>
+                </div>
+            </main>
         </div>
     </div>
-    <script>window.setTimeout(() => window.location.reload(), 15000);</script>
+    <script>
+        const messageList = document.querySelector('.chat-message-list');
+        if (messageList) {
+            messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        const refreshConversation = () => {
+            const composer = document.querySelector('[data-message-composer]');
+            if (composer && (composer.value.trim() || document.activeElement === composer)) {
+                window.setTimeout(refreshConversation, 15000);
+                return;
+            }
+            window.location.reload();
+        };
+        window.setTimeout(refreshConversation, 15000);
+    </script>
 </x-shell>

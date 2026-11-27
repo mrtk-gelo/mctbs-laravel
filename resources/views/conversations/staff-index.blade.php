@@ -1,53 +1,77 @@
 <x-shell title="Messages | MCTBS">
     <x-slot:nav>@include('partials.nav', ['activePage' => 'messages'])</x-slot:nav>
 
-    <div class="container">
-        <div class="page-header mt-3">
-            <h1>Messages</h1>
-            <p>Manage guest conversations for your authorized properties.</p>
-        </div>
+    @php
+        $conversationRoute = auth()->user()->role->name === 'Staff'
+            ? 'staff.conversations.show'
+            : 'owner.conversations.show';
+    @endphp
 
-        <form method="GET" class="card mb-3">
-            <div class="card-body flex-between" style="gap:12px;flex-wrap:wrap">
-                <input class="form-control" style="max-width:320px" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search conversations">
-                <select class="form-control" style="max-width:220px" name="status">
-                    <option value="attention" @selected(in_array(($filters['status'] ?? ''), ['', 'attention'], true))>Needs attention</option>
-                    <option value="all" @selected(($filters['status'] ?? '') === 'all')>All statuses</option>
-                    @foreach (['open', 'pending_staff', 'assigned', 'resolved'] as $status)
-                        <option value="{{ $status }}" @selected(($filters['status'] ?? '') === $status)>{{ str_replace('_', ' ', ucfirst($status)) }}</option>
-                    @endforeach
-                </select>
-                <button class="btn btn-outline-primary" type="submit">Filter</button>
+    <div class="container chat-page">
+        <header class="chat-page-heading">
+            <div>
+                <span class="chat-eyebrow">MCTBS Connect · Team inbox</span>
+                <h1>Messages</h1>
+                <p>One shared place to reply to guests across your authorized properties.</p>
             </div>
-        </form>
+            <span class="chat-secure-note"><i class="fa fa-shield-halved" aria-hidden="true"></i> Property-scoped inbox</span>
+        </header>
 
-        <div class="card">
-            <div class="card-body">
-                @forelse ($conversations as $conversation)
-                    <a href="{{ route(auth()->user()->role->name === 'Staff' ? 'staff.conversations.show' : 'owner.conversations.show', $conversation->conversation_id) }}" class="card mb-2" style="display:block;text-decoration:none;color:inherit">
-                        <div class="card-body">
-                            <div class="flex-between">
-                                <strong>{{ $conversation->guest->first_name }} {{ $conversation->guest->last_name }}</strong>
-                                <span>
-                                    @if ($conversation->unread_message_count > 0)
-                                        <span class="badge">{{ $conversation->unread_message_count }} unread</span>
-                                    @endif
-                                    <span class="badge">{{ str_replace('_', ' ', ucfirst($conversation->status)) }}</span>
-                                </span>
-                            </div>
-                            @if ($conversation->subject)
-                                <div class="fs-sm mt-1"><strong>{{ $conversation->subject }}</strong></div>
-                            @endif
-                            <div class="text-muted fs-sm">{{ $conversation->house->name }}{{ $conversation->unit ? ' · '.$conversation->unit->unit_type : '' }} · {{ $conversation->assignee ? 'Assigned to '.$conversation->assignee->first_name : 'Unassigned' }}</div>
-                            @if ($conversation->latestMessage)
-                                <p class="mb-0 mt-1">{{ \Illuminate\Support\Str::limit($conversation->latestMessage->message, 140) }}</p>
-                            @endif
+        <div class="chat-workspace chat-workspace--staff">
+            <aside class="chat-sidebar" aria-label="Team conversations">
+                <div class="chat-sidebar-header">
+                    <div>
+                        <h2>Inbox</h2>
+                        <p>{{ $conversations->count() }} {{ \Illuminate\Support\Str::plural('chat', $conversations->count()) }}</p>
+                    </div>
+                    <span class="chat-sidebar-icon"><i class="fa fa-inbox" aria-hidden="true"></i></span>
+                </div>
+
+                <form method="GET" class="chat-filter-form" role="search">
+                    <label class="sr-only" for="chat-search">Search conversations</label>
+                    <div class="chat-search-field">
+                        <i class="fa fa-magnifying-glass" aria-hidden="true"></i>
+                        <input id="chat-search" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search chats">
+                    </div>
+                    <label class="sr-only" for="chat-status">Filter by status</label>
+                    <select id="chat-status" name="status">
+                        <option value="attention" @selected(in_array(($filters['status'] ?? ''), ['', 'attention'], true))>Needs attention</option>
+                        <option value="all" @selected(($filters['status'] ?? '') === 'all')>All conversations</option>
+                        @foreach (['open', 'pending_staff', 'assigned', 'resolved'] as $status)
+                            <option value="{{ $status }}" @selected(($filters['status'] ?? '') === $status)>{{ str_replace('_', ' ', ucfirst($status)) }}</option>
+                        @endforeach
+                    </select>
+                    <button class="btn btn-outline-primary btn-sm" type="submit">Apply filters</button>
+                </form>
+
+                <nav class="chat-conversation-list" aria-label="Inbox conversation list">
+                    @forelse ($conversations as $conversation)
+                        @include('conversations.partials.list-item', [
+                            'conversation' => $conversation,
+                            'conversationRoute' => $conversationRoute,
+                            'listType' => 'staff',
+                            'activeConversationId' => null,
+                        ])
+                    @empty
+                        <div class="chat-list-empty">
+                            <span class="chat-empty-icon"><i class="fa fa-inbox" aria-hidden="true"></i></span>
+                            <strong>No conversations found</strong>
+                            <span>Try another filter or search term.</span>
                         </div>
-                    </a>
-                @empty
-                    <div class="empty-state"><i class="fa fa-comments"></i><h3>No conversations found</h3></div>
-                @endforelse
-            </div>
+                    @endforelse
+                </nav>
+            </aside>
+
+            <main class="chat-main chat-inbox-welcome">
+                <span class="chat-start-icon"><i class="fa fa-comments" aria-hidden="true"></i></span>
+                <span class="chat-eyebrow">Guest support</span>
+                <h2>Every conversation, in one place</h2>
+                <p>Select a chat to read the full history, review booking context, assign the inquiry, or reply. Unread messages are marked in your list and dashboard navigation.</p>
+                <div class="chat-inbox-tip">
+                    <i class="fa fa-lightbulb" aria-hidden="true"></i>
+                    <span>Approved FAQ answers appear in the guest conversation automatically; only questions needing your help stay in the attention queue.</span>
+                </div>
+            </main>
         </div>
     </div>
 </x-shell>
