@@ -2,45 +2,24 @@
     <x-slot:nav>@include('partials.nav', ['activePage' => 'messages'])</x-slot:nav>
 
     <div class="container chat-page">
+        <a class="chat-page-back text-muted fs-sm" href="{{ route('guest.conversations.index', ['folder' => $folder]) }}">
+            <i class="fa fa-arrow-left" aria-hidden="true"></i> Back to conversations
+        </a>
         <header class="chat-page-heading">
             <div>
                 <span class="chat-eyebrow">MCTBS Connect</span>
                 <h1>Your conversations</h1>
                 <p>Messages with {{ $conversation->house->name }} are kept here.</p>
             </div>
-            <a class="text-muted fs-sm" href="{{ route('guest.conversations.index') }}">
-                <i class="fa fa-arrow-left" aria-hidden="true"></i> All conversations
-            </a>
         </header>
 
         <div class="chat-workspace chat-workspace--guest chat-workspace--thread">
-            <aside class="chat-sidebar" aria-label="Your conversations">
-                <div class="chat-sidebar-header">
-                    <div>
-                        <h2>Chats</h2>
-                        <p>{{ $conversations->count() }} {{ \Illuminate\Support\Str::plural('conversation', $conversations->count()) }}</p>
-                    </div>
-                    <a class="chat-new-button" href="{{ route('guest.conversations.index') }}#start-conversation" aria-label="Start a new conversation" title="Start a new conversation">
-                        <i class="fa fa-pen-to-square" aria-hidden="true"></i>
-                    </a>
-                </div>
-                <nav class="chat-conversation-list" aria-label="Conversation list">
-                    @forelse ($conversations as $thread)
-                        @include('conversations.partials.list-item', [
-                            'conversation' => $thread,
-                            'conversationRoute' => 'guest.conversations.show',
-                            'listType' => 'guest',
-                            'activeConversationId' => $conversation->conversation_id,
-                        ])
-                    @empty
-                        <div class="chat-list-empty">
-                            <span class="chat-empty-icon"><i class="fa fa-comments" aria-hidden="true"></i></span>
-                            <strong>No chats yet</strong>
-                            <span>Your messages with property teams will appear here.</span>
-                        </div>
-                    @endforelse
-                </nav>
-            </aside>
+            @include('conversations.partials.guest-sidebar', [
+                'conversations' => $conversations,
+                'folder' => $folder,
+                'folderCounts' => $folderCounts,
+                'activeConversationId' => $conversation->conversation_id,
+            ])
 
             <main class="chat-thread">
                 <header class="chat-thread-header">
@@ -55,6 +34,26 @@
                             {{ \App\Support\BookingStatus::canonical($conversation->booking_status) }}
                         </span>
                     @endif
+                    <div class="chat-thread-actions">
+                        @include('conversations.partials.actions-menu', [
+                            'folder' => $folder,
+                            'archiveRoute' => 'guest.conversations.archive',
+                            'deleteRoute' => 'guest.conversations.delete',
+                            'restoreRoute' => 'guest.conversations.restore',
+                            'conversationId' => $conversation->conversation_id,
+                        ])
+                        <button
+                            class="chat-info-toggle"
+                            type="button"
+                            aria-label="Show conversation information"
+                            aria-controls="chat-details"
+                            aria-expanded="false"
+                            title="Show conversation information"
+                            data-chat-details-toggle
+                        >
+                            <i class="fa fa-circle-info" aria-hidden="true"></i>
+                        </button>
+                    </div>
                 </header>
 
                 <div class="chat-thread-welcome">
@@ -62,34 +61,16 @@
                     <p><strong>MCTBS Connect</strong><br>{{ $settings->welcome_message }}</p>
                 </div>
 
-                <details class="chat-context">
-                    <summary><i class="fa fa-circle-info" aria-hidden="true"></i> Booking and property information</summary>
-                    <div class="chat-context-body">
-                        @if ($context['booking'])
-                            <p><strong>{{ $context['booking']->unit->house->name }} · {{ $context['booking']->unit->unit_type }}</strong></p>
-                            <p>{{ $context['booking']->check_in->format('M j, Y') }} - {{ $context['booking']->check_out->format('M j, Y') }}</p>
-                            <p>Booking {{ $context['booking']->booking_reference ?: '#'.$context['booking']->booking_id }} · {{ $context['booking']->status }}</p>
-                            <p>Payment: {{ $context['paymentStatus'] ?: 'No payment record' }}</p>
-                            @if ($context['bookingUrl'])
-                                <a href="{{ $context['bookingUrl'] }}" class="btn btn-outline-primary btn-sm">View booking</a>
-                            @endif
-                            @if ($context['ticketUrl'])
-                                <a href="{{ $context['ticketUrl'] }}" class="btn btn-outline-primary btn-sm">View ticket</a>
-                            @endif
-                        @else
-                            <p>No booking is linked to this property yet.</p>
-                        @endif
-                        <p>{{ $conversation->house->address }}{{ $conversation->house->contact_number ? ' · '.$conversation->house->contact_number : '' }}</p>
-                        @if ($context['policies'])
-                            <p class="chat-context-prewrap">{{ $context['policies'] }}</p>
-                        @endif
-                        @if ($context['amenities']->isNotEmpty())
-                            <p>Amenities: {{ $context['amenities']->pluck('name')->join(', ') }}</p>
-                        @endif
-                    </div>
-                </details>
-
-                <section class="chat-message-list" aria-label="Conversation messages" aria-live="polite">
+                <section
+                    class="chat-message-list"
+                    aria-label="Conversation messages"
+                    aria-live="polite"
+                    data-chat-poll-url="{{ route('guest.conversations.updates', $conversation->conversation_id) }}"
+                    data-conversation-id="{{ $conversation->conversation_id }}"
+                    data-viewer-type="guest"
+                    data-viewer-id="{{ auth()->id() }}"
+                    data-last-message-id="{{ $conversation->messages->max('message_id') ?? 0 }}"
+                >
                     @if ($conversation->messages->isNotEmpty())
                         @include('conversations.partials.messages', [
                             'messages' => $conversation->messages,
@@ -105,6 +86,8 @@
                         </div>
                     @endif
                 </section>
+
+                <p class="chat-sync-status" role="status" aria-live="polite" data-chat-sync-status hidden></p>
 
                 <div class="chat-composer">
                     @if (! empty($faqPrompts) || $faqs->isNotEmpty())
@@ -141,6 +124,106 @@
                     <p class="chat-composer-note"><i class="fa fa-lock" aria-hidden="true"></i> Your reply is visible only to you and the property team.</p>
                 </div>
             </main>
+
+            <aside class="chat-details" id="chat-details" aria-label="Conversation information" aria-hidden="true" data-chat-details-panel>
+                <section class="chat-detail-section">
+                    <div class="chat-detail-heading">
+                        <span class="chat-detail-avatar">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr(auth()->user()->first_name, 0, 1)) }}</span>
+                        <div>
+                            <h2>{{ trim(auth()->user()->first_name.' '.auth()->user()->last_name) }}</h2>
+                            <p>{{ auth()->user()->email }}</p>
+                        </div>
+                    </div>
+                    <div class="chat-detail-fact">
+                        <span>Your contact number</span>
+                        <strong>{{ auth()->user()->phone ?: 'Not provided' }}</strong>
+                    </div>
+                </section>
+
+                <section class="chat-detail-section">
+                    <h3><i class="fa fa-calendar-check" aria-hidden="true"></i> Booking context</h3>
+                    @if ($context['booking'])
+                        <div class="chat-detail-fact">
+                            <span>Stay</span>
+                            <strong>{{ $context['booking']->unit->house->name }} · {{ $context['booking']->unit->unit_type }}</strong>
+                        </div>
+                        <div class="chat-detail-fact">
+                            <span>Dates</span>
+                            <strong>{{ $context['booking']->check_in->format('M j, Y') }} - {{ $context['booking']->check_out->format('M j, Y') }}</strong>
+                        </div>
+                        <div class="chat-detail-fact">
+                            <span>Booking status</span>
+                            <strong>{{ \App\Support\BookingStatus::canonical($context['booking']->status) }}</strong>
+                        </div>
+                        <div class="chat-detail-fact">
+                            <span>Payment</span>
+                            <strong>{{ $context['paymentStatus'] ?: 'No payment record' }}</strong>
+                        </div>
+                        <div class="chat-detail-actions">
+                            @if ($context['bookingUrl'])
+                                <a href="{{ $context['bookingUrl'] }}" class="btn btn-outline-primary btn-sm">View booking</a>
+                            @endif
+                            @if ($context['ticketUrl'])
+                                <a href="{{ $context['ticketUrl'] }}" class="btn btn-outline-primary btn-sm">View ticket</a>
+                            @endif
+                        </div>
+                    @else
+                        <p class="chat-detail-empty">No booking is linked to this property yet.</p>
+                    @endif
+                </section>
+
+                <section class="chat-detail-section">
+                    <h3><i class="fa fa-house" aria-hidden="true"></i> Property and unit</h3>
+                    <div class="chat-detail-fact">
+                        <span>Property</span>
+                        <strong>{{ $conversation->house->name }}</strong>
+                    </div>
+                    <div class="chat-detail-fact">
+                        <span>Address</span>
+                        <strong>{{ $conversation->house->address }}</strong>
+                    </div>
+                    @if ($conversation->house->contact_number)
+                        <div class="chat-detail-fact">
+                            <span>Property contact</span>
+                            <strong>{{ $conversation->house->contact_number }}</strong>
+                        </div>
+                    @endif
+                    @if ($conversation->unit)
+                        <div class="chat-detail-fact">
+                            <span>Unit</span>
+                            <strong>{{ $conversation->unit->unit_type }}</strong>
+                        </div>
+                        <div class="chat-detail-fact">
+                            <span>Rate</span>
+                            <strong>₱{{ number_format((float) $conversation->unit->price, 2) }} per night</strong>
+                        </div>
+                    @endif
+                    @if ($context['policies'])
+                        <details class="chat-detail-collapsible">
+                            <summary>House policies</summary>
+                            <p>{{ $context['policies'] }}</p>
+                        </details>
+                    @endif
+                    @if ($context['amenities']->isNotEmpty())
+                        <details class="chat-detail-collapsible">
+                            <summary>Amenities</summary>
+                            <p>{{ $context['amenities']->pluck('name')->join(', ') }}</p>
+                        </details>
+                    @endif
+                </section>
+
+                <section class="chat-detail-section">
+                    <h3><i class="fa fa-user-tie" aria-hidden="true"></i> Property owner</h3>
+                    <div class="chat-detail-fact">
+                        <span>Name</span>
+                        <strong>{{ trim($conversation->house->owner->first_name.' '.$conversation->house->owner->last_name) }}</strong>
+                    </div>
+                    <div class="chat-detail-fact">
+                        <span>Contact</span>
+                        <strong>{{ $conversation->house->owner->email }}{{ $conversation->house->owner->phone ? ' · '.$conversation->house->owner->phone : '' }}</strong>
+                    </div>
+                </section>
+            </aside>
         </div>
     </div>
     <script>
@@ -149,14 +232,5 @@
             messageList.scrollTop = messageList.scrollHeight;
         }
 
-        const refreshConversation = () => {
-            const composer = document.querySelector('[data-message-composer]');
-            if (composer && (composer.value.trim() || document.activeElement === composer)) {
-                window.setTimeout(refreshConversation, 15000);
-                return;
-            }
-            window.location.reload();
-        };
-        window.setTimeout(refreshConversation, 15000);
     </script>
 </x-shell>

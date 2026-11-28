@@ -7,6 +7,9 @@
         $inboxRoute = $isStaff ? 'staff.conversations.index' : 'owner.conversations.index';
         $replyRoute = $isStaff ? 'staff.conversations.store' : 'owner.conversations.store';
         $notesRoute = $isStaff ? 'staff.conversations.notes.store' : 'owner.conversations.notes.store';
+        $archiveRoute = $isStaff ? 'staff.conversations.archive' : 'owner.conversations.archive';
+        $deleteRoute = $isStaff ? 'staff.conversations.delete' : 'owner.conversations.delete';
+        $restoreRoute = $isStaff ? 'staff.conversations.restore' : 'owner.conversations.restore';
         $guestName = $conversation->guest
             ? trim($conversation->guest->first_name.' '.$conversation->guest->last_name)
             : (trim((string) $conversation->visitor_name) ?: 'Public visitor');
@@ -18,15 +21,15 @@
     @endphp
 
     <div class="container chat-page">
+        <a class="chat-page-back text-muted fs-sm" href="{{ route($inboxRoute, ['filter' => $filter, 'folder' => $folder]) }}">
+            <i class="fa fa-arrow-left" aria-hidden="true"></i> Back to inbox
+        </a>
         <header class="chat-page-heading">
             <div>
                 <span class="chat-eyebrow">MCTBS Connect · Team inbox</span>
                 <h1>Messages</h1>
                 <p>Review the guest's conversation and reply from one workspace.</p>
             </div>
-            <a class="text-muted fs-sm" href="{{ route($inboxRoute, ['filter' => $filter]) }}">
-                <i class="fa fa-arrow-left" aria-hidden="true"></i> Back to inbox
-            </a>
         </header>
 
         <div class="chat-workspace chat-workspace--staff chat-workspace--thread">
@@ -34,6 +37,7 @@
                 'conversations' => $conversations,
                 'counts' => $counts,
                 'filter' => $filter,
+                'folder' => $folder,
                 'conversationRoute' => $conversationRoute,
                 'inboxRoute' => $inboxRoute,
                 'createRoute' => $isStaff ? 'staff.conversations.create' : 'owner.conversations.create',
@@ -53,20 +57,38 @@
                             {{ \App\Support\BookingStatus::canonical($conversation->booking_status) }}
                         </span>
                     @endif
-                    <button
-                        class="chat-info-toggle"
-                        type="button"
-                        aria-label="Show guest information"
-                        aria-controls="chat-details"
-                        aria-expanded="false"
-                        title="Show guest information"
-                        data-chat-details-toggle
-                    >
-                        <i class="fa fa-circle-info" aria-hidden="true"></i>
-                    </button>
+                    <div class="chat-thread-actions">
+                        @include('conversations.partials.actions-menu', [
+                            'folder' => $folder,
+                            'archiveRoute' => $archiveRoute,
+                            'deleteRoute' => $deleteRoute,
+                            'restoreRoute' => $restoreRoute,
+                            'conversationId' => $conversation->conversation_id,
+                        ])
+                        <button
+                            class="chat-info-toggle"
+                            type="button"
+                            aria-label="Show conversation information"
+                            aria-controls="chat-details"
+                            aria-expanded="false"
+                            title="Show conversation information"
+                            data-chat-details-toggle
+                        >
+                            <i class="fa fa-circle-info" aria-hidden="true"></i>
+                        </button>
+                    </div>
                 </header>
 
-                <section class="chat-message-list" aria-label="Conversation messages" aria-live="polite">
+                <section
+                    class="chat-message-list"
+                    aria-label="Conversation messages"
+                    aria-live="polite"
+                    data-chat-poll-url="{{ route($isStaff ? 'staff.conversations.updates' : 'owner.conversations.updates', $conversation->conversation_id) }}"
+                    data-conversation-id="{{ $conversation->conversation_id }}"
+                    data-viewer-type="team"
+                    data-viewer-id="{{ auth()->id() }}"
+                    data-last-message-id="{{ $conversation->messages->max('message_id') ?? 0 }}"
+                >
                     @if ($conversation->messages->isNotEmpty())
                         @include('conversations.partials.messages', [
                             'messages' => $conversation->messages,
@@ -83,6 +105,8 @@
                         </div>
                     @endif
                 </section>
+
+                <p class="chat-sync-status" role="status" aria-live="polite" data-chat-sync-status hidden></p>
 
                 <div class="chat-composer">
                     @if ($quickReplies->isNotEmpty())
@@ -103,7 +127,6 @@
                             <i class="fa fa-paper-plane" aria-hidden="true"></i> Send
                         </button>
                     </form>
-                    <p class="chat-composer-note"><i class="fa fa-lock" aria-hidden="true"></i> Replies are sent in the guest's MCTBS conversation.</p>
                 </div>
             </main>
 
@@ -120,6 +143,12 @@
                         <span>Guest status</span>
                         <strong><span class="chat-status chat-status--{{ $guestStatusClass }}">{{ $guestStatus }}</span></strong>
                     </div>
+                    @if ($conversation->guest?->phone)
+                        <div class="chat-detail-fact">
+                            <span>Phone</span>
+                            <strong>{{ $conversation->guest->phone }}</strong>
+                        </div>
+                    @endif
                     <div class="chat-detail-fact">
                         <span>Property</span>
                         <strong>{{ $conversation->house->name }}</strong>
@@ -128,6 +157,38 @@
                         <div class="chat-detail-fact">
                             <span>Unit</span>
                             <strong>{{ $conversation->unit->unit_type }}</strong>
+                        </div>
+                        <div class="chat-detail-fact">
+                            <span>Nightly rate</span>
+                            <strong>₱{{ number_format((float) $conversation->unit->price, 2) }}</strong>
+                        </div>
+                        <div class="chat-detail-fact">
+                            <span>Capacity</span>
+                            <strong>{{ $conversation->unit->capacity }} guests</strong>
+                        </div>
+                    @endif
+                    @if ($conversation->house->contact_number)
+                        <div class="chat-detail-fact">
+                            <span>Property phone</span>
+                            <strong>{{ $conversation->house->contact_number }}</strong>
+                        </div>
+                    @endif
+                </section>
+
+                <section class="chat-detail-section">
+                    <h3><i class="fa fa-user-tie" aria-hidden="true"></i> Property owner</h3>
+                    <div class="chat-detail-fact">
+                        <span>Name</span>
+                        <strong>{{ trim($conversation->house->owner->first_name.' '.$conversation->house->owner->last_name) }}</strong>
+                    </div>
+                    <div class="chat-detail-fact">
+                        <span>Email</span>
+                        <strong>{{ $conversation->house->owner->email }}</strong>
+                    </div>
+                    @if ($conversation->house->owner->phone)
+                        <div class="chat-detail-fact">
+                            <span>Phone</span>
+                            <strong>{{ $conversation->house->owner->phone }}</strong>
                         </div>
                     @endif
                 </section>
@@ -213,13 +274,5 @@
                 messageComposer.focus();
             }
         });
-        const refreshConversation = () => {
-            if (messageComposer && (messageComposer.value.trim() || document.activeElement === messageComposer)) {
-                window.setTimeout(refreshConversation, 15000);
-                return;
-            }
-            window.location.reload();
-        };
-        window.setTimeout(refreshConversation, 15000);
     </script>
 </x-shell>

@@ -2,46 +2,24 @@
     <x-slot:nav>@include('partials.nav', ['activePage' => 'messages'])</x-slot:nav>
 
     <div class="container chat-page">
+        <a class="chat-page-back text-muted fs-sm" href="{{ route('home') }}">
+            <i class="fa fa-arrow-left" aria-hidden="true"></i> Back to MCTBS
+        </a>
         <header class="chat-page-heading">
             <div>
                 <span class="chat-eyebrow">MCTBS Connect</span>
                 <h1>Your conversations</h1>
                 <p>Ask a property team a question or pick up where you left off.</p>
             </div>
-            <a class="text-muted fs-sm" href="{{ route('home') }}">
-                <i class="fa fa-arrow-left" aria-hidden="true"></i> Back to MCTBS
-            </a>
         </header>
 
         <div class="chat-workspace chat-workspace--guest">
-            <aside class="chat-sidebar" aria-label="Your conversations">
-                <div class="chat-sidebar-header">
-                    <div>
-                        <h2>Chats</h2>
-                        <p>{{ $conversations->count() }} {{ \Illuminate\Support\Str::plural('conversation', $conversations->count()) }}</p>
-                    </div>
-                    <a class="chat-new-button" href="#start-conversation" aria-label="Start a new conversation" title="Start a new conversation">
-                        <i class="fa fa-pen-to-square" aria-hidden="true"></i>
-                    </a>
-                </div>
-
-                <nav class="chat-conversation-list" aria-label="Conversation list">
-                    @forelse ($conversations as $conversation)
-                        @include('conversations.partials.list-item', [
-                            'conversation' => $conversation,
-                            'conversationRoute' => 'guest.conversations.show',
-                            'listType' => 'guest',
-                            'activeConversationId' => null,
-                        ])
-                    @empty
-                        <div class="chat-list-empty">
-                            <span class="chat-empty-icon"><i class="fa fa-comments" aria-hidden="true"></i></span>
-                            <strong>No chats yet</strong>
-                            <span>Your messages with property teams will appear here.</span>
-                        </div>
-                    @endforelse
-                </nav>
-            </aside>
+            @include('conversations.partials.guest-sidebar', [
+                'conversations' => $conversations,
+                'folder' => $folder,
+                'folderCounts' => $folderCounts,
+                'activeConversationId' => null,
+            ])
 
             <main class="chat-main chat-start-panel" id="start-conversation">
                 <div class="chat-start-card">

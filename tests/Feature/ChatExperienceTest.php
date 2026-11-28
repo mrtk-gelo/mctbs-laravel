@@ -172,6 +172,10 @@ test('guest and staff see the conversation as a message thread beside their chat
         ->assertSee('chat-list-item', false)
         ->assertSee('chat-message-row--outgoing', false)
         ->assertSee('chat-message-row--incoming', false)
+        ->assertSee('data-chat-poll-url', false)
+        ->assertSee('data-chat-details-toggle', false)
+        ->assertSee('Property owner')
+        ->assertSee($owner->email)
         ->assertSee('What time can I check in?')
         ->assertSee('Check-in starts at 3 PM.');
 
@@ -186,6 +190,11 @@ test('guest and staff see the conversation as a message thread beside their chat
         ->assertSee('Search guest names')
         ->assertSee('Guest status')
         ->assertSee('Registered guest')
+        ->assertSee('Property owner')
+        ->assertSee($owner->email)
+        ->assertSee('data-chat-poll-url', false)
+        ->assertDontSee("Replies are sent in the guest's MCTBS conversation.")
+        ->assertDontSee('window.location.reload()', false)
         ->assertDontSee('chat-recent-conversations', false)
         ->assertSee('chat-message-row--incoming', false)
         ->assertSee('chat-message-row--outgoing', false)

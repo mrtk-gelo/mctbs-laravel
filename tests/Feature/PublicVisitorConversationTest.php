@@ -46,10 +46,16 @@ test('anonymous conversations are scoped to their visitor session and can be reo
     $this->get(route('public.visitor-conversations.show', $conversation->conversation_id))
         ->assertOk()
         ->assertSee('Can someone help me?')
+        ->assertSee('Visitor (no account)')
+        ->assertSee('Property owner')
+        ->assertSee($owner->email)
+        ->assertSee('data-chat-poll-url', false)
         ->assertDontSee('guest-chat-launcher');
 
     $this->flushSession();
     $this->get(route('public.visitor-conversations.show', $conversation->conversation_id))
+        ->assertNotFound();
+    $this->getJson(route('public.visitor-conversations.updates', $conversation->conversation_id))
         ->assertNotFound();
 
     $signedUrl = URL::temporarySignedRoute(
@@ -63,6 +69,112 @@ test('anonymous conversations are scoped to their visitor session and can be reo
     $this->get(route('public.visitor-conversations.show', $conversation->conversation_id))
         ->assertOk()
         ->assertSee('Can someone help me?');
+});
+
+test('anonymous conversation polling returns only replies after the supplied message cursor', function () {
+    Mail::fake();
+    $owner = User::create([
+        'role_id' => Role::query()->where('name', 'Owner')->firstOrFail()->role_id,
+        'first_name' => 'Polling',
+        'last_name' => 'Owner',
+        'email' => 'visitor-poll-owner@example.com',
+        'password' => 'Password123!',
+        'is_active' => true,
+    ]);
+    $house = TransientHouse::create([
+        'owner_id' => $owner->user_id,
+        'name' => 'Visitor Poll House',
+        'address' => '1 Poll Road',
+        'city' => 'Baguio',
+        'contact_number' => '5557004',
+        'is_active' => true,
+    ]);
+
+    $this->post(route('public.visitor-conversations.store'), [
+        'house_id' => $house->house_id,
+        'name' => 'Polling Visitor',
+        'email' => 'visitor-poll@example.com',
+        'message' => 'Can the team help with my question?',
+    ])->assertRedirect();
+    $conversation = Conversation::query()->firstOrFail();
+    $cursor = (int) $conversation->messages()->max('message_id');
+    $reply = $conversation->messages()->create([
+        'sender_id' => $owner->user_id,
+        'sender_type' => 'user',
+        'message' => 'The team has replied.',
+        'message_type' => 'user',
+        'sent_at' => now(),
+    ]);
+
+    $this->getJson(route('public.visitor-conversations.updates', [
+        'conversationId' => $conversation->conversation_id,
+        'after' => $cursor,
+    ]))
+        ->assertOk()
+        ->assertJsonCount(1, 'messages')
+        ->assertJsonPath('messages.0.id', $reply->message_id)
+        ->assertJsonPath('messages.0.text', 'The team has replied.');
+});
+
+test('anonymous conversations can be archived, moved to deleted, and restored without losing messages', function () {
+    Mail::fake();
+    $owner = User::create([
+        'role_id' => Role::query()->where('name', 'Owner')->firstOrFail()->role_id,
+        'first_name' => 'Folder',
+        'last_name' => 'Owner',
+        'email' => 'visitor-folder-owner@example.com',
+        'password' => 'Password123!',
+        'is_active' => true,
+    ]);
+    $house = TransientHouse::create([
+        'owner_id' => $owner->user_id,
+        'name' => 'Visitor Folder House',
+        'address' => '1 Folder Road',
+        'city' => 'Baguio',
+        'contact_number' => '5557003',
+        'is_active' => true,
+    ]);
+
+    $this->post(route('public.visitor-conversations.store'), [
+        'house_id' => $house->house_id,
+        'name' => 'Folder Visitor',
+        'email' => 'visitor-folder@example.com',
+        'subject' => 'Folder test conversation',
+        'message' => 'Can the team help with my question?',
+    ])->assertRedirect();
+    $conversation = Conversation::query()->firstOrFail();
+    $messageCount = $conversation->messages()->count();
+
+    $this->post(route('public.visitor-conversations.archive', $conversation->conversation_id))
+        ->assertRedirect(route('public.visitor-conversations.index', ['folder' => 'archived']));
+    $this->get(route('public.visitor-conversations.index', ['folder' => 'archived']))
+        ->assertSee('Folder test conversation');
+
+    $signedUrl = URL::temporarySignedRoute(
+        'public.visitor-conversations.access',
+        now()->addDay(),
+        ['conversationId' => $conversation->conversation_id]
+    );
+    $this->flushSession();
+    $this->get($signedUrl)
+        ->assertRedirect(route('public.visitor-conversations.show', $conversation->conversation_id));
+    $this->get(route('public.visitor-conversations.show', $conversation->conversation_id))
+        ->assertSee('Visitor (no account)');
+    $this->get(route('public.visitor-conversations.index', ['folder' => 'archived']))
+        ->assertSee('Folder test conversation');
+
+    $this->post(route('public.visitor-conversations.delete', $conversation->conversation_id))
+        ->assertRedirect(route('public.visitor-conversations.index', ['folder' => 'deleted']));
+    $this->get(route('public.visitor-conversations.index', ['folder' => 'deleted']))
+        ->assertSee('Folder test conversation');
+
+    $this->post(route('public.visitor-conversations.restore', $conversation->conversation_id))
+        ->assertRedirect(route('public.visitor-conversations.index', ['folder' => 'inbox']));
+    $this->get(route('public.visitor-conversations.index', ['folder' => 'inbox']))
+        ->assertSee('Folder test conversation');
+
+    expect($conversation->fresh())->not->toBeNull()
+        ->and($conversation->messages()->count())->toBe($messageCount);
 });
 
 test('sensitive visitor questions receive a sign-in prompt instead of an answer', function () {
@@ -138,6 +250,9 @@ test('login claims only visitor chats with the matching email from the same brow
         ->where('visitor_email', 'other-visitor@example.com')
         ->value('conversation_id');
 
+    $this->post(route('public.visitor-conversations.archive', $matchingConversationId))
+        ->assertRedirect(route('public.visitor-conversations.index', ['folder' => 'archived']));
+
     $this->post(route('login'), [
         'email' => $guest->email,
         'password' => 'Password123!',
@@ -151,4 +266,8 @@ test('login claims only visitor chats with the matching email from the same brow
         'conversation_id' => $otherConversationId,
         'guest_user_id' => null,
     ]);
+    expect(Conversation::query()->findOrFail($matchingConversationId)
+        ->participants()
+        ->where('user_id', $guest->user_id)
+        ->value('archived_at'))->not->toBeNull();
 });

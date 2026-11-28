@@ -10,15 +10,15 @@
     @endphp
 
     <div class="container chat-page">
+        <a class="chat-page-back text-muted fs-sm" href="{{ route($inboxRoute, ['filter' => $filter, 'folder' => 'inbox']) }}">
+            <i class="fa fa-arrow-left" aria-hidden="true"></i> Back to inbox
+        </a>
         <header class="chat-page-heading">
             <div>
                 <span class="chat-eyebrow">MCTBS Connect · Team inbox</span>
                 <h1>New conversation</h1>
                 <p>Start a private chat with a registered guest who has booked one of your properties.</p>
             </div>
-            <a class="text-muted fs-sm" href="{{ route($inboxRoute, ['filter' => $filter]) }}">
-                <i class="fa fa-arrow-left" aria-hidden="true"></i> Back to inbox
-            </a>
         </header>
 
         <div class="chat-workspace chat-workspace--staff">
@@ -26,6 +26,7 @@
                 'conversations' => $conversations,
                 'counts' => $counts,
                 'filter' => $filter,
+                'folder' => $folder,
                 'conversationRoute' => $conversationRoute,
                 'inboxRoute' => $inboxRoute,
                 'createRoute' => $createRoute,

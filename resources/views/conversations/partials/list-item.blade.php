@@ -15,16 +15,18 @@
     $previewMessage = $isStaffInbox ? $conversation->latestHumanMessage : $conversation->latestMessage;
     $lastMessageAt = $previewMessage?->sent_at ?? $conversation->created_at;
     $isActive = (int) $activeConversationId === (int) $conversation->conversation_id;
-    $bookingStatus = $conversation->booking_status
-        ? \App\Support\BookingStatus::canonical($conversation->booking_status)
-        : 'No booking';
+    $bookingStatus = $conversation->guest_user_id === null
+        ? 'Public visitor'
+        : ($conversation->booking_status
+            ? \App\Support\BookingStatus::canonical($conversation->booking_status)
+            : 'Registered guest');
     $statusClass = \Illuminate\Support\Str::slug($bookingStatus);
     $statusHint = $bookingStatus === \App\Support\BookingStatus::ACCEPTED
         ? 'Dates are reserved while the guest submits the downpayment.'
         : $bookingStatus;
     $conversationUrl = route($conversationRoute, array_merge(
         ['conversationId' => $conversation->conversation_id],
-        $isStaffInbox ? request()->only('filter') : []
+        $isStaffInbox ? request()->only(['filter', 'folder']) : request()->only('folder')
     ));
 @endphp
 
@@ -33,6 +35,7 @@
     href="{{ $conversationUrl }}"
     data-chat-inbox-item
     data-chat-guest-name="{{ \Illuminate\Support\Str::lower($guestName) }}"
+    data-chat-conversation-id="{{ $conversation->conversation_id }}"
     data-chat-unread="{{ ($conversation->unread_message_count ?? 0) > 0 ? 'true' : 'false' }}"
     data-chat-anonymous="{{ $conversation->guest_user_id === null ? 'true' : 'false' }}"
     @if ($isActive) aria-current="page" @endif
@@ -42,14 +45,14 @@
         <span class="chat-list-topline">
             <strong>{{ $title }}</strong>
             @if ($lastMessageAt)
-                <time datetime="{{ $lastMessageAt->toIso8601String() }}">{{ $lastMessageAt->diffForHumans() }}</time>
+                <time datetime="{{ $lastMessageAt->toIso8601String() }}" data-chat-time>{{ $lastMessageAt->diffForHumans() }}</time>
             @endif
         </span>
         @if ($isStaffInbox && $conversation->subject)
             <span class="chat-list-subject">{{ $conversation->subject }}</span>
         @endif
         <span class="chat-list-subtitle">{{ $subtitle }}</span>
-        <span class="chat-list-preview">
+        <span class="chat-list-preview" data-chat-preview>
             {{ $previewMessage ? \Illuminate\Support\Str::limit($previewMessage->message, 76) : 'No messages yet' }}
         </span>
         <span class="chat-list-foot">

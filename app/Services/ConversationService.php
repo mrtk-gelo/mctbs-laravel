@@ -13,8 +13,8 @@ use App\Models\Role;
 use App\Models\TransientHouse;
 use App\Models\Unit;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -70,8 +70,12 @@ class ConversationService
         return hash('sha256', $sessionKey);
     }
 
-    public function visitorConversationsFor(Request $request): EloquentCollection
+    public function visitorConversationsFor(Request $request, string $folder = 'inbox'): EloquentCollection
     {
+        if (! in_array($folder, ['all', 'inbox', 'archived', 'deleted'], true)) {
+            throw new \InvalidArgumentException('Unsupported conversation folder.');
+        }
+
         $sessionKey = $request->session()->get('mctbs_visitor_chat_key');
         $sessionHash = is_string($sessionKey) && $sessionKey !== ''
             ? hash('sha256', $sessionKey)
@@ -82,7 +86,7 @@ class ConversationService
             return new EloquentCollection;
         }
 
-        return Conversation::query()
+        $query = Conversation::query()
             ->whereNull('guest_user_id')
             ->where(function (Builder $query) use ($sessionHash, $grantedConversationIds): void {
                 if ($sessionHash !== null) {
@@ -92,11 +96,44 @@ class ConversationService
                 if ($grantedConversationIds !== []) {
                     $query->orWhereIn('conversation_id', $grantedConversationIds);
                 }
-            })
+            });
+
+        if ($folder === 'archived') {
+            $query->whereNotNull('visitor_archived_at')->whereNull('visitor_deleted_at');
+        } elseif ($folder === 'deleted') {
+            $query->whereNotNull('visitor_deleted_at');
+        } elseif ($folder === 'inbox') {
+            $query->whereNull('visitor_archived_at')->whereNull('visitor_deleted_at');
+        }
+
+        return $query
             ->with(['house', 'unit', 'latestMessage'])
             ->latest('last_message_at')
             ->latest('created_at')
             ->get();
+    }
+
+    /**
+     * @return array{inbox: int, archived: int, deleted: int}
+     */
+    public function visitorConversationCountsFor(Request $request): array
+    {
+        $conversations = $this->visitorConversationsFor($request, 'all');
+
+        return [
+            'inbox' => $conversations->whereNull('visitor_archived_at')->whereNull('visitor_deleted_at')->count(),
+            'archived' => $conversations->whereNotNull('visitor_archived_at')->whereNull('visitor_deleted_at')->count(),
+            'deleted' => $conversations->whereNotNull('visitor_deleted_at')->count(),
+        ];
+    }
+
+    public function visitorFolderForConversation(Conversation $conversation): string
+    {
+        if ($conversation->visitor_deleted_at !== null) {
+            return 'deleted';
+        }
+
+        return $conversation->visitor_archived_at !== null ? 'archived' : 'inbox';
     }
 
     public function canAccessVisitor(Request $request, Conversation $conversation): bool
@@ -167,15 +204,22 @@ class ConversationService
                 }
             })
             ->get();
-
         foreach ($conversations as $conversation) {
+            $archivedAt = $conversation->visitor_archived_at;
+            $deletedAt = $conversation->visitor_deleted_at;
             $conversation->forceFill([
                 'guest_user_id' => $user->user_id,
                 'visitor_session_hash' => null,
+                'visitor_archived_at' => null,
+                'visitor_deleted_at' => null,
             ])->save();
-            $conversation->participants()->firstOrCreate([
+            $participant = $conversation->participants()->firstOrCreate([
                 'user_id' => $user->user_id,
             ]);
+            $participant->forceFill([
+                'archived_at' => $archivedAt,
+                'deleted_at' => $deletedAt,
+            ])->save();
         }
 
         $request->session()->forget('mctbs_visitor_chat_verified');
@@ -250,7 +294,7 @@ class ConversationService
             ]);
         }
 
-        return DB::transaction(function () use ($conversation, $body): Message {
+        $message = DB::transaction(function () use ($conversation, $body): Message {
             $message = $conversation->messages()->create([
                 'sender_id' => null,
                 'sender_type' => 'visitor',
@@ -262,7 +306,13 @@ class ConversationService
                 'last_message_at' => $message->sent_at,
                 'status' => 'open',
                 'resolved_at' => null,
+                'visitor_archived_at' => null,
+                'visitor_deleted_at' => null,
             ])->save();
+            $conversation->participants()->update([
+                'archived_at' => null,
+                'deleted_at' => null,
+            ]);
 
             $assistance = app(AssistanceService::class);
             $unitAnswer = $conversation->unit
@@ -284,13 +334,97 @@ class ConversationService
 
             return $message;
         });
+
+        return $message;
     }
 
-    public function conversationQueryFor(User $user): Builder
+    public function moveVisitorConversationToFolder(Request $request, Conversation $conversation, string $folder): void
+    {
+        abort_unless($this->canAccessVisitor($request, $conversation), 404);
+
+        $timestamps = match ($folder) {
+            'inbox' => ['visitor_archived_at' => null, 'visitor_deleted_at' => null],
+            'archived' => ['visitor_archived_at' => now(), 'visitor_deleted_at' => null],
+            'deleted' => ['visitor_archived_at' => null, 'visitor_deleted_at' => now()],
+            default => throw new \InvalidArgumentException('Unsupported conversation folder.'),
+        };
+
+        $conversation->forceFill($timestamps)->save();
+    }
+
+    public function moveUserConversationToFolder(User $user, Conversation $conversation, string $folder): void
+    {
+        abort_unless($this->canAccess($user, $conversation), 403);
+
+        $timestamps = match ($folder) {
+            'inbox' => ['archived_at' => null, 'deleted_at' => null],
+            'archived' => ['archived_at' => now(), 'deleted_at' => null],
+            'deleted' => ['archived_at' => null, 'deleted_at' => now()],
+            default => throw new \InvalidArgumentException('Unsupported conversation folder.'),
+        };
+        $participant = $conversation->participants()->firstOrCreate([
+            'user_id' => $user->user_id,
+        ]);
+
+        $participant->forceFill($timestamps)->save();
+    }
+
+    public function userFolderForConversation(User $user, Conversation $conversation): string
+    {
+        $participant = $conversation->participants()
+            ->where('user_id', $user->user_id)
+            ->first();
+
+        if ($participant?->deleted_at !== null) {
+            return 'deleted';
+        }
+
+        return $participant?->archived_at !== null ? 'archived' : 'inbox';
+    }
+
+    /**
+     * @return EloquentCollection<int, Message>
+     */
+    public function messagesAfter(Conversation $conversation, int $messageId): EloquentCollection
+    {
+        return $conversation->messages()
+            ->with('sender')
+            ->where('message_id', '>', $messageId)
+            ->orderBy('message_id')
+            ->limit(100)
+            ->get();
+    }
+
+    /**
+     * @return array{id: int, senderType: string, senderId: ?int, senderName: string, text: string, sentAt: string, timeLabel: string}
+     */
+    public function messageUpdatePayload(Message $message, Conversation $conversation): array
+    {
+        $senderName = match ($message->sender_type) {
+            'assistant' => 'MCTBS Connect · automated answer',
+            'system' => 'MCTBS Connect',
+            'visitor' => trim((string) $conversation->visitor_name) ?: 'Public visitor',
+            default => trim(($message->sender?->first_name ?? '').' '.($message->sender?->last_name ?? '')) ?: 'Property team',
+        };
+
+        return [
+            'id' => (int) $message->message_id,
+            'senderType' => (string) $message->sender_type,
+            'senderId' => $message->sender_id === null ? null : (int) $message->sender_id,
+            'senderName' => $senderName,
+            'text' => (string) $message->message,
+            'sentAt' => $message->sent_at->toIso8601String(),
+            'timeLabel' => $message->sent_at->format('M j, g:i A'),
+        ];
+    }
+
+    public function conversationQueryFor(User $user, string $folder = 'inbox'): Builder
     {
         $query = $user->role?->name === 'Guest'
             ? Conversation::query()->where('guest_user_id', $user->user_id)
             : Conversation::query()->whereIn('house_id', $this->accessibleHouseIds($user));
+
+        $this->applyConversationFolder($query, $user, $folder);
 
         return $query
             ->addSelect([
@@ -345,6 +479,13 @@ class ConversationService
                 ->whereIn('status', ['pending_staff', 'assigned']);
 
         return $query
+            ->whereDoesntHave('participants', function (Builder $participantQuery) use ($user): void {
+                $participantQuery
+                    ->where('user_id', $user->user_id)
+                    ->where(function (Builder $stateQuery): void {
+                        $stateQuery->whereNotNull('archived_at')->orWhereNotNull('deleted_at');
+                    });
+            })
             ->whereHas('messages', function (Builder $messageQuery) use ($user): void {
                 $messageQuery
                     ->whereNotIn('sender_type', ['assistant', 'system'])
@@ -424,7 +565,13 @@ class ConversationService
                     'last_message_at' => $message->sent_at,
                     'status' => 'open',
                     'resolved_at' => null,
+                    'visitor_archived_at' => null,
+                    'visitor_deleted_at' => null,
                 ])->save();
+                $conversation->participants()->update([
+                    'archived_at' => null,
+                    'deleted_at' => null,
+                ]);
 
                 $this->addParticipant($conversation, $sender);
 
@@ -462,6 +609,47 @@ class ConversationService
         $conversation->participants()->firstOrCreate([
             'user_id' => $user->user_id,
         ]);
+    }
+
+    private function applyConversationFolder(Builder $query, User $user, string $folder): void
+    {
+        if (! in_array($folder, ['all', 'inbox', 'archived', 'deleted'], true)) {
+            throw new \InvalidArgumentException('Unsupported conversation folder.');
+        }
+
+        if ($folder === 'all') {
+            return;
+        }
+
+        if ($folder === 'inbox') {
+            $query->whereDoesntHave('participants', function (Builder $participantQuery) use ($user): void {
+                $participantQuery
+                    ->where('user_id', $user->user_id)
+                    ->where(function (Builder $stateQuery): void {
+                        $stateQuery->whereNotNull('archived_at')->orWhereNotNull('deleted_at');
+                    });
+            });
+
+            return;
+        }
+
+        $query->whereHas('participants', function (Builder $participantQuery) use ($user, $folder): void {
+            $participantQuery->where('user_id', $user->user_id);
+
+            if ($folder === 'archived') {
+                $participantQuery->whereNotNull('archived_at')->whereNull('deleted_at');
+
+                return;
+            }
+
+            if ($folder === 'deleted') {
+                $participantQuery->whereNotNull('deleted_at');
+
+                return;
+            }
+
+            throw new \InvalidArgumentException('Unsupported conversation folder.');
+        });
     }
 
     private function notifyRecipients(User $sender, Conversation $conversation, Message $message): void

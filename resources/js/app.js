@@ -736,9 +736,138 @@ document.addEventListener('DOMContentLoaded', () => {
         button.addEventListener('click', () => {
             const isOpen = workspace.classList.toggle('chat-workspace--details-open');
             button.setAttribute('aria-expanded', String(isOpen));
-            button.setAttribute('aria-label', isOpen ? 'Hide guest information' : 'Show guest information');
-            button.title = isOpen ? 'Hide guest information' : 'Show guest information';
+            button.setAttribute('aria-label', isOpen ? 'Hide conversation information' : 'Show conversation information');
+            button.title = isOpen ? 'Hide conversation information' : 'Show conversation information';
             panel.setAttribute('aria-hidden', String(!isOpen));
+        });
+    });
+
+    document.querySelectorAll('[data-chat-poll-url]').forEach((messageList) => {
+        const syncStatus = document.querySelector('[data-chat-sync-status]');
+        const viewerType = messageList.dataset.viewerType ?? '';
+        const viewerId = messageList.dataset.viewerId ?? '';
+        const conversationId = messageList.dataset.conversationId ?? '';
+        let lastMessageId = Number(messageList.dataset.lastMessageId ?? 0);
+        let timer;
+        let isPolling = false;
+
+        const appendMessage = (message) => {
+            const isSystemMessage = ['assistant', 'system'].includes(message.senderType);
+            const isOutgoing = !isSystemMessage && (
+                (message.senderId !== null && String(message.senderId) === viewerId)
+                || (message.senderType === 'visitor' && viewerType === 'visitor')
+            );
+            const row = document.createElement('article');
+            row.className = `chat-message-row${isSystemMessage ? ' chat-message-row--system' : (isOutgoing ? ' chat-message-row--outgoing' : ' chat-message-row--incoming')}`;
+            row.dataset.messageId = String(message.id);
+
+            const meta = document.createElement('div');
+            meta.className = 'chat-message-meta';
+            const sender = document.createElement('span');
+            sender.textContent = message.senderName;
+            const time = document.createElement('time');
+            time.dateTime = message.sentAt;
+            time.textContent = message.timeLabel;
+            meta.append(sender, time);
+
+            const bubble = document.createElement('div');
+            bubble.className = 'chat-message-bubble';
+            bubble.textContent = message.text;
+            row.append(meta, bubble);
+            messageList.append(row);
+        };
+
+        const updateRecentConversation = (message) => {
+            if (viewerType === 'team' && ['assistant', 'system'].includes(message.senderType)) {
+                return;
+            }
+
+            const inboxItem = [...document.querySelectorAll('[data-chat-inbox-item]')]
+                .find((item) => item.dataset.chatConversationId === conversationId);
+            if (!inboxItem) {
+                return;
+            }
+
+            const preview = inboxItem.querySelector('[data-chat-preview]');
+            const time = inboxItem.querySelector('[data-chat-time]');
+            const unreadCount = inboxItem.querySelector('.chat-unread-count');
+            if (preview) {
+                preview.textContent = message.text.length > 76 ? `${message.text.slice(0, 73)}...` : message.text;
+            }
+            if (time) {
+                time.dateTime = message.sentAt;
+                time.textContent = 'Just now';
+            }
+            unreadCount?.remove();
+            inboxItem.dataset.chatUnread = 'false';
+            inboxItem.parentElement?.insertBefore(inboxItem, inboxItem.parentElement.firstElementChild);
+        };
+
+        const poll = async () => {
+            if (isPolling || document.visibilityState === 'hidden') {
+                return;
+            }
+
+            isPolling = true;
+            try {
+                const url = new URL(messageList.dataset.chatPollUrl, window.location.origin);
+                url.searchParams.set('after', String(lastMessageId));
+                const response = await fetch(url, {
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                });
+                if (!response.ok) {
+                    throw new Error(`Conversation sync returned HTTP ${response.status}.`);
+                }
+
+                const payload = await response.json();
+                if (!Array.isArray(payload.messages) || !Number.isInteger(Number(payload.lastMessageId))) {
+                    throw new Error('Conversation sync returned an invalid response.');
+                }
+
+                if (payload.messages.length > 0) {
+                    messageList.querySelector('.chat-list-empty')?.remove();
+                    const shouldScroll = messageList.scrollHeight - messageList.scrollTop - messageList.clientHeight < 80;
+                    payload.messages.forEach((message) => {
+                        lastMessageId = Math.max(lastMessageId, Number(message.id));
+                        if (viewerType !== 'team' || !['assistant', 'system'].includes(message.senderType)) {
+                            appendMessage(message);
+                            updateRecentConversation(message);
+                        }
+                    });
+                    if (shouldScroll) {
+                        messageList.scrollTop = messageList.scrollHeight;
+                    }
+                }
+
+                lastMessageId = Math.max(lastMessageId, Number(payload.lastMessageId));
+                messageList.dataset.lastMessageId = String(lastMessageId);
+                if (syncStatus) {
+                    syncStatus.hidden = true;
+                    syncStatus.textContent = '';
+                }
+            } catch (error) {
+                if (syncStatus) {
+                    syncStatus.textContent = 'Connection interrupted. New messages will retry automatically.';
+                    syncStatus.hidden = false;
+                }
+                console.error('Unable to sync conversation messages.', error);
+            } finally {
+                isPolling = false;
+                timer = window.setTimeout(poll, 12000);
+            }
+        };
+
+        timer = window.setTimeout(poll, 12000);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                window.clearTimeout(timer);
+                poll();
+            }
         });
     });
 
