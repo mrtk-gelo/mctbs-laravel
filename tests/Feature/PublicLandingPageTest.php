@@ -68,21 +68,32 @@ test('the public home shows three transient houses and links to the complete lis
         ]);
     }
 
-    $this->get(route('home'))
-        ->assertSee('Listing House 4')
-        ->assertSee('Listing House 3')
-        ->assertSee('Listing House 2')
-        ->assertDontSee('Listing House 1')
+    $houseNamesInResults = function (string $html): array {
+        $document = new DOMDocument;
+        $document->loadHTML($html, LIBXML_NOERROR | LIBXML_NOWARNING);
+        $names = [];
+
+        foreach ((new DOMXPath($document))->query('//*[@id="transient-results"]//h3') as $heading) {
+            $names[] = trim($heading->textContent);
+        }
+
+        return $names;
+    };
+
+    $homeResponse = $this->get(route('home'))->assertOk();
+    expect($houseNamesInResults($homeResponse->getContent()))
+        ->toBe(['Listing House 4', 'Listing House 3', 'Listing House 2']);
+
+    $homeResponse
         ->assertSee('View More Transient')
         ->assertSee('href="'.route('public.transients').'"', false);
 
-    $this->withHeader('X-Requested-With', 'XMLHttpRequest')
+    $ajaxResponse = $this->withHeader('X-Requested-With', 'XMLHttpRequest')
         ->get(route('home'))
-        ->assertSee('Listing House 4')
-        ->assertSee('Listing House 3')
-        ->assertSee('Listing House 2')
-        ->assertDontSee('Listing House 1')
+        ->assertOk()
         ->assertSee('View More Transient');
+    expect($houseNamesInResults($ajaxResponse->getContent()))
+        ->toBe(['Listing House 4', 'Listing House 3', 'Listing House 2']);
 
     $this->get(route('public.transients'))
         ->assertSee('Listing House 1')
@@ -92,9 +103,10 @@ test('the public home shows three transient houses and links to the complete lis
 
     TransientHouse::where('name', 'Listing House 1')->delete();
 
-    $this->get(route('home'))
-        ->assertSee('Listing House 2')
-        ->assertSee('Listing House 3')
-        ->assertSee('Listing House 4')
+    $homeAfterDeletion = $this->get(route('home'))->assertOk();
+    expect($houseNamesInResults($homeAfterDeletion->getContent()))
+        ->toBe(['Listing House 4', 'Listing House 3', 'Listing House 2']);
+
+    $homeAfterDeletion
         ->assertDontSee('View More Transient');
 });

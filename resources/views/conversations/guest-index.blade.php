@@ -8,7 +8,9 @@
                 <h1>Your conversations</h1>
                 <p>Ask a property team a question or pick up where you left off.</p>
             </div>
-            <span class="chat-secure-note"><i class="fa fa-lock" aria-hidden="true"></i> Private to your account</span>
+            <a class="text-muted fs-sm" href="{{ route('home') }}">
+                <i class="fa fa-arrow-left" aria-hidden="true"></i> Back to MCTBS
+            </a>
         </header>
 
         <div class="chat-workspace chat-workspace--guest">

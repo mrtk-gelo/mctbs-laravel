@@ -1,7 +1,10 @@
 @php
     $isStaffInbox = $listType === 'staff';
+    $guestName = $conversation->guest
+        ? trim($conversation->guest->first_name.' '.$conversation->guest->last_name)
+        : (trim((string) $conversation->visitor_name) ?: 'Public visitor');
     $avatarName = $isStaffInbox
-        ? $conversation->guest->first_name.' '.$conversation->guest->last_name
+        ? $guestName
         : $conversation->house->name;
     $title = $isStaffInbox
         ? $avatarName
@@ -19,11 +22,19 @@
     $statusHint = $bookingStatus === \App\Support\BookingStatus::ACCEPTED
         ? 'Dates are reserved while the guest submits the downpayment.'
         : $bookingStatus;
+    $conversationUrl = route($conversationRoute, array_merge(
+        ['conversationId' => $conversation->conversation_id],
+        $isStaffInbox ? request()->only('filter') : []
+    ));
 @endphp
 
 <a
     class="chat-list-item{{ $isActive ? ' is-active' : '' }}"
-    href="{{ route($conversationRoute, $conversation->conversation_id) }}"
+    href="{{ $conversationUrl }}"
+    data-chat-inbox-item
+    data-chat-guest-name="{{ \Illuminate\Support\Str::lower($guestName) }}"
+    data-chat-unread="{{ ($conversation->unread_message_count ?? 0) > 0 ? 'true' : 'false' }}"
+    data-chat-anonymous="{{ $conversation->guest_user_id === null ? 'true' : 'false' }}"
     @if ($isActive) aria-current="page" @endif
 >
     <span class="chat-list-avatar" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($avatarName, 0, 1)) }}</span>
@@ -43,7 +54,7 @@
         </span>
         <span class="chat-list-foot">
             <span class="chat-status chat-status--{{ $statusClass }}" title="{{ $statusHint }}">{{ $bookingStatus }}</span>
-            @if ($conversation->unread_message_count > 0)
+            @if (($conversation->unread_message_count ?? 0) > 0)
                 <span class="chat-unread-count" aria-label="{{ $conversation->unread_message_count }} unread messages">{{ $conversation->unread_message_count }}</span>
             @endif
         </span>

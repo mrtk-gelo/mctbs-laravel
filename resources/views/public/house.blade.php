@@ -1,4 +1,4 @@
-<x-shell title="{{ $house->name }} | MCTBS">
+<x-shell title="{{ $house->name }} | MCTBS" :chat-house="$house">
     <x-slot:nav>@include('partials.nav', ['activePage' => 'transients'])</x-slot:nav>
 
     <style>

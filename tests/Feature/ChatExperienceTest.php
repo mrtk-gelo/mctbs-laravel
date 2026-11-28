@@ -61,7 +61,7 @@ function chatExperienceFaq(TransientHouse $house, Unit $unit, string $answer): C
     ]);
 }
 
-test('public unit pages show only FAQs for that unit and answer matching questions', function () {
+test('public unit FAQs are answered in the chat launcher using unit context', function () {
     $owner = chatExperienceUser('Owner', 'faq-owner@example.com');
     $house = chatExperienceHouse($owner, 'FAQ House');
     $unitA = chatExperienceUnit($house, 'Suite A');
@@ -72,26 +72,33 @@ test('public unit pages show only FAQs for that unit and answer matching questio
     $this->get(route('public.unit', $unitA))
         ->assertOk()
         ->assertSee('guest-chat-launcher')
-        ->assertSee('public-chat-card', false)
-        ->assertSee('public-chat-message--assistant', false)
+        ->assertDontSee('public-chat-card', false)
+        ->assertDontSee('unit-faqs', false)
+        ->assertDontSee('Ask about this unit')
+        ->assertSee('data-public-chat-widget', false)
+        ->assertSee('data-chat-question="What is the price per night?"', false)
         ->assertSee('Quick questions')
-        ->assertSee('What is the price per night?')
-        ->assertSee('Breakfast is included in Suite A.')
-        ->assertDontSee('Breakfast is not included in Suite B.');
+        ->assertSee('Does this room include breakfast?')
+        ->assertDontSee('Ask about this unit');
 
-    $this->from(route('public.unit', $unitA))
-        ->post(route('public.units.questions.store', $unitA), [
+    $this->postJson(route('public.visitor-chat.answer'), [
+            'house_id' => $house->house_id,
+            'unit_id' => $unitA->unit_id,
             'question' => 'What is the price per night?',
         ])
-        ->assertRedirect(route('public.unit', $unitA))
-        ->assertSessionHas('unitFaqAnswer.answer', 'The current listed rate for Suite A is ₱1,800.00 per night.');
+        ->assertOk()
+        ->assertJson([
+            'answered' => true,
+            'answer' => 'The current listed rate for Suite A is ₱1,800.00 per night.',
+        ]);
 
-    $this->from(route('public.unit', $unitA))
-        ->post(route('public.units.questions.store', $unitA), [
+    $this->postJson(route('public.visitor-chat.answer'), [
+            'house_id' => $house->house_id,
+            'unit_id' => $unitA->unit_id,
             'question' => 'Does this room include breakfast?',
         ])
-        ->assertRedirect(route('public.unit', $unitA))
-        ->assertSessionHas('unitFaqAnswer.answer', 'Breakfast is included in Suite A.');
+        ->assertOk()
+        ->assertJsonPath('answer', 'Breakfast is included in Suite A.');
 
     expect(Conversation::query()->count())->toBe(0);
 });
@@ -134,7 +141,8 @@ test('guest unit questions keep unit context and automatic FAQs out of staff att
         ->get(route('guest.conversations.index'))
         ->assertOk()
         ->assertSee('chat-workspace--guest', false)
-        ->assertSee('guest-chat-launcher')
+        ->assertDontSee('guest-chat-launcher')
+        ->assertSee('Back to MCTBS')
         ->assertSee('Breakfast question')
         ->assertDontSee('Messages</a>');
 });
@@ -177,24 +185,38 @@ test('guest and staff see the conversation as a message thread beside their chat
         ->assertSee('Check-in starts at 3 PM.');
 });
 
-test('unit questions without a matched FAQ are not saved until a guest signs in', function () {
+test('anonymous guests can send unanswered questions with contact details from the chat launcher', function () {
+    Mail::fake();
     $owner = chatExperienceUser('Owner', 'unanswered-owner@example.com');
     $house = chatExperienceHouse($owner, 'Unanswered House');
     $unit = chatExperienceUnit($house, 'Quiet Room');
 
-    $this->from(route('public.unit', $unit))
-        ->post(route('public.units.questions.store', $unit), [
-            'question' => 'Can I bring a pet?',
-        ])
-        ->assertRedirect(route('public.unit', $unit))
-        ->assertSessionHas('unitFaqUnanswered', true)
-        ->assertSessionHas('url.intended');
-
     $this->get(route('public.unit', $unit))
-        ->assertSee('Sign in as a guest')
-        ->assertSee('Can I bring a pet?');
+        ->assertOk()
+        ->assertSee('data-chat-contact-form', false)
+        ->assertSee('guest-chat-name')
+        ->assertSee('guest-chat-email');
 
-    expect(Conversation::query()->count())->toBe(0);
+    $response = $this->post(route('public.visitor-conversations.store'), [
+            'house_id' => $house->house_id,
+            'unit_id' => $unit->unit_id,
+            'name' => 'Potential Guest',
+            'email' => 'potential-guest@example.com',
+            'message' => 'Can I bring a pet?',
+        ])
+        ->assertRedirect();
+    $conversation = Conversation::query()->where('visitor_email', 'potential-guest@example.com')->firstOrFail();
+
+    expect($response->headers->get('Location'))
+        ->toBe(route('public.visitor-conversations.show', $conversation->conversation_id))
+        ->and($conversation->visitor_name)
+        ->toBe('Potential Guest')
+        ->and($conversation->unit_id)
+        ->toBe($unit->unit_id)
+        ->and($conversation->messages()->where('sender_type', 'visitor')->value('message'))
+        ->toBe('Can I bring a pet?')
+        ->and($conversation->messages()->where('sender_type', 'system')->exists())
+        ->toBeTrue();
 });
 
 test('guest conversation creation rejects a unit from a different property', function () {

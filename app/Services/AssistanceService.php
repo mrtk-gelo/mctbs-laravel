@@ -9,6 +9,7 @@ use App\Models\Conversation;
 use App\Models\ConversationNote;
 use App\Models\Invitation;
 use App\Models\Role;
+use App\Models\TransientHouse;
 use App\Models\Unit;
 use App\Models\User;
 use App\Support\UnitTimeFormatter;
@@ -135,6 +136,57 @@ class AssistanceService
             'What are the property policies?',
             'Is there an extra guest fee?',
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function quickQuestionsForHouse(): array
+    {
+        return [
+            'What is the property address?',
+            'What amenities are available?',
+            'What are the property policies?',
+            'How can I contact the property?',
+        ];
+    }
+
+    public function answerHouseQuestion(TransientHouse $house, string $question): ?string
+    {
+        $house->loadMissing('amenities');
+        $question = Str::lower(preg_replace('/[^a-z0-9]+/i', ' ', $question) ?? '');
+
+        if ($this->questionContainsAny($question, ['address', 'location', 'where is'])) {
+            return 'The property address is '.implode(', ', array_filter([
+                $house->address,
+                $house->barangay,
+                $house->city,
+            ])).'.';
+        }
+
+        if ($this->questionContainsAny($question, ['amenity', 'amenities', 'facilities'])) {
+            $amenities = $house->amenities->pluck('name')->filter()->values();
+
+            return $amenities->isNotEmpty()
+                ? 'Amenities listed for this property include: '.$amenities->join(', ').'.'
+                : 'No amenities have been listed for this property yet.';
+        }
+
+        if ($this->questionContainsAny($question, ['policy', 'policies', 'house rule', 'rules'])) {
+            $policies = trim((string) $house->policies);
+
+            return $policies !== ''
+                ? 'The property policies are: '.$policies
+                : 'No property policies have been added yet. A team member can help with specific questions.';
+        }
+
+        if ($this->questionContainsAny($question, ['contact', 'phone number', 'contact number'])) {
+            return $house->contact_number
+                ? 'You can contact the property at '.$house->contact_number.'.'
+                : 'No contact number has been listed for this property yet.';
+        }
+
+        return null;
     }
 
     public function answerUnitQuestion(Unit $unit, string $question): ?string

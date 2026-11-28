@@ -206,22 +206,34 @@ class ConversationService
     public function visitorQuestionRequiresSignIn(string $question): bool
     {
         $question = Str::lower(preg_replace('/[^a-z0-9]+/i', ' ', $question) ?? '');
-
-        return Str::contains($question, [
+        $sensitiveTerms = [
             'my booking',
             'my reservation',
             'existing booking',
             'existing reservation',
             'booking status',
             'reservation status',
-            'payment status',
+            'booking details',
+            'reservation details',
+            'my stay',
+            'payment',
+            'paid',
             'refund',
-            'cancel my booking',
-            'change my booking',
-            'modify my booking',
+            'balance due',
+            'amount due',
+            'transaction',
+            'receipt',
             'my account',
             'account details',
-        ]);
+            'personal information',
+        ];
+        $bookingChanges = ['cancel', 'change', 'modify', 'edit', 'reschedule', 'move'];
+
+        return Str::contains($question, $sensitiveTerms)
+            || (
+                Str::contains($question, $bookingChanges)
+                && Str::contains($question, ['booking', 'reservation', 'stay', 'dates'])
+            );
     }
 
     public function sendVisitorMessage(
@@ -255,7 +267,7 @@ class ConversationService
             $assistance = app(AssistanceService::class);
             $unitAnswer = $conversation->unit
                 ? $assistance->answerUnitQuestion($conversation->unit, $body)
-                : null;
+                : $assistance->answerHouseQuestion($conversation->house, $body);
             $faq = $unitAnswer
                 ? null
                 : $assistance->findFaq($conversation->house_id, $body, $conversation->unit_id);
