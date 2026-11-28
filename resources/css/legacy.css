@@ -60,7 +60,7 @@ img { max-width: 100%; }
   color: #fff; font-size: 20px; font-weight: 700; text-decoration: none;
   display: flex; align-items: center; gap: 8px;
 }
-.brand-icon { background-image: url('/img/mctbs.png'); width: 32px; height: 32px; background-size: contain; background-repeat: no-repeat; }
+.brand-icon { background-image: url('/img/mctbs-mark.png'); width: 32px; height: 32px; background-size: contain; background-position: center; background-repeat: no-repeat; }
 .topnav-center { display: flex; align-items: center; flex: 1; gap: 4px; padding: 0 16px; }
 .topnav-center > a, .nav-dropdown > a, .nav-dropdown > .nav-dropdown-toggle {
   color: rgba(255,255,255,.9); padding: 8px 14px; border-radius: 6px;
