@@ -5,6 +5,7 @@
         $isStaff = auth()->user()->role->name === 'Staff';
         $conversationRoute = $isStaff ? 'staff.conversations.show' : 'owner.conversations.show';
         $inboxRoute = $isStaff ? 'staff.conversations.index' : 'owner.conversations.index';
+        $createRoute = $isStaff ? 'staff.conversations.create' : 'owner.conversations.create';
     @endphp
 
     <div class="container chat-page">
@@ -18,61 +19,15 @@
         </header>
 
         <div class="chat-workspace chat-workspace--staff">
-            <aside class="chat-sidebar" aria-label="Team conversations">
-                <div class="chat-sidebar-header">
-                    <div>
-                        <h2>Inbox</h2>
-                        <p>{{ $conversations->count() }} {{ \Illuminate\Support\Str::plural('chat', $conversations->count()) }}</p>
-                    </div>
-                    <span class="chat-sidebar-icon"><i class="fa fa-inbox" aria-hidden="true"></i></span>
-                </div>
-
-                <form class="chat-filter-form" role="search" data-chat-search-form>
-                    <label class="sr-only" for="chat-search">Search guest names</label>
-                    <div class="chat-search-field">
-                        <i class="fa fa-magnifying-glass" aria-hidden="true"></i>
-                        <input id="chat-search" type="search" placeholder="Search guest names" autocomplete="off" data-chat-search-input>
-                    </div>
-                    <button class="chat-search-clear" type="button" aria-label="Clear search" title="Clear search" data-chat-search-clear hidden>
-                        <i class="fa fa-xmark" aria-hidden="true"></i>
-                    </button>
-                </form>
-
-                <nav class="chat-status-tabs" aria-label="Filter conversations" data-chat-inbox-filters>
-                    @foreach (['all' => 'All', 'unread' => 'Unread', 'guest' => 'Guest'] as $filterKey => $filterLabel)
-                        <a
-                            class="chat-status-tab{{ $filter === $filterKey ? ' is-active' : '' }}{{ $counts[$filterKey] > 0 ? ' has-chats' : '' }}"
-                            href="{{ route($inboxRoute, ['filter' => $filterKey]) }}"
-                            @if ($filter === $filterKey) aria-current="page" @endif
-                        >
-                            <span>{{ $filterLabel }}</span>
-                            <span class="chat-tab-count">{{ $counts[$filterKey] }}</span>
-                        </a>
-                    @endforeach
-                </nav>
-
-                <nav class="chat-conversation-list" aria-label="Inbox conversation list" data-chat-inbox-list>
-                    @forelse ($conversations as $conversation)
-                        @include('conversations.partials.list-item', [
-                            'conversation' => $conversation,
-                            'conversationRoute' => $conversationRoute,
-                            'listType' => 'staff',
-                            'activeConversationId' => null,
-                        ])
-                    @empty
-                        <div class="chat-list-empty">
-                            <span class="chat-empty-icon"><i class="fa fa-inbox" aria-hidden="true"></i></span>
-                            <strong>No conversations found</strong>
-                            <span>New guest messages will appear here.</span>
-                        </div>
-                    @endforelse
-                </nav>
-                <div class="chat-list-empty" data-chat-search-empty hidden>
-                    <span class="chat-empty-icon"><i class="fa fa-magnifying-glass" aria-hidden="true"></i></span>
-                    <strong>No matching guests</strong>
-                    <span>Try another name or clear the search.</span>
-                </div>
-            </aside>
+            @include('conversations.partials.staff-sidebar', [
+                'conversations' => $conversations,
+                'counts' => $counts,
+                'filter' => $filter,
+                'conversationRoute' => $conversationRoute,
+                'inboxRoute' => $inboxRoute,
+                'createRoute' => $createRoute,
+                'activeConversationId' => null,
+            ])
 
             <main class="chat-main chat-inbox-welcome">
                 <span class="chat-start-icon"><i class="fa fa-comments" aria-hidden="true"></i></span>

@@ -82,10 +82,10 @@ test('public unit FAQs are answered in the chat launcher using unit context', fu
         ->assertDontSee('Ask about this unit');
 
     $this->postJson(route('public.visitor-chat.answer'), [
-            'house_id' => $house->house_id,
-            'unit_id' => $unitA->unit_id,
-            'question' => 'What is the price per night?',
-        ])
+        'house_id' => $house->house_id,
+        'unit_id' => $unitA->unit_id,
+        'question' => 'What is the price per night?',
+    ])
         ->assertOk()
         ->assertJson([
             'answered' => true,
@@ -93,10 +93,10 @@ test('public unit FAQs are answered in the chat launcher using unit context', fu
         ]);
 
     $this->postJson(route('public.visitor-chat.answer'), [
-            'house_id' => $house->house_id,
-            'unit_id' => $unitA->unit_id,
-            'question' => 'Does this room include breakfast?',
-        ])
+        'house_id' => $house->house_id,
+        'unit_id' => $unitA->unit_id,
+        'question' => 'Does this room include breakfast?',
+    ])
         ->assertOk()
         ->assertJsonPath('answer', 'Breakfast is included in Suite A.');
 
@@ -179,6 +179,14 @@ test('guest and staff see the conversation as a message thread beside their chat
         ->get(route('staff.conversations.show', $conversation->conversation_id))
         ->assertSee('chat-workspace--staff chat-workspace--thread', false)
         ->assertSee('chat-details', false)
+        ->assertSee('data-chat-details-toggle', false)
+        ->assertSee('aria-expanded="false"', false)
+        ->assertSee('data-chat-details-panel', false)
+        ->assertSee('Recent conversations')
+        ->assertSee('Search guest names')
+        ->assertSee('Guest status')
+        ->assertSee('Registered guest')
+        ->assertDontSee('chat-recent-conversations', false)
         ->assertSee('chat-message-row--incoming', false)
         ->assertSee('chat-message-row--outgoing', false)
         ->assertSee('Booking context')
@@ -198,12 +206,12 @@ test('anonymous guests can send unanswered questions with contact details from t
         ->assertSee('guest-chat-email');
 
     $response = $this->post(route('public.visitor-conversations.store'), [
-            'house_id' => $house->house_id,
-            'unit_id' => $unit->unit_id,
-            'name' => 'Potential Guest',
-            'email' => 'potential-guest@example.com',
-            'message' => 'Can I bring a pet?',
-        ])
+        'house_id' => $house->house_id,
+        'unit_id' => $unit->unit_id,
+        'name' => 'Potential Guest',
+        'email' => 'potential-guest@example.com',
+        'message' => 'Can I bring a pet?',
+    ])
         ->assertRedirect();
     $conversation = Conversation::query()->where('visitor_email', 'potential-guest@example.com')->firstOrFail();
 
