@@ -1,4 +1,4 @@
-@foreach ($messages as $message)
+@foreach (($hideSystemMessages ?? false) ? $messages->where('sender_type', '!=', 'system') : $messages as $message)
     @php
         $isSystemMessage = in_array($message->sender_type, ['assistant', 'system'], true);
         $isOutgoing = ! $isSystemMessage && (int) $message->sender_id === (int) $viewerUserId;

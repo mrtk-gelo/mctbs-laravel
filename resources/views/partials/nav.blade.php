@@ -22,7 +22,6 @@
                     <a href="{{ route('owner.houses.index') }}" class="{{ in_array($activePage ?? '', ['houses', 'units'], true) ? 'active' : '' }}"><i class="fa fa-building"></i> Properties</a>
                     <a href="{{ route('owner.bookings.index') }}" class="{{ ($activePage ?? '') === 'bookings' ? 'active' : '' }}"><i class="fa fa-calendar-check"></i> Bookings</a>
                     <a href="{{ route('owner.conversations.index') }}" class="{{ ($activePage ?? '') === 'messages' ? 'active' : '' }}"><i class="fa fa-comments"></i> Messages @if (($unreadConversationCount ?? 0) > 0)<span class="nav-unread-dot" title="{{ $unreadConversationCount }} unread conversations" aria-label="{{ $unreadConversationCount }} unread conversations"></span>@endif</a>
-                    <a href="{{ route('owner.assistance.index') }}" class="{{ ($activePage ?? '') === 'assistance' ? 'active' : '' }}"><i class="fa fa-book-open"></i> Assistance</a>
                     <a href="{{ route('owner.bookings.index', ['section' => 'calendar']) }}" class="{{ ($activePage ?? '') === 'calendar' ? 'active' : '' }}"><i class="fa fa-calendar"></i> Calendar</a>
                     <a href="{{ route('owner.bookings.index', ['section' => 'reports']) }}" class="{{ ($activePage ?? '') === 'reports' ? 'active' : '' }}"><i class="fa fa-chart-bar"></i> Reports</a>
                     <a href="{{ route('owner.admins.index') }}" class="{{ ($activePage ?? '') === 'staff' ? 'active' : '' }}"><i class="fa fa-user-shield"></i> Staff</a>
@@ -33,7 +32,6 @@
                     <a href="{{ route('staff.houses.index') }}" class="{{ in_array($activePage ?? '', ['houses', 'units'], true) ? 'active' : '' }}"><i class="fa fa-building"></i> Properties</a>
                     <a href="{{ route('staff.bookings.index') }}" class="{{ ($activePage ?? '') === 'bookings' ? 'active' : '' }}"><i class="fa fa-calendar-check"></i> Bookings</a>
                     <a href="{{ route('staff.conversations.index') }}" class="{{ ($activePage ?? '') === 'messages' ? 'active' : '' }}"><i class="fa fa-comments"></i> Messages @if (($unreadConversationCount ?? 0) > 0)<span class="nav-unread-dot" title="{{ $unreadConversationCount }} unread conversations" aria-label="{{ $unreadConversationCount }} unread conversations"></span>@endif</a>
-                    <a href="{{ route('staff.assistance.index') }}" class="{{ ($activePage ?? '') === 'assistance' ? 'active' : '' }}"><i class="fa fa-book-open"></i> Assistance</a>
                     <a href="{{ route('staff.bookings.index', ['section' => 'calendar']) }}" class="{{ ($activePage ?? '') === 'calendar' ? 'active' : '' }}"><i class="fa fa-calendar"></i> Calendar</a>
                     <a href="{{ route('staff.bookings.index', ['section' => 'reports']) }}" class="{{ ($activePage ?? '') === 'reports' ? 'active' : '' }}"><i class="fa fa-chart-bar"></i> Reports</a>
                     @break

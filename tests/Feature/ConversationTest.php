@@ -13,6 +13,7 @@ use App\Services\ConversationService;
 use App\Support\BookingStatus;
 use App\Support\PaymentStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 
 uses(RefreshDatabase::class);
 
@@ -126,39 +127,90 @@ test('sending a message with the same client token does not duplicate it', funct
     expect($conversation->messages()->where('sender_type', 'user')->count())->toBe(1);
 });
 
-test('staff can assign and resolve a property conversation', function () {
-    $owner = conversationUser('Owner', 'owner-assignment@example.com');
-    $staff = conversationUser('Staff', 'staff-assignment@example.com');
-    $guest = conversationUser('Guest', 'guest-assignment@example.com');
-    $house = conversationHouse($owner, 'Assignment House');
+test('staff replies without assigning or resolving a property conversation', function () {
+    Mail::fake();
+    $owner = conversationUser('Owner', 'owner-reply@example.com');
+    $staff = conversationUser('Staff', 'staff-reply@example.com');
+    $guest = conversationUser('Guest', 'guest-reply@example.com');
+    $house = conversationHouse($owner, 'Reply House');
     $staffRoleId = Role::where('name', 'Staff')->firstOrFail()->role_id;
 
     $owner->invitationsSent()->create([
         'house_id' => $house->house_id,
         'role_id' => $staffRoleId,
         'email' => $staff->email,
-        'token' => 'assignment-token',
+        'token' => 'reply-token',
         'used_at' => now(),
         'expires_at' => now()->addDay(),
     ]);
 
     $conversation = app(ConversationService::class)->createForGuest($guest, $house->house_id);
 
-    $this->actingAs($owner)
-        ->post(route('owner.conversations.assign', $conversation->conversation_id), [
-            'assigned_to' => $staff->user_id,
+    $this->actingAs($staff)
+        ->post(route('staff.conversations.store', $conversation->conversation_id), [
+            'message' => 'We can help with that.',
         ])
         ->assertRedirect();
 
-    expect($conversation->fresh()->assigned_to)->toBe($staff->user_id)
-        ->and($conversation->fresh()->status)->toBe('assigned');
+    expect($conversation->fresh()->assigned_to)->toBeNull()
+        ->and($conversation->fresh()->status)->toBe('open')
+        ->and($conversation->fresh()->resolved_at)->toBeNull()
+        ->and($conversation->messages()->where('message', 'We can help with that.')->exists())->toBeTrue();
+});
 
-    $this->actingAs($staff)
-        ->post(route('staff.conversations.resolve', $conversation->conversation_id))
-        ->assertRedirect();
+test('owner inbox filters chats by each guest property latest booking status', function () {
+    $owner = conversationUser('Owner', 'owner-status-filter@example.com');
+    $guest = conversationUser('Guest', 'guest-status-filter@example.com');
+    $acceptedGuest = conversationUser('Guest', 'accepted-status-filter@example.com');
+    $legacyGuest = conversationUser('Guest', 'legacy-status-filter@example.com');
+    $noBookingGuest = conversationUser('Guest', 'no-booking-status-filter@example.com');
+    $house = conversationHouse($owner, 'Status Filter House');
+    $unit = Unit::create([
+        'house_id' => $house->house_id,
+        'unit_type' => 'Status Suite',
+        'capacity' => 2,
+        'price' => 1800,
+        'status' => 'Available',
+    ]);
 
-    expect($conversation->fresh()->status)->toBe('resolved')
-        ->and($conversation->fresh()->resolved_at)->not->toBeNull();
+    $createBooking = fn (User $bookingGuest, string $status, int $daysAgo): Booking => Booking::create([
+        'user_id' => $bookingGuest->user_id,
+        'unit_id' => $unit->unit_id,
+        'check_in' => now()->subDays($daysAgo),
+        'check_out' => now()->subDays($daysAgo)->addDay(),
+        'adult_count' => 1,
+        'child_count' => 0,
+        'total_price' => 1800,
+        'status' => $status,
+    ]);
+
+    $createBooking($guest, BookingStatus::ACCEPTED, 10);
+    $createBooking($guest, BookingStatus::COMPLETED, 5);
+    $createBooking($acceptedGuest, BookingStatus::ACCEPTED, 3);
+    $createBooking($legacyGuest, BookingStatus::CHECKED_OUT, 4);
+
+    app(ConversationService::class)->createForGuest($guest, $house->house_id, 'Latest complete chat');
+    app(ConversationService::class)->createForGuest($acceptedGuest, $house->house_id, 'Accepted chat');
+    app(ConversationService::class)->createForGuest($legacyGuest, $house->house_id, 'Legacy checked-out chat');
+    app(ConversationService::class)->createForGuest($noBookingGuest, $house->house_id, 'No booking chat');
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.index', ['booking_status' => BookingStatus::COMPLETED]))
+        ->assertOk()
+        ->assertSee('Latest complete chat')
+        ->assertSee('Legacy checked-out chat')
+        ->assertDontSee('Accepted chat')
+        ->assertDontSee('No booking chat');
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.index', ['booking_status' => BookingStatus::ACCEPTED]))
+        ->assertSee('Accepted chat')
+        ->assertDontSee('Latest complete chat');
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.index', ['booking_status' => 'none']))
+        ->assertSee('No booking chat')
+        ->assertDontSee('Accepted chat');
 });
 
 test('guest contextual assistance uses only the guest booking and does not mutate payment records', function () {
@@ -200,9 +252,19 @@ test('guest contextual assistance uses only the guest booking and does not mutat
         ])
         ->assertRedirect();
 
-    expect($conversation->messages()->where('message_type', 'context')->value('message'))
-        ->toContain(PaymentStatus::VERIFIED)
+    expect($conversation->messages()->where('sender_type', 'assistant')->value('message'))
+        ->toBe('Your latest booking payment status is '.PaymentStatus::VERIFIED.'.')
         ->and($payment->fresh()->payment_status)->toBe(PaymentStatus::VERIFIED);
+
+    $this->actingAs($guest)
+        ->post(route('guest.conversations.reply', $conversation->conversation_id), [
+            'message' => 'What time are check-in and check-out?',
+        ])
+        ->assertRedirect();
+
+    expect($conversation->messages()->where('sender_type', 'assistant')->latest('message_id')->value('message'))
+        ->toBe('Your check-in date is '.$booking->check_in->format('M j, Y').' at 2:00 PM and check-out date is '
+            .$booking->check_out->format('M j, Y').' at 12:00 NN.');
 
     $otherConversation = app(ConversationService::class)->createForGuest($otherGuest, $house->house_id);
     $this->actingAs($otherGuest)

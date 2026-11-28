@@ -6,9 +6,6 @@
         $conversationRoute = $isStaff ? 'staff.conversations.show' : 'owner.conversations.show';
         $inboxRoute = $isStaff ? 'staff.conversations.index' : 'owner.conversations.index';
         $replyRoute = $isStaff ? 'staff.conversations.store' : 'owner.conversations.store';
-        $assignRoute = $isStaff ? 'staff.conversations.assign' : 'owner.conversations.assign';
-        $resolveRoute = $isStaff ? 'staff.conversations.resolve' : 'owner.conversations.resolve';
-        $reopenRoute = $isStaff ? 'staff.conversations.reopen' : 'owner.conversations.reopen';
         $notesRoute = $isStaff ? 'staff.conversations.notes.store' : 'owner.conversations.notes.store';
     @endphp
 
@@ -19,7 +16,7 @@
                 <h1>Messages</h1>
                 <p>Review the guest's conversation and reply from one workspace.</p>
             </div>
-            <a class="chat-header-link" href="{{ route($inboxRoute) }}">
+            <a class="text-muted fs-sm" href="{{ route($inboxRoute) }}">
                 <i class="fa fa-arrow-left" aria-hidden="true"></i> Back to inbox
             </a>
         </header>
@@ -55,16 +52,17 @@
 
             <main class="chat-thread">
                 <header class="chat-thread-header">
-                    <a class="chat-back-link" href="{{ route($inboxRoute) }}" aria-label="Back to inbox">
-                        <i class="fa fa-arrow-left" aria-hidden="true"></i>
-                    </a>
                     <span class="chat-thread-avatar" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($conversation->guest->first_name, 0, 1)) }}</span>
                     <div class="chat-thread-heading">
                         <span class="chat-eyebrow">{{ $conversation->house->name }}{{ $conversation->unit ? ' · '.$conversation->unit->unit_type : '' }}</span>
                         <h2>{{ $conversation->subject ?: $conversation->guest->first_name.' '.$conversation->guest->last_name }}</h2>
                         <p>Guest conversation · {{ $conversation->guest->email }}</p>
                     </div>
-                    <span class="chat-status chat-status--{{ $conversation->status }}">{{ str_replace('_', ' ', ucfirst($conversation->status)) }}</span>
+                    @if ($conversation->booking_status)
+                        <span class="chat-status chat-status--{{ \Illuminate\Support\Str::slug(\App\Support\BookingStatus::canonical($conversation->booking_status)) }}" title="{{ $conversation->booking_status === \App\Support\BookingStatus::ACCEPTED ? 'Dates are reserved while downpayment is pending.' : \App\Support\BookingStatus::canonical($conversation->booking_status) }}">
+                            {{ \App\Support\BookingStatus::canonical($conversation->booking_status) }}
+                        </span>
+                    @endif
                 </header>
 
                 <section class="chat-message-list" aria-label="Conversation messages" aria-live="polite">
@@ -72,6 +70,7 @@
                         @include('conversations.partials.messages', [
                             'messages' => $conversation->messages,
                             'viewerUserId' => auth()->id(),
+                            'hideSystemMessages' => true,
                         ])
                     @else
                         <div class="chat-list-empty">
@@ -101,7 +100,7 @@
                             <i class="fa fa-paper-plane" aria-hidden="true"></i> Send
                         </button>
                     </form>
-                    <p class="chat-composer-note"><i class="fa fa-lock" aria-hidden="true"></i> Replies are sent in the guest’s MCTBS conversation.</p>
+                    <p class="chat-composer-note"><i class="fa fa-lock" aria-hidden="true"></i> Replies are sent in the guest's MCTBS conversation.</p>
                 </div>
             </main>
 
@@ -124,17 +123,6 @@
                             <strong>{{ $conversation->unit->unit_type }}</strong>
                         </div>
                     @endif
-                    <form method="POST" action="{{ route($assignRoute, $conversation->conversation_id) }}" class="chat-assignment-form">
-                        @csrf
-                        <label class="form-label" for="assigned_to">Assigned to</label>
-                        <select class="form-control" id="assigned_to" name="assigned_to" required>
-                            @foreach ($assignees as $assignee)
-                                <option value="{{ $assignee->user_id }}" @selected($conversation->assigned_to === $assignee->user_id)>{{ $assignee->first_name }} {{ $assignee->last_name }} · {{ $assignee->role->name }}</option>
-                            @endforeach
-                        </select>
-                        @error('assigned_to')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
-                        <button class="btn btn-outline-primary btn-sm" type="submit">Update assignment</button>
-                    </form>
                 </section>
 
                 <section class="chat-detail-section">
@@ -181,19 +169,8 @@
                 </section>
 
                 <section class="chat-detail-section">
-                    <div class="chat-detail-actions">
-                        @if ($conversation->status === 'resolved')
-                            <form method="POST" action="{{ route($reopenRoute, $conversation->conversation_id) }}">
-                                @csrf
-                                <button class="btn btn-outline-primary btn-sm" type="submit">Reopen conversation</button>
-                            </form>
-                        @else
-                            <form method="POST" action="{{ route($resolveRoute, $conversation->conversation_id) }}">
-                                @csrf
-                                <button class="btn btn-outline-primary btn-sm" type="submit">Mark as resolved</button>
-                            </form>
-                        @endif
-                    </div>
+                    <h3><i class="fa fa-comments" aria-hidden="true"></i> Conversation</h3>
+                    <p class="chat-detail-empty">This chat stays in the inbox history. The team can continue replying whenever the guest sends a message.</p>
                 </section>
 
                 <details class="chat-internal-notes">
