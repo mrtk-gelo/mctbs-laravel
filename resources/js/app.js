@@ -189,6 +189,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    document.addEventListener('click', (event) => {
+        document.querySelectorAll('.chat-message-menu[open], .chat-actions-menu[open], .chat-folder-menu[open]')
+            .forEach((menu) => {
+                if (!menu.contains(event.target)) {
+                    menu.removeAttribute('open');
+                }
+            });
+    });
+
     document.querySelectorAll('[data-booking-filters]').forEach((filters) => {
         const root = filters.closest('[data-booking-filter-root]') ?? document;
         const searchInput = filters.querySelector('[data-booking-search]');
@@ -759,6 +768,29 @@ document.addEventListener('DOMContentLoaded', () => {
             '__message_id__',
             encodeURIComponent(String(messageId))
         );
+        const composer = thread?.querySelector('[data-message-composer]');
+        const composerForm = composer?.closest('form');
+        const resizeComposer = () => {
+            if (!composer) {
+                return;
+            }
+
+            composer.style.height = 'auto';
+            composer.style.height = `${Math.min(composer.scrollHeight, 120)}px`;
+            composer.style.overflowY = composer.scrollHeight > 120 ? 'auto' : 'hidden';
+        };
+
+        composer?.addEventListener('input', resizeComposer);
+        composer?.addEventListener('focus', resizeComposer);
+        composer?.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+                return;
+            }
+
+            event.preventDefault();
+            composerForm?.requestSubmit();
+        });
+        resizeComposer();
 
         const showInteractionError = (error) => {
             if (syncStatus) {
@@ -789,7 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const createMessageRow = (message) => {
-            const isSystemMessage = ['assistant', 'system'].includes(message.senderType);
+            const isSystemMessage = message.senderType === 'system';
             const isOutgoing = !isSystemMessage && (
                 (message.senderId !== null && String(message.senderId) === viewerId)
                 || (message.senderType === 'visitor' && viewerType === 'visitor')
@@ -819,8 +851,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             row.append(meta, pinIndicator);
             if (message.replyTo) {
-                const quote = document.createElement('div');
+                const quote = document.createElement('button');
                 quote.className = 'chat-message-reply-quote';
+                quote.type = 'button';
+                quote.dataset.chatJumpToMessage = 'true';
+                quote.dataset.messageId = String(message.replyTo.id);
                 const quoteSender = document.createElement('strong');
                 quoteSender.textContent = `Replying to ${message.replyTo.senderName}`;
                 const quoteText = document.createElement('span');
@@ -1146,7 +1181,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const updateRecentConversation = (message) => {
-            if (viewerType === 'team' && ['assistant', 'system'].includes(message.senderType)) {
+            if (viewerType === 'team' && message.senderType === 'system') {
                 return;
             }
 
@@ -1202,7 +1237,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const shouldScroll = messageList.scrollHeight - messageList.scrollTop - messageList.clientHeight < 80;
                     payload.messages.forEach((message) => {
                         lastMessageId = Math.max(lastMessageId, Number(message.id));
-                        if (viewerType !== 'team' || !['assistant', 'system'].includes(message.senderType)) {
+                        if (viewerType !== 'team' || message.senderType !== 'system') {
                             appendMessage(message);
                             updateRecentConversation(message);
                         }

@@ -542,6 +542,7 @@ test('guest contextual assistance uses only the guest booking and does not mutat
     expect($conversation->messages()->where('sender_type', 'assistant')->value('message'))
         ->toBe('Your latest booking payment status is '.PaymentStatus::VERIFIED.'.')
         ->and($payment->fresh()->payment_status)->toBe(PaymentStatus::VERIFIED);
+    $paymentAnswer = $conversation->messages()->where('sender_type', 'assistant')->firstOrFail();
 
     $this->actingAs($guest)
         ->post(route('guest.conversations.reply', $conversation->conversation_id), [
@@ -558,6 +559,16 @@ test('guest contextual assistance uses only the guest booking and does not mutat
         ->get(route('guest.conversations.show', $otherConversation->conversation_id))
         ->assertOk()
         ->assertDontSee('CTX-001');
+
+    $ownerChatResponse = $this->actingAs($owner)
+        ->get(route('owner.conversations.show', $conversation->conversation_id))
+        ->assertSee('Your latest booking payment status is '.PaymentStatus::VERIFIED.'.')
+        ->assertSee('rows="1"', false)
+        ->assertDontSee('Your reply is visible only to you and the property team.');
+    expect(preg_match(
+        '/<article\s+class="chat-message-row chat-message-row--incoming"\s+data-message-id="'.$paymentAnswer->message_id.'"/',
+        $ownerChatResponse->getContent()
+    ))->toBe(1);
 });
 
 test('message menus let each participant unsend only their own messages and guests pin the other side', function () {
@@ -578,6 +589,7 @@ test('message menus let each participant unsend only their own messages and gues
         'conversation_id' => $conversation->conversation_id,
         'sender_id' => $owner->user_id,
         'sender_type' => 'user',
+        'reply_to_message_id' => $guestMessage->message_id,
         'message' => 'Owner message saved by the guest.',
         'message_type' => 'user',
         'sent_at' => $ownerSentAt,
@@ -589,6 +601,8 @@ test('message menus let each participant unsend only their own messages and gues
         ->assertSee('data-chat-pin-toggle', false)
         ->assertSee('Pinned messages')
         ->assertSee('Owner message saved by the guest.')
+        ->assertSee('Guest message that will be unsent.')
+        ->assertSee('data-chat-jump-to-message', false)
         ->assertSee('11:41 AM')
         ->assertDontSee('data-chat-react', false);
 
