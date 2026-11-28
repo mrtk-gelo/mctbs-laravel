@@ -1,4 +1,4 @@
-<x-accadmin-shell title="Account Admin Dashboard | MCTBS" heading="Dashboard">
+<x-accadmin-shell title="Account Admin Dashboard | MCTBS">
 
     <div class="container workspace-page">
         @if (session('success'))
@@ -69,32 +69,5 @@
             </div>
         </section>
 
-        <section class="card personnel-table-card sysadmin-dashboard-section" id="backups">
-            <div class="card-header">
-                <span>Database backups</span>
-                <form method="POST" action="{{ route('accadmin.backups.store') }}">
-                    @csrf
-                    <button type="submit" class="btn btn-primary"><i class="fa fa-database"></i> Backup</button>
-                </form>
-            </div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr><th scope="col">Date</th><th scope="col">Size</th><th scope="col">Action</th></tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($backups as $backup)
-                            <tr>
-                                <td>{{ $backup['created_at']->format('M j, Y g:i A') }}</td>
-                                <td>{{ $backup['size'] }}</td>
-                                <td><a class="btn btn-outline btn-sm" href="{{ route('accadmin.backups.download', $backup['filename']) }}">Download</a></td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="3" class="empty-table-cell">No backups yet.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </section>
     </div>
 </x-accadmin-shell>

@@ -15,6 +15,8 @@
                 @case('Account Admin')
                     <a href="{{ route('accadmin.dashboard') }}" class="{{ ($activePage ?? '') === 'dashboard' ? 'active' : '' }}"><i class="fa fa-gauge"></i> Dashboard</a>
                     <a href="{{ route('accadmin.owners.index') }}" class="{{ ($activePage ?? '') === 'owners' ? 'active' : '' }}"><i class="fa fa-users"></i> Owners</a>
+                    <a href="{{ route('accadmin.owners.deactivated') }}" class="{{ ($activePage ?? '') === 'deactivated-owners' ? 'active' : '' }}"><i class="fa fa-user-slash"></i> Deactivated</a>
+                    <a href="{{ route('accadmin.backups.index') }}" class="{{ ($activePage ?? '') === 'backups' ? 'active' : '' }}"><i class="fa fa-database"></i> Backups</a>
                     @break
 
                 @case('Owner')

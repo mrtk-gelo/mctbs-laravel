@@ -1,4 +1,4 @@
-<x-accadmin-shell title="Owner Management | MCTBS" heading="Owners">
+<x-accadmin-shell title="Owner Management | MCTBS">
 
     <main class="container workspace-page account-lifecycle-page">
         @if (session('success'))<div class="alert alert-success" role="status">{{ session('success') }}</div>@endif

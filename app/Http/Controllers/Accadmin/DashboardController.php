@@ -6,12 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Invitation;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\DatabaseBackupService;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
-    public function index(DatabaseBackupService $backups): View
+    public function index(): View
     {
         return view('accadmin.dashboard', [
             'pendingOwnerInvitations' => Invitation::query()
@@ -25,7 +24,6 @@ class DashboardController extends Controller
                 ->orderByDesc('registered_at')
                 ->orderByDesc('user_id')
                 ->get(),
-            'backups' => $backups->recent(),
         ]);
     }
 }

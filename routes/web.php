@@ -173,6 +173,7 @@ Route::middleware(['auth', 'role:guest'])->group(function () {
 
 Route::middleware(['auth', 'role:accadmin'])->prefix('accadmin')->name('accadmin.')->group(function () {
     Route::get('/dashboard', [AccadminDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/backups', [AccadminBackupController::class, 'index'])->name('backups.index');
     Route::post('/backups', [AccadminBackupController::class, 'store'])->name('backups.store');
     Route::get('/backups/{filename}', [AccadminBackupController::class, 'download'])->name('backups.download');
     Route::get('/owners', [AccadminOwnerController::class, 'index'])->name('owners.index');

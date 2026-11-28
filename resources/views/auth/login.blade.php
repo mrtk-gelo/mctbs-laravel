@@ -27,7 +27,7 @@
         <div class="auth-card">
             <div class="card-eyebrow">
                 <span class="card-eyebrow-dot"></span>
-                {{ $systemAdminLogin ? 'System Admin access' : 'Welcome back' }}
+                {{ $systemAdminLogin ? 'Welcome back, Admin' : 'Welcome back' }}
             </div>
             <h2 class="card-title">{{ $systemAdminLogin ? 'System Admin sign in' : 'Sign in to your account' }}</h2>
             <p class="card-subtitle">
