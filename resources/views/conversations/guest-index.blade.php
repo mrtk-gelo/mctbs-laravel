@@ -17,7 +17,6 @@
             @include('conversations.partials.guest-sidebar', [
                 'conversations' => $conversations,
                 'folder' => $folder,
-                'folderCounts' => $folderCounts,
                 'activeConversationId' => null,
             ])
 

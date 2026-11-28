@@ -59,6 +59,16 @@ Route::get('/public-chat/conversations/{conversationId}/updates', [PublicVisitor
     ->whereNumber('conversationId')
     ->middleware('throttle:60,1')
     ->name('public.visitor-conversations.updates');
+Route::post('/public-chat/conversations/{conversationId}/messages/{messageId}/reactions', [PublicVisitorConversationController::class, 'toggleReaction'])
+    ->whereNumber('conversationId')
+    ->whereNumber('messageId')
+    ->middleware('throttle:60,1')
+    ->name('public.visitor-conversations.reactions');
+Route::post('/public-chat/conversations/{conversationId}/messages/{messageId}/pins', [PublicVisitorConversationController::class, 'togglePin'])
+    ->whereNumber('conversationId')
+    ->whereNumber('messageId')
+    ->middleware('throttle:60,1')
+    ->name('public.visitor-conversations.pins');
 Route::post('/public-chat/conversations/{conversationId}/reply', [PublicVisitorConversationController::class, 'reply'])
     ->whereNumber('conversationId')
     ->middleware('throttle:10,1')
@@ -122,6 +132,16 @@ Route::middleware(['auth', 'role:guest'])->group(function () {
         ->whereNumber('conversationId')
         ->middleware('throttle:60,1')
         ->name('guest.conversations.updates');
+    Route::post('/guest/conversations/{conversationId}/messages/{messageId}/reactions', [ConversationController::class, 'toggleReaction'])
+        ->whereNumber('conversationId')
+        ->whereNumber('messageId')
+        ->middleware('throttle:60,1')
+        ->name('guest.conversations.reactions');
+    Route::post('/guest/conversations/{conversationId}/messages/{messageId}/pins', [ConversationController::class, 'togglePin'])
+        ->whereNumber('conversationId')
+        ->whereNumber('messageId')
+        ->middleware('throttle:60,1')
+        ->name('guest.conversations.pins');
     Route::post('/guest/conversations/{conversationId}/reply', [ConversationController::class, 'guestReply'])
         ->whereNumber('conversationId')
         ->name('guest.conversations.reply');
@@ -172,6 +192,11 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
         ->whereNumber('conversationId')
         ->middleware('throttle:60,1')
         ->name('conversations.updates');
+    Route::post('/messages/{conversationId}/messages/{messageId}/reactions', [ConversationController::class, 'toggleReaction'])
+        ->whereNumber('conversationId')
+        ->whereNumber('messageId')
+        ->middleware('throttle:60,1')
+        ->name('conversations.reactions');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
     Route::post('/messages/{conversationId}/archive', [ConversationController::class, 'archive'])->whereNumber('conversationId')->name('conversations.archive');
     Route::post('/messages/{conversationId}/delete', [ConversationController::class, 'deleteConversation'])->whereNumber('conversationId')->name('conversations.delete');
@@ -266,6 +291,11 @@ Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->grou
         ->whereNumber('conversationId')
         ->middleware('throttle:60,1')
         ->name('conversations.updates');
+    Route::post('/messages/{conversationId}/messages/{messageId}/reactions', [ConversationController::class, 'toggleReaction'])
+        ->whereNumber('conversationId')
+        ->whereNumber('messageId')
+        ->middleware('throttle:60,1')
+        ->name('conversations.reactions');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
     Route::post('/messages/{conversationId}/archive', [ConversationController::class, 'archive'])->whereNumber('conversationId')->name('conversations.archive');
     Route::post('/messages/{conversationId}/delete', [ConversationController::class, 'deleteConversation'])->whereNumber('conversationId')->name('conversations.delete');

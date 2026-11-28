@@ -25,6 +25,8 @@ use Illuminate\Validation\ValidationException;
 
 class ConversationService
 {
+    public const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
     public function __construct(private BookingContextService $bookingContext) {}
 
     public function accessibleHouseIds(User $user): Collection
@@ -51,11 +53,18 @@ class ConversationService
 
     public function canAccess(User $user, Conversation $conversation): bool
     {
-        if ($user->role?->name === 'Guest') {
-            return $conversation->guest_user_id === $user->user_id;
+        $hasConversationAccess = $user->role?->name === 'Guest'
+            ? $conversation->guest_user_id === $user->user_id
+            : in_array($conversation->house_id, $this->accessibleHouseIds($user)->all(), true);
+
+        if (! $hasConversationAccess) {
+            return false;
         }
 
-        return in_array($conversation->house_id, $this->accessibleHouseIds($user)->all(), true);
+        return ! $conversation->participants()
+            ->where('user_id', $user->user_id)
+            ->whereNotNull('deleted_at')
+            ->exists();
     }
 
     public function visitorSessionHash(Request $request): string
@@ -72,7 +81,7 @@ class ConversationService
 
     public function visitorConversationsFor(Request $request, string $folder = 'inbox'): EloquentCollection
     {
-        if (! in_array($folder, ['all', 'inbox', 'archived', 'deleted'], true)) {
+        if (! in_array($folder, ['all', 'inbox', 'archived'], true)) {
             throw new \InvalidArgumentException('Unsupported conversation folder.');
         }
 
@@ -98,12 +107,12 @@ class ConversationService
                 }
             });
 
+        $query->whereNull('visitor_deleted_at');
+
         if ($folder === 'archived') {
-            $query->whereNotNull('visitor_archived_at')->whereNull('visitor_deleted_at');
-        } elseif ($folder === 'deleted') {
-            $query->whereNotNull('visitor_deleted_at');
+            $query->whereNotNull('visitor_archived_at');
         } elseif ($folder === 'inbox') {
-            $query->whereNull('visitor_archived_at')->whereNull('visitor_deleted_at');
+            $query->whereNull('visitor_archived_at');
         }
 
         return $query
@@ -113,32 +122,18 @@ class ConversationService
             ->get();
     }
 
-    /**
-     * @return array{inbox: int, archived: int, deleted: int}
-     */
-    public function visitorConversationCountsFor(Request $request): array
-    {
-        $conversations = $this->visitorConversationsFor($request, 'all');
-
-        return [
-            'inbox' => $conversations->whereNull('visitor_archived_at')->whereNull('visitor_deleted_at')->count(),
-            'archived' => $conversations->whereNotNull('visitor_archived_at')->whereNull('visitor_deleted_at')->count(),
-            'deleted' => $conversations->whereNotNull('visitor_deleted_at')->count(),
-        ];
-    }
-
     public function visitorFolderForConversation(Conversation $conversation): string
     {
-        if ($conversation->visitor_deleted_at !== null) {
-            return 'deleted';
-        }
-
         return $conversation->visitor_archived_at !== null ? 'archived' : 'inbox';
     }
 
     public function canAccessVisitor(Request $request, Conversation $conversation): bool
     {
         if ($conversation->guest_user_id !== null) {
+            return false;
+        }
+
+        if ($conversation->visitor_deleted_at !== null) {
             return false;
         }
 
@@ -164,6 +159,8 @@ class ConversationService
         Conversation $conversation,
         bool $verifiedEmail = false
     ): void {
+        abort_if($conversation->visitor_deleted_at !== null, 404);
+
         $conversationIds = $this->visitorConversationIdsFromSession($request);
         $conversationIds[] = $conversation->conversation_id;
         $request->session()->put('mctbs_visitor_chat_access', array_values(array_unique($conversationIds)));
@@ -207,6 +204,9 @@ class ConversationService
         foreach ($conversations as $conversation) {
             $archivedAt = $conversation->visitor_archived_at;
             $deletedAt = $conversation->visitor_deleted_at;
+            $visitorActorKey = 'visitor:'.$conversation->visitor_session_hash;
+            $userActorKey = 'user:'.$user->user_id;
+            $messageIds = $conversation->messages()->pluck('message_id');
             $conversation->forceFill([
                 'guest_user_id' => $user->user_id,
                 'visitor_session_hash' => null,
@@ -220,6 +220,14 @@ class ConversationService
                 'archived_at' => $archivedAt,
                 'deleted_at' => $deletedAt,
             ])->save();
+            DB::table('conversation_message_reactions')
+                ->whereIn('message_id', $messageIds)
+                ->where('actor_key', $visitorActorKey)
+                ->update(['actor_key' => $userActorKey]);
+            DB::table('conversation_message_pins')
+                ->where('conversation_id', $conversation->conversation_id)
+                ->where('actor_key', $visitorActorKey)
+                ->update(['actor_key' => $userActorKey]);
         }
 
         $request->session()->forget('mctbs_visitor_chat_verified');
@@ -283,9 +291,11 @@ class ConversationService
     public function sendVisitorMessage(
         Request $request,
         Conversation $conversation,
-        string $body
+        string $body,
+        ?int $replyToMessageId = null
     ): Message {
         abort_unless($this->canAccessVisitor($request, $conversation), 404);
+        $this->assertReplyTarget($conversation, $replyToMessageId);
 
         $body = trim($body);
         if ($body === '') {
@@ -294,10 +304,11 @@ class ConversationService
             ]);
         }
 
-        $message = DB::transaction(function () use ($conversation, $body): Message {
+        $message = DB::transaction(function () use ($conversation, $body, $replyToMessageId): Message {
             $message = $conversation->messages()->create([
                 'sender_id' => null,
                 'sender_type' => 'visitor',
+                'reply_to_message_id' => $replyToMessageId,
                 'message' => $body,
                 'message_type' => 'user',
                 'sent_at' => now(),
@@ -307,11 +318,9 @@ class ConversationService
                 'status' => 'open',
                 'resolved_at' => null,
                 'visitor_archived_at' => null,
-                'visitor_deleted_at' => null,
             ])->save();
             $conversation->participants()->update([
                 'archived_at' => null,
-                'deleted_at' => null,
             ]);
 
             $assistance = app(AssistanceService::class);
@@ -343,8 +352,8 @@ class ConversationService
         abort_unless($this->canAccessVisitor($request, $conversation), 404);
 
         $timestamps = match ($folder) {
-            'inbox' => ['visitor_archived_at' => null, 'visitor_deleted_at' => null],
-            'archived' => ['visitor_archived_at' => now(), 'visitor_deleted_at' => null],
+            'inbox' => ['visitor_archived_at' => null],
+            'archived' => ['visitor_archived_at' => now()],
             'deleted' => ['visitor_archived_at' => null, 'visitor_deleted_at' => now()],
             default => throw new \InvalidArgumentException('Unsupported conversation folder.'),
         };
@@ -357,8 +366,8 @@ class ConversationService
         abort_unless($this->canAccess($user, $conversation), 403);
 
         $timestamps = match ($folder) {
-            'inbox' => ['archived_at' => null, 'deleted_at' => null],
-            'archived' => ['archived_at' => now(), 'deleted_at' => null],
+            'inbox' => ['archived_at' => null],
+            'archived' => ['archived_at' => now()],
             'deleted' => ['archived_at' => null, 'deleted_at' => now()],
             default => throw new \InvalidArgumentException('Unsupported conversation folder.'),
         };
@@ -375,10 +384,6 @@ class ConversationService
             ->where('user_id', $user->user_id)
             ->first();
 
-        if ($participant?->deleted_at !== null) {
-            return 'deleted';
-        }
-
         return $participant?->archived_at !== null ? 'archived' : 'inbox';
     }
 
@@ -388,7 +393,7 @@ class ConversationService
     public function messagesAfter(Conversation $conversation, int $messageId): EloquentCollection
     {
         return $conversation->messages()
-            ->with('sender')
+            ->with(['sender', 'replyToMessage.sender'])
             ->where('message_id', '>', $messageId)
             ->orderBy('message_id')
             ->limit(100)
@@ -396,26 +401,209 @@ class ConversationService
     }
 
     /**
-     * @return array{id: int, senderType: string, senderId: ?int, senderName: string, text: string, sentAt: string, timeLabel: string}
+     * @param  list<array{emoji: string, count: int, reactedByMe: bool}>  $reactions
+     * @return array{id: int, senderType: string, senderId: ?int, senderName: string, text: string, sentAt: string, timeLabel: string, replyTo: ?array{id: int, senderName: string, text: string}, reactions: list<array{emoji: string, count: int, reactedByMe: bool}>}
      */
-    public function messageUpdatePayload(Message $message, Conversation $conversation): array
-    {
-        $senderName = match ($message->sender_type) {
-            'assistant' => 'MCTBS Connect · automated answer',
-            'system' => 'MCTBS Connect',
-            'visitor' => trim((string) $conversation->visitor_name) ?: 'Public visitor',
-            default => trim(($message->sender?->first_name ?? '').' '.($message->sender?->last_name ?? '')) ?: 'Property team',
-        };
-
+    public function messageUpdatePayload(
+        Message $message,
+        Conversation $conversation,
+        array $reactions = []
+    ): array {
         return [
             'id' => (int) $message->message_id,
             'senderType' => (string) $message->sender_type,
             'senderId' => $message->sender_id === null ? null : (int) $message->sender_id,
-            'senderName' => $senderName,
+            'senderName' => $this->senderName($message, $conversation),
             'text' => (string) $message->message,
             'sentAt' => $message->sent_at->toIso8601String(),
             'timeLabel' => $message->sent_at->format('M j, g:i A'),
+            'replyTo' => $message->replyToMessage
+                ? $this->messageSummaryPayload($message->replyToMessage, $conversation)
+                : null,
+            'reactions' => $reactions,
         ];
+    }
+
+    public function interactionActorKey(?User $viewer, Conversation $conversation): string
+    {
+        if ($viewer !== null) {
+            return 'user:'.$viewer->user_id;
+        }
+
+        abort_if($conversation->visitor_session_hash === null, 404);
+
+        return 'visitor:'.$conversation->visitor_session_hash;
+    }
+
+    /**
+     * @return array<string, list<array{emoji: string, count: int, reactedByMe: bool}>>
+     */
+    public function reactionSummariesForMessages(EloquentCollection $messages, string $actorKey): array
+    {
+        if ($messages->isEmpty()) {
+            return [];
+        }
+
+        $rowsByMessage = DB::table('conversation_message_reactions')
+            ->whereIn('message_id', $messages->pluck('message_id'))
+            ->get(['message_id', 'actor_key', 'emoji'])
+            ->groupBy('message_id');
+
+        return $this->formatReactionGroups($rowsByMessage, $actorKey);
+    }
+
+    /**
+     * @return array<string, list<array{emoji: string, count: int, reactedByMe: bool}>>
+     */
+    public function reactionSummariesForConversation(Conversation $conversation, string $actorKey): array
+    {
+        $rowsByMessage = DB::table('conversation_message_reactions')
+            ->join('messages', 'messages.message_id', '=', 'conversation_message_reactions.message_id')
+            ->where('messages.conversation_id', $conversation->conversation_id)
+            ->get([
+                'conversation_message_reactions.message_id',
+                'conversation_message_reactions.actor_key',
+                'conversation_message_reactions.emoji',
+            ])
+            ->groupBy('message_id');
+
+        return $this->formatReactionGroups($rowsByMessage, $actorKey);
+    }
+
+    /**
+     * @return list<array{emoji: string, count: int, reactedByMe: bool}>
+     */
+    public function toggleMessageReaction(
+        Conversation $conversation,
+        Message $message,
+        string $actorKey,
+        string $emoji
+    ): array {
+        abort_unless((int) $message->conversation_id === (int) $conversation->conversation_id, 404);
+        abort_unless(in_array($emoji, self::REACTION_EMOJIS, true), 422);
+
+        $existing = DB::table('conversation_message_reactions')
+            ->where('message_id', $message->message_id)
+            ->where('actor_key', $actorKey)
+            ->first();
+
+        if ($existing?->emoji === $emoji) {
+            DB::table('conversation_message_reactions')
+                ->where('message_id', $message->message_id)
+                ->where('actor_key', $actorKey)
+                ->delete();
+        } elseif ($existing !== null) {
+            DB::table('conversation_message_reactions')
+                ->where('message_id', $message->message_id)
+                ->where('actor_key', $actorKey)
+                ->update(['emoji' => $emoji]);
+        } else {
+            DB::table('conversation_message_reactions')->insert([
+                'message_id' => $message->message_id,
+                'actor_key' => $actorKey,
+                'emoji' => $emoji,
+            ]);
+        }
+
+        $summaries = $this->reactionSummariesForMessages(
+            new EloquentCollection([$message]),
+            $actorKey
+        );
+
+        return $summaries[(string) $message->message_id] ?? [];
+    }
+
+    /**
+     * @return EloquentCollection<int, Message>
+     */
+    public function pinnedMessagesFor(Conversation $conversation, string $actorKey): EloquentCollection
+    {
+        $pins = DB::table('conversation_message_pins')
+            ->where('conversation_id', $conversation->conversation_id)
+            ->where('actor_key', $actorKey)
+            ->orderBy('pinned_at')
+            ->get(['message_id']);
+
+        if ($pins->isEmpty()) {
+            return new EloquentCollection;
+        }
+
+        $messages = Message::query()
+            ->with(['sender', 'replyToMessage.sender'])
+            ->whereIn('message_id', $pins->pluck('message_id'))
+            ->get()
+            ->keyBy('message_id');
+
+        return new EloquentCollection(
+            $pins->map(fn (object $pin): ?Message => $messages->get($pin->message_id))
+                ->filter()
+                ->values()
+                ->all()
+        );
+    }
+
+    /**
+     * @return list<array{id: int, senderName: string, text: string}>
+     */
+    public function pinnedMessagePayloadsFor(Conversation $conversation, string $actorKey): array
+    {
+        return $this->pinnedMessagesFor($conversation, $actorKey)
+            ->map(fn (Message $message): array => $this->messageSummaryPayload($message, $conversation))
+            ->all();
+    }
+
+    /**
+     * @return array{pinnedMessageIds: list<int>, pins: list<array{id: int, senderName: string, text: string}>}
+     */
+    public function toggleMessagePin(
+        Conversation $conversation,
+        Message $message,
+        string $actorKey
+    ): array {
+        abort_unless((int) $message->conversation_id === (int) $conversation->conversation_id, 404);
+
+        $pinQuery = DB::table('conversation_message_pins')
+            ->where('conversation_id', $conversation->conversation_id)
+            ->where('message_id', $message->message_id)
+            ->where('actor_key', $actorKey);
+
+        if ($pinQuery->exists()) {
+            $pinQuery->delete();
+        } else {
+            DB::table('conversation_message_pins')->insert([
+                'conversation_id' => $conversation->conversation_id,
+                'message_id' => $message->message_id,
+                'actor_key' => $actorKey,
+                'pinned_at' => now(),
+            ]);
+        }
+
+        $pinnedMessages = $this->pinnedMessagesFor($conversation, $actorKey);
+
+        return [
+            'pinnedMessageIds' => $pinnedMessages->map(fn (Message $pinned): int => (int) $pinned->message_id)->all(),
+            'pins' => $pinnedMessages
+                ->map(fn (Message $pinned): array => $this->messageSummaryPayload($pinned, $conversation))
+                ->all(),
+        ];
+    }
+
+    /**
+     * @param  Collection<int|string, Collection<int, object>>  $rowsByMessage
+     * @return array<string, list<array{emoji: string, count: int, reactedByMe: bool}>>
+     */
+    private function formatReactionGroups(Collection $rowsByMessage, string $actorKey): array
+    {
+        return $rowsByMessage->map(function (Collection $rows) use ($actorKey): array {
+            return $rows->groupBy('emoji')
+                ->map(fn (Collection $emojiRows, string $emoji): array => [
+                    'emoji' => $emoji,
+                    'count' => $emojiRows->count(),
+                    'reactedByMe' => $emojiRows->contains('actor_key', $actorKey),
+                ])
+                ->values()
+                ->all();
+        })->all();
     }
 
     public function conversationQueryFor(User $user, string $folder = 'inbox'): Builder
@@ -531,9 +719,15 @@ class ConversationService
         return $conversation;
     }
 
-    public function sendMessage(User $sender, Conversation $conversation, string $body, ?string $clientToken = null): Message
-    {
+    public function sendMessage(
+        User $sender,
+        Conversation $conversation,
+        string $body,
+        ?string $clientToken = null,
+        ?int $replyToMessageId = null
+    ): Message {
         abort_unless($this->canAccess($sender, $conversation), 403);
+        $this->assertReplyTarget($conversation, $replyToMessageId);
 
         $body = trim($body);
         if ($body === '') {
@@ -542,10 +736,11 @@ class ConversationService
             ]);
         }
 
-        return DB::transaction(function () use ($sender, $conversation, $body, $clientToken): Message {
+        return DB::transaction(function () use ($sender, $conversation, $body, $clientToken, $replyToMessageId): Message {
             $message = $clientToken === null
                 ? $conversation->messages()->create([
                     'sender_id' => $sender->user_id,
+                    'reply_to_message_id' => $replyToMessageId,
                     'message' => $body,
                     'message_type' => 'user',
                     'sent_at' => now(),
@@ -554,6 +749,7 @@ class ConversationService
                     ['client_token' => $clientToken],
                     [
                         'sender_id' => $sender->user_id,
+                        'reply_to_message_id' => $replyToMessageId,
                         'message' => $body,
                         'message_type' => 'user',
                         'sent_at' => now(),
@@ -566,11 +762,9 @@ class ConversationService
                     'status' => 'open',
                     'resolved_at' => null,
                     'visitor_archived_at' => null,
-                    'visitor_deleted_at' => null,
                 ])->save();
                 $conversation->participants()->update([
                     'archived_at' => null,
-                    'deleted_at' => null,
                 ]);
 
                 $this->addParticipant($conversation, $sender);
@@ -611,13 +805,54 @@ class ConversationService
         ]);
     }
 
+    private function assertReplyTarget(Conversation $conversation, ?int $replyToMessageId): void
+    {
+        if ($replyToMessageId === null) {
+            return;
+        }
+
+        if (! $conversation->messages()->where('message_id', $replyToMessageId)->exists()) {
+            throw ValidationException::withMessages([
+                'reply_to_message_id' => 'Choose a message from this conversation.',
+            ]);
+        }
+    }
+
+    private function senderName(Message $message, Conversation $conversation): string
+    {
+        return match ($message->sender_type) {
+            'assistant' => 'MCTBS Connect · automated answer',
+            'system' => 'MCTBS Connect',
+            'visitor' => trim((string) $conversation->visitor_name) ?: 'Public visitor',
+            default => trim(($message->sender?->first_name ?? '').' '.($message->sender?->last_name ?? '')) ?: 'Property team',
+        };
+    }
+
+    /**
+     * @return array{id: int, senderName: string, text: string}
+     */
+    private function messageSummaryPayload(Message $message, Conversation $conversation): array
+    {
+        return [
+            'id' => (int) $message->message_id,
+            'senderName' => $this->senderName($message, $conversation),
+            'text' => (string) $message->message,
+        ];
+    }
+
     private function applyConversationFolder(Builder $query, User $user, string $folder): void
     {
-        if (! in_array($folder, ['all', 'inbox', 'archived', 'deleted'], true)) {
+        if (! in_array($folder, ['all', 'inbox', 'archived'], true)) {
             throw new \InvalidArgumentException('Unsupported conversation folder.');
         }
 
         if ($folder === 'all') {
+            $query->whereDoesntHave('participants', function (Builder $participantQuery) use ($user): void {
+                $participantQuery
+                    ->where('user_id', $user->user_id)
+                    ->whereNotNull('deleted_at');
+            });
+
             return;
         }
 
@@ -633,22 +868,11 @@ class ConversationService
             return;
         }
 
-        $query->whereHas('participants', function (Builder $participantQuery) use ($user, $folder): void {
+        $query->whereHas('participants', function (Builder $participantQuery) use ($user): void {
             $participantQuery->where('user_id', $user->user_id);
 
-            if ($folder === 'archived') {
-                $participantQuery->whereNotNull('archived_at')->whereNull('deleted_at');
+            $participantQuery->whereNotNull('archived_at')->whereNull('deleted_at');
 
-                return;
-            }
-
-            if ($folder === 'deleted') {
-                $participantQuery->whereNotNull('deleted_at');
-
-                return;
-            }
-
-            throw new \InvalidArgumentException('Unsupported conversation folder.');
         });
     }
 

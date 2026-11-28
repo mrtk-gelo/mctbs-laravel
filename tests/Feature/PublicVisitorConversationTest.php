@@ -116,7 +116,7 @@ test('anonymous conversation polling returns only replies after the supplied mes
         ->assertJsonPath('messages.0.text', 'The team has replied.');
 });
 
-test('anonymous conversations can be archived, moved to deleted, and restored without losing messages', function () {
+test('anonymous visitors can archive chats and permanently delete their own copy', function () {
     Mail::fake();
     $owner = User::create([
         'role_id' => Role::query()->where('name', 'Owner')->firstOrFail()->role_id,
@@ -144,11 +144,15 @@ test('anonymous conversations can be archived, moved to deleted, and restored wi
     ])->assertRedirect();
     $conversation = Conversation::query()->firstOrFail();
     $messageCount = $conversation->messages()->count();
+    $this->get(route('public.visitor-conversations.index'))
+        ->assertSee('Show archive')
+        ->assertDontSee('chat-folder-links', false);
 
     $this->post(route('public.visitor-conversations.archive', $conversation->conversation_id))
         ->assertRedirect(route('public.visitor-conversations.index', ['folder' => 'archived']));
     $this->get(route('public.visitor-conversations.index', ['folder' => 'archived']))
-        ->assertSee('Folder test conversation');
+        ->assertSee('Folder test conversation')
+        ->assertSee('Show inbox');
 
     $signedUrl = URL::temporarySignedRoute(
         'public.visitor-conversations.access',
@@ -164,17 +168,38 @@ test('anonymous conversations can be archived, moved to deleted, and restored wi
         ->assertSee('Folder test conversation');
 
     $this->post(route('public.visitor-conversations.delete', $conversation->conversation_id))
-        ->assertRedirect(route('public.visitor-conversations.index', ['folder' => 'deleted']));
-    $this->get(route('public.visitor-conversations.index', ['folder' => 'deleted']))
-        ->assertSee('Folder test conversation');
-
-    $this->post(route('public.visitor-conversations.restore', $conversation->conversation_id))
         ->assertRedirect(route('public.visitor-conversations.index', ['folder' => 'inbox']));
-    $this->get(route('public.visitor-conversations.index', ['folder' => 'inbox']))
-        ->assertSee('Folder test conversation');
+    $this->get(route('public.visitor-conversations.index'))
+        ->assertDontSee('Folder test conversation');
+    $this->get(route('public.visitor-conversations.show', $conversation->conversation_id))
+        ->assertNotFound();
+    $this->get($signedUrl)->assertNotFound();
+    $this->post(route('public.visitor-conversations.restore', $conversation->conversation_id))
+        ->assertNotFound();
+
+    $this->post(route('public.visitor-conversations.store'), [
+        'house_id' => $house->house_id,
+        'name' => 'Folder Visitor',
+        'email' => 'visitor-folder@example.com',
+        'subject' => 'Fresh visitor conversation',
+        'message' => 'This is a new inquiry with fresh chat history.',
+    ])->assertRedirect();
+    $freshConversation = Conversation::query()
+        ->where('conversation_id', '!=', $conversation->conversation_id)
+        ->where('visitor_email', 'visitor-folder@example.com')
+        ->firstOrFail();
+    $this->get(route('public.visitor-conversations.index'))
+        ->assertSee('Fresh visitor conversation')
+        ->assertDontSee('Folder test conversation');
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.index'))
+        ->assertSee('Folder test conversation')
+        ->assertSee('Fresh visitor conversation');
 
     expect($conversation->fresh())->not->toBeNull()
-        ->and($conversation->messages()->count())->toBe($messageCount);
+        ->and($conversation->messages()->count())->toBe($messageCount)
+        ->and($conversation->fresh()->visitor_deleted_at)->not->toBeNull()
+        ->and($freshConversation->fresh()->visitor_deleted_at)->toBeNull();
 });
 
 test('sensitive visitor questions receive a sign-in prompt instead of an answer', function () {

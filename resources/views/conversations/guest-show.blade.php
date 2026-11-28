@@ -17,7 +17,6 @@
             @include('conversations.partials.guest-sidebar', [
                 'conversations' => $conversations,
                 'folder' => $folder,
-                'folderCounts' => $folderCounts,
                 'activeConversationId' => $conversation->conversation_id,
             ])
 
@@ -41,6 +40,8 @@
                             'deleteRoute' => 'guest.conversations.delete',
                             'restoreRoute' => 'guest.conversations.restore',
                             'conversationId' => $conversation->conversation_id,
+                            'showPinnedMessages' => true,
+                            'pinnedCount' => $pinnedMessages->count(),
                         ])
                         <button
                             class="chat-info-toggle"
@@ -61,11 +62,21 @@
                     <p><strong>MCTBS Connect</strong><br>{{ $settings->welcome_message }}</p>
                 </div>
 
+                @include('conversations.partials.pinned-messages', [
+                    'pinnedMessages' => $pinnedMessages,
+                    'pinRoute' => $pinRoute,
+                    'conversationId' => $conversation->conversation_id,
+                    'visitorName' => trim(auth()->user()->first_name.' '.auth()->user()->last_name),
+                ])
+
                 <section
                     class="chat-message-list"
                     aria-label="Conversation messages"
                     aria-live="polite"
                     data-chat-poll-url="{{ route('guest.conversations.updates', $conversation->conversation_id) }}"
+                    data-reaction-url-template="{{ route($reactionRoute, ['conversationId' => $conversation->conversation_id, 'messageId' => '__message_id__']) }}"
+                    data-pin-url-template="{{ route($pinRoute, ['conversationId' => $conversation->conversation_id, 'messageId' => '__message_id__']) }}"
+                    data-csrf-token="{{ csrf_token() }}"
                     data-conversation-id="{{ $conversation->conversation_id }}"
                     data-viewer-type="guest"
                     data-viewer-id="{{ auth()->id() }}"
@@ -77,6 +88,12 @@
                             'viewerUserId' => auth()->id(),
                             'conversationGuestId' => $conversation->guest_user_id,
                             'visitorName' => trim(auth()->user()->first_name.' '.auth()->user()->last_name),
+                            'conversationId' => $conversation->conversation_id,
+                            'reactionRoute' => $reactionRoute,
+                            'reactionSummaries' => $reactionSummaries,
+                            'pinnedMessageIds' => $pinnedMessages->map(fn ($message): int => (int) $message->message_id)->all(),
+                            'pinRoute' => $pinRoute,
+                            'canPin' => true,
                         ])
                     @else
                         <div class="chat-list-empty">
@@ -112,8 +129,10 @@
                         </details>
                     @endif
 
+                    @include('conversations.partials.reply-preview')
                     <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}" class="chat-composer-form">
                         @csrf
+                        <input type="hidden" name="reply_to_message_id" value="{{ old('reply_to_message_id') }}" data-chat-reply-id>
                         <label class="sr-only" for="message">Write a reply</label>
                         <textarea class="form-control" id="message" name="message" rows="2" maxlength="5000" required placeholder="Write a message..." data-message-composer></textarea>
                         @error('message')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror

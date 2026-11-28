@@ -747,11 +747,74 @@ document.addEventListener('DOMContentLoaded', () => {
         const viewerType = messageList.dataset.viewerType ?? '';
         const viewerId = messageList.dataset.viewerId ?? '';
         const conversationId = messageList.dataset.conversationId ?? '';
+        const reactionUrlTemplate = messageList.dataset.reactionUrlTemplate ?? '';
+        const pinUrlTemplate = messageList.dataset.pinUrlTemplate ?? '';
+        const thread = messageList.closest('.chat-thread');
+        const csrfToken = messageList.dataset.csrfToken ?? '';
         let lastMessageId = Number(messageList.dataset.lastMessageId ?? 0);
         let timer;
         let isPolling = false;
 
-        const appendMessage = (message) => {
+        const urlForMessage = (template, messageId) => template.replace(
+            '__message_id__',
+            encodeURIComponent(String(messageId))
+        );
+
+        const showInteractionError = (error) => {
+            if (syncStatus) {
+                syncStatus.textContent = 'Could not update this message. Please try again.';
+                syncStatus.hidden = false;
+            }
+            console.error('Unable to update conversation interaction.', error);
+        };
+
+        const postAction = async (url, payload = {}) => {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+                cache: 'no-store',
+                body: JSON.stringify(payload),
+            });
+            if (!response.ok) {
+                throw new Error(`Conversation action returned HTTP ${response.status}.`);
+            }
+
+            return response.json();
+        };
+
+        const renderReactionChips = (row, reactions) => {
+            const list = row.querySelector('[data-chat-reaction-list]');
+            if (!list) {
+                return;
+            }
+
+            list.replaceChildren();
+            reactions.forEach((reaction) => {
+                const button = document.createElement('button');
+                button.className = `chat-reaction-chip${reaction.reactedByMe ? ' is-selected' : ''}`;
+                button.type = 'button';
+                button.dataset.chatReact = 'true';
+                button.dataset.emoji = reaction.emoji;
+                button.dataset.reactionUrl = urlForMessage(reactionUrlTemplate, row.dataset.messageId);
+                button.setAttribute('aria-pressed', String(reaction.reactedByMe));
+                button.setAttribute('aria-label', `${reaction.emoji} reaction, ${reaction.count}`);
+
+                const emoji = document.createElement('span');
+                emoji.textContent = reaction.emoji;
+                const count = document.createElement('span');
+                count.textContent = String(reaction.count);
+                button.append(emoji, count);
+                list.append(button);
+            });
+        };
+
+        const createMessageRow = (message) => {
             const isSystemMessage = ['assistant', 'system'].includes(message.senderType);
             const isOutgoing = !isSystemMessage && (
                 (message.senderId !== null && String(message.senderId) === viewerId)
@@ -760,6 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = document.createElement('article');
             row.className = `chat-message-row${isSystemMessage ? ' chat-message-row--system' : (isOutgoing ? ' chat-message-row--outgoing' : ' chat-message-row--incoming')}`;
             row.dataset.messageId = String(message.id);
+            row.dataset.isPinned = 'false';
 
             const meta = document.createElement('div');
             meta.className = 'chat-message-meta';
@@ -770,11 +834,309 @@ document.addEventListener('DOMContentLoaded', () => {
             time.textContent = message.timeLabel;
             meta.append(sender, time);
 
+            const pinIndicator = document.createElement('span');
+            pinIndicator.className = 'chat-message-pin-indicator';
+            pinIndicator.dataset.messagePinIndicator = 'true';
+            pinIndicator.hidden = true;
+            const pinIcon = document.createElement('i');
+            pinIcon.className = 'fa fa-thumbtack';
+            pinIcon.setAttribute('aria-hidden', 'true');
+            pinIndicator.append(pinIcon, document.createTextNode(' Pinned for you'));
+
+            row.append(meta, pinIndicator);
+            if (message.replyTo) {
+                const quote = document.createElement('div');
+                quote.className = 'chat-message-reply-quote';
+                const quoteSender = document.createElement('strong');
+                quoteSender.textContent = `Replying to ${message.replyTo.senderName}`;
+                const quoteText = document.createElement('span');
+                quoteText.textContent = message.replyTo.text.length > 120
+                    ? `${message.replyTo.text.slice(0, 117)}...`
+                    : message.replyTo.text;
+                quote.append(quoteSender, quoteText);
+                row.append(quote);
+            }
+
             const bubble = document.createElement('div');
             bubble.className = 'chat-message-bubble';
             bubble.textContent = message.text;
-            row.append(meta, bubble);
+            row.append(bubble);
+
+            const actions = document.createElement('div');
+            actions.className = 'chat-message-interactions';
+            const reactionList = document.createElement('div');
+            reactionList.className = 'chat-reaction-list';
+            reactionList.dataset.chatReactionList = 'true';
+            actions.append(reactionList);
+
+            const picker = document.createElement('details');
+            picker.className = 'chat-reaction-picker';
+            const pickerSummary = document.createElement('summary');
+            pickerSummary.setAttribute('aria-label', 'React to message');
+            pickerSummary.title = 'React to message';
+            pickerSummary.textContent = '☺';
+            const pickerPanel = document.createElement('div');
+            pickerPanel.className = 'chat-reaction-picker-panel';
+            ['👍', '❤️', '😂', '😮', '😢', '🙏'].forEach((emoji) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.dataset.chatReact = 'true';
+                button.dataset.emoji = emoji;
+                button.dataset.reactionUrl = urlForMessage(reactionUrlTemplate, message.id);
+                button.setAttribute('aria-label', `React with ${emoji}`);
+                button.textContent = emoji;
+                pickerPanel.append(button);
+            });
+            picker.append(pickerSummary, pickerPanel);
+            actions.append(picker);
+
+            const replyButton = document.createElement('button');
+            replyButton.className = 'chat-message-action';
+            replyButton.type = 'button';
+            replyButton.dataset.chatReplyMessage = 'true';
+            replyButton.dataset.messageId = String(message.id);
+            replyButton.textContent = 'Reply';
+            actions.append(replyButton);
+
+            if (pinUrlTemplate !== '') {
+                const pinButton = document.createElement('button');
+                pinButton.className = 'chat-message-action';
+                pinButton.type = 'button';
+                pinButton.dataset.chatPinToggle = 'true';
+                pinButton.dataset.messageId = String(message.id);
+                pinButton.dataset.isPinned = 'false';
+                pinButton.dataset.pinUrl = urlForMessage(pinUrlTemplate, message.id);
+                const icon = document.createElement('i');
+                icon.className = 'fa fa-thumbtack';
+                icon.setAttribute('aria-hidden', 'true');
+                const label = document.createElement('span');
+                label.textContent = 'Pin';
+                pinButton.append(icon, label);
+                actions.append(pinButton);
+            }
+
+            row.append(actions);
+            renderReactionChips(row, message.reactions ?? []);
             messageList.append(row);
+        };
+
+        const updatePinnedMessages = (pins, pinnedMessageIds) => {
+            if (!pinUrlTemplate || !thread || !Array.isArray(pins) || !Array.isArray(pinnedMessageIds)) {
+                return;
+            }
+
+            const pinnedIds = new Set(pinnedMessageIds.map((id) => String(id)));
+            messageList.querySelectorAll('[data-message-id]').forEach((row) => {
+                const isPinned = pinnedIds.has(row.dataset.messageId);
+                row.dataset.isPinned = String(isPinned);
+                const indicator = row.querySelector('[data-message-pin-indicator]');
+                if (indicator) {
+                    indicator.hidden = !isPinned;
+                }
+
+                const button = row.querySelector('[data-chat-pin-toggle]');
+                if (button && !button.closest('[data-pinned-message-id]')) {
+                    button.dataset.isPinned = String(isPinned);
+                    const label = button.querySelector('span');
+                    if (label) {
+                        label.textContent = isPinned ? 'Unpin' : 'Pin';
+                    }
+                }
+            });
+
+            thread.querySelectorAll('[data-chat-pin-count]').forEach((count) => {
+                count.textContent = String(pins.length);
+            });
+
+            const list = thread.querySelector('[data-chat-pinned-list]');
+            if (!list) {
+                return;
+            }
+            list.replaceChildren();
+            if (pins.length === 0) {
+                const empty = document.createElement('p');
+                empty.className = 'chat-pinned-empty';
+                empty.dataset.chatPinsEmpty = 'true';
+                empty.textContent = 'No messages pinned yet.';
+                list.append(empty);
+                return;
+            }
+
+            pins.forEach((pin) => {
+                const item = document.createElement('div');
+                item.className = 'chat-pinned-item';
+                item.dataset.pinnedMessageId = String(pin.id);
+                const link = document.createElement('button');
+                link.className = 'chat-pinned-message-link';
+                link.type = 'button';
+                link.dataset.chatJumpToMessage = 'true';
+                link.dataset.messageId = String(pin.id);
+                const author = document.createElement('strong');
+                author.textContent = pin.senderName;
+                const text = document.createElement('span');
+                text.textContent = pin.text.length > 150 ? `${pin.text.slice(0, 147)}...` : pin.text;
+                link.append(author, text);
+
+                const unpin = document.createElement('button');
+                unpin.className = 'chat-message-action';
+                unpin.type = 'button';
+                unpin.dataset.chatPinToggle = 'true';
+                unpin.dataset.messageId = String(pin.id);
+                unpin.dataset.isPinned = 'true';
+                unpin.dataset.pinUrl = urlForMessage(pinUrlTemplate, pin.id);
+                unpin.textContent = 'Unpin';
+                item.append(link, unpin);
+                list.append(item);
+            });
+        };
+
+        const updateReactionStates = (summaries) => {
+            if (!summaries || typeof summaries !== 'object') {
+                return;
+            }
+
+            Object.entries(summaries).forEach(([messageId, reactions]) => {
+                const row = [...messageList.querySelectorAll('[data-message-id]')]
+                    .find((item) => item.dataset.messageId === messageId);
+                if (row && Array.isArray(reactions)) {
+                    renderReactionChips(row, reactions);
+                }
+            });
+        };
+
+        const setReplyTarget = (row) => {
+            const replyId = thread?.querySelector('[data-chat-reply-id]');
+            const preview = thread?.querySelector('[data-chat-reply-preview]');
+            const sender = row?.querySelector('.chat-message-meta span')?.textContent ?? '';
+            const text = row?.querySelector('.chat-message-bubble')?.textContent ?? '';
+            if (!replyId || !preview || !row) {
+                return;
+            }
+
+            replyId.value = row.dataset.messageId ?? '';
+            const senderLabel = preview.querySelector('[data-chat-reply-sender]');
+            const textLabel = preview.querySelector('[data-chat-reply-text]');
+            if (senderLabel) {
+                senderLabel.textContent = `Replying to ${sender}`;
+            }
+            if (textLabel) {
+                textLabel.textContent = text.length > 120 ? `${text.slice(0, 117)}...` : text;
+            }
+            preview.hidden = false;
+            thread.querySelector('[data-message-composer]')?.focus();
+        };
+
+        const clearReplyTarget = () => {
+            const replyId = thread?.querySelector('[data-chat-reply-id]');
+            const preview = thread?.querySelector('[data-chat-reply-preview]');
+            if (replyId) {
+                replyId.value = '';
+            }
+            if (preview) {
+                preview.hidden = true;
+            }
+        };
+
+        thread?.addEventListener('click', async (event) => {
+            const target = event.target;
+            const pinnedToggle = target.closest('[data-chat-pinned-toggle]');
+            if (pinnedToggle) {
+                const panel = thread.querySelector('[data-chat-pinned-panel]');
+                if (panel) {
+                    panel.hidden = !panel.hidden;
+                    pinnedToggle.closest('details')?.removeAttribute('open');
+                    if (!panel.hidden) {
+                        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                }
+                return;
+            }
+
+            if (target.closest('[data-chat-pinned-close]')) {
+                const panel = thread.querySelector('[data-chat-pinned-panel]');
+                if (panel) {
+                    panel.hidden = true;
+                }
+                return;
+            }
+
+            const jumpButton = target.closest('[data-chat-jump-to-message]');
+            if (jumpButton) {
+                const row = [...messageList.querySelectorAll('[data-message-id]')]
+                    .find((item) => item.dataset.messageId === jumpButton.dataset.messageId);
+                row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                row?.classList.add('is-highlighted');
+                window.setTimeout(() => row?.classList.remove('is-highlighted'), 1400);
+                return;
+            }
+
+            const replyButton = target.closest('[data-chat-reply-message]');
+            if (replyButton) {
+                const row = [...messageList.querySelectorAll('[data-message-id]')]
+                    .find((item) => item.dataset.messageId === replyButton.dataset.messageId);
+                setReplyTarget(row);
+                return;
+            }
+
+            const reactionButton = target.closest('[data-chat-react]');
+            if (reactionButton) {
+                reactionButton.disabled = true;
+                try {
+                    const payload = await postAction(reactionButton.dataset.reactionUrl, {
+                        emoji: reactionButton.dataset.emoji,
+                    });
+                    const row = reactionButton.closest('[data-message-id]');
+                    if (!row || !Array.isArray(payload.reactions)) {
+                        throw new Error('Reaction response was invalid.');
+                    }
+                    renderReactionChips(row, payload.reactions);
+                    reactionButton.closest('details')?.removeAttribute('open');
+                    if (syncStatus) {
+                        syncStatus.hidden = true;
+                    }
+                } catch (error) {
+                    showInteractionError(error);
+                } finally {
+                    reactionButton.disabled = false;
+                }
+                return;
+            }
+
+            const pinButton = target.closest('[data-chat-pin-toggle]');
+            if (pinButton) {
+                pinButton.disabled = true;
+                try {
+                    const payload = await postAction(pinButton.dataset.pinUrl);
+                    if (!Array.isArray(payload.pins) || !Array.isArray(payload.pinnedMessageIds)) {
+                        throw new Error('Pin response was invalid.');
+                    }
+                    updatePinnedMessages(payload.pins, payload.pinnedMessageIds);
+                    if (syncStatus) {
+                        syncStatus.hidden = true;
+                    }
+                } catch (error) {
+                    showInteractionError(error);
+                } finally {
+                    pinButton.disabled = false;
+                }
+            }
+        });
+
+        thread?.querySelector('[data-chat-reply-cancel]')?.addEventListener('click', clearReplyTarget);
+
+        const previousReplyId = thread?.querySelector('[data-chat-reply-id]')?.value;
+        if (previousReplyId) {
+            const previousReplyRow = [...messageList.querySelectorAll('[data-message-id]')]
+                .find((row) => row.dataset.messageId === previousReplyId);
+            if (previousReplyRow) {
+                setReplyTarget(previousReplyRow);
+            } else {
+                clearReplyTarget();
+            }
+        }
+
+        const appendMessage = (message) => {
+            createMessageRow(message);
         };
 
         const updateRecentConversation = (message) => {
@@ -844,6 +1206,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
+                updateReactionStates(payload.reactionSummaries);
+                updatePinnedMessages(payload.pins, payload.pinnedMessageIds);
                 lastMessageId = Math.max(lastMessageId, Number(payload.lastMessageId));
                 messageList.dataset.lastMessageId = String(lastMessageId);
                 if (syncStatus) {
