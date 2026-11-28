@@ -11,6 +11,10 @@
             ? trim($conversation->guest->first_name.' '.$conversation->guest->last_name)
             : (trim((string) $conversation->visitor_name) ?: 'Public visitor');
         $guestEmail = $conversation->guest?->email ?? $conversation->visitor_email;
+        $guestStatus = $conversation->guest
+            ? ($conversation->booking_status ? \App\Support\BookingStatus::canonical($conversation->booking_status) : 'Registered guest')
+            : 'Public visitor';
+        $guestStatusClass = \Illuminate\Support\Str::slug($guestStatus);
     @endphp
 
     <div class="container chat-page">
@@ -26,40 +30,15 @@
         </header>
 
         <div class="chat-workspace chat-workspace--staff chat-workspace--thread">
-            <aside class="chat-sidebar" aria-label="Team conversations">
-                <div class="chat-sidebar-header">
-                    <div>
-                        <h2>Inbox</h2>
-                        <p>{{ $conversations->count() }} {{ \Illuminate\Support\Str::plural('chat', $conversations->count()) }}</p>
-                    </div>
-                    <a class="chat-sidebar-icon" href="{{ route($inboxRoute, ['filter' => $filter]) }}" aria-label="Back to inbox">
-                        <i class="fa fa-arrow-left" aria-hidden="true"></i>
-                    </a>
-                </div>
-                <details class="chat-recent-conversations">
-                    <summary>
-                        <span><i class="fa fa-comments" aria-hidden="true"></i> Recent conversations</span>
-                        <span class="chat-recent-count">{{ $conversations->count() }}</span>
-                        <i class="fa fa-chevron-down chat-details-chevron" aria-hidden="true"></i>
-                    </summary>
-                    <nav class="chat-conversation-list" aria-label="Inbox conversation list">
-                        @forelse ($conversations as $thread)
-                            @include('conversations.partials.list-item', [
-                                'conversation' => $thread,
-                                'conversationRoute' => $conversationRoute,
-                                'listType' => 'staff',
-                                'activeConversationId' => $conversation->conversation_id,
-                            ])
-                        @empty
-                            <div class="chat-list-empty">
-                                <span class="chat-empty-icon"><i class="fa fa-inbox" aria-hidden="true"></i></span>
-                                <strong>No conversations found</strong>
-                                <span>New guest messages will appear here.</span>
-                            </div>
-                        @endforelse
-                    </nav>
-                </details>
-            </aside>
+            @include('conversations.partials.staff-sidebar', [
+                'conversations' => $conversations,
+                'counts' => $counts,
+                'filter' => $filter,
+                'conversationRoute' => $conversationRoute,
+                'inboxRoute' => $inboxRoute,
+                'createRoute' => $isStaff ? 'staff.conversations.create' : 'owner.conversations.create',
+                'activeConversationId' => $conversation->conversation_id,
+            ])
 
             <main class="chat-thread">
                 <header class="chat-thread-header">
@@ -74,6 +53,17 @@
                             {{ \App\Support\BookingStatus::canonical($conversation->booking_status) }}
                         </span>
                     @endif
+                    <button
+                        class="chat-info-toggle"
+                        type="button"
+                        aria-label="Show guest information"
+                        aria-controls="chat-details"
+                        aria-expanded="false"
+                        title="Show guest information"
+                        data-chat-details-toggle
+                    >
+                        <i class="fa fa-circle-info" aria-hidden="true"></i>
+                    </button>
                 </header>
 
                 <section class="chat-message-list" aria-label="Conversation messages" aria-live="polite">
@@ -117,97 +107,92 @@
                 </div>
             </main>
 
-            <aside class="chat-details" aria-label="Conversation details">
-                <details class="chat-details-toggle">
-                    <summary>
-                        <i class="fa fa-circle-info" aria-hidden="true"></i>
-                        <span>Guest and booking details</span>
-                        <i class="fa fa-chevron-down chat-details-chevron" aria-hidden="true"></i>
-                    </summary>
-                    <div class="chat-details-toggle-body">
-                        <section class="chat-detail-section">
-                            <div class="chat-detail-heading">
-                                <span class="chat-detail-avatar">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($guestName, 0, 1)) }}</span>
-                                <div>
-                                    <h2>{{ $guestName }}</h2>
-                                    <p>{{ $guestEmail ?: 'No email provided' }}</p>
-                                </div>
-                            </div>
-                            <div class="chat-detail-fact">
-                                <span>Property</span>
-                                <strong>{{ $conversation->house->name }}</strong>
-                            </div>
-                            @if ($conversation->unit)
-                                <div class="chat-detail-fact">
-                                    <span>Unit</span>
-                                    <strong>{{ $conversation->unit->unit_type }}</strong>
-                                </div>
-                            @endif
-                        </section>
+            <aside class="chat-details" id="chat-details" aria-label="Conversation details" aria-hidden="true" data-chat-details-panel>
+                <section class="chat-detail-section">
+                    <div class="chat-detail-heading">
+                        <span class="chat-detail-avatar">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($guestName, 0, 1)) }}</span>
+                        <div>
+                            <h2>{{ $guestName }}</h2>
+                            <p>{{ $guestEmail ?: 'No email provided' }}</p>
+                        </div>
+                    </div>
+                    <div class="chat-detail-fact">
+                        <span>Guest status</span>
+                        <strong><span class="chat-status chat-status--{{ $guestStatusClass }}">{{ $guestStatus }}</span></strong>
+                    </div>
+                    <div class="chat-detail-fact">
+                        <span>Property</span>
+                        <strong>{{ $conversation->house->name }}</strong>
+                    </div>
+                    @if ($conversation->unit)
+                        <div class="chat-detail-fact">
+                            <span>Unit</span>
+                            <strong>{{ $conversation->unit->unit_type }}</strong>
+                        </div>
+                    @endif
+                </section>
 
-                        <section class="chat-detail-section">
-                            <h3><i class="fa fa-calendar-check" aria-hidden="true"></i> Booking context</h3>
-                            @if ($context['booking'])
-                                <div class="chat-detail-fact">
-                                    <span>Stay</span>
-                                    <strong>{{ $context['booking']->unit->house->name }} · {{ $context['booking']->unit->unit_type }}</strong>
-                                </div>
-                                <div class="chat-detail-fact">
-                                    <span>Dates</span>
-                                    <strong>{{ $context['booking']->check_in->format('M j, Y') }} - {{ $context['booking']->check_out->format('M j, Y') }}</strong>
-                                </div>
-                                <div class="chat-detail-fact">
-                                    <span>Booking</span>
-                                    <strong>{{ $context['booking']->booking_reference ?: '#'.$context['booking']->booking_id }} · {{ $context['booking']->status }}</strong>
-                                </div>
-                                <div class="chat-detail-fact">
-                                    <span>Payment</span>
-                                    <strong>{{ $context['paymentStatus'] ?: 'No payment record' }}</strong>
-                                </div>
-                                @if ($context['bookingUrl'])
-                                    <a href="{{ $context['bookingUrl'] }}" class="btn btn-outline-primary btn-sm">Open booking</a>
-                                @endif
-                            @else
-                                <p class="chat-detail-empty">No booking is linked to this conversation.</p>
-                            @endif
-                            <div class="chat-detail-fact">
-                                <span>Property address</span>
-                                <strong>{{ $conversation->house->address }}</strong>
-                            </div>
-                            @if ($context['policies'])
-                                <details class="chat-detail-collapsible">
-                                    <summary>House policies</summary>
-                                    <p>{{ $context['policies'] }}</p>
-                                </details>
-                            @endif
-                            @if ($context['amenities']->isNotEmpty())
-                                <details class="chat-detail-collapsible">
-                                    <summary>Amenities</summary>
-                                    <p>{{ $context['amenities']->pluck('name')->join(', ') }}</p>
-                                </details>
-                            @endif
-                        </section>
-
-                        <details class="chat-internal-notes">
-                            <summary><i class="fa fa-note-sticky" aria-hidden="true"></i> Internal notes <span>{{ $conversation->notes->count() }}</span></summary>
-                            <div class="chat-notes-body">
-                                @forelse ($conversation->notes as $note)
-                                    <article class="chat-note">
-                                        <div><strong>{{ $note->author->first_name }}</strong><time datetime="{{ $note->created_at->toIso8601String() }}">{{ $note->created_at->format('M j, g:i A') }}</time></div>
-                                        <p>{{ $note->note }}</p>
-                                    </article>
-                                @empty
-                                    <p class="chat-detail-empty">No private notes yet.</p>
-                                @endforelse
-                                <form method="POST" action="{{ route($notesRoute, $conversation->conversation_id) }}" class="chat-note-form">
-                                    @csrf
-                                    <label class="form-label" for="note">Add a private note</label>
-                                    <textarea class="form-control" id="note" name="note" rows="3" maxlength="5000" required placeholder="Visible only to your team"></textarea>
-                                    @error('note')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
-                                    <button class="btn btn-outline-primary btn-sm" type="submit">Save note</button>
-                                </form>
-                            </div>
+                <section class="chat-detail-section">
+                    <h3><i class="fa fa-calendar-check" aria-hidden="true"></i> Booking context</h3>
+                    @if ($context['booking'])
+                        <div class="chat-detail-fact">
+                            <span>Stay</span>
+                            <strong>{{ $context['booking']->unit->house->name }} · {{ $context['booking']->unit->unit_type }}</strong>
+                        </div>
+                        <div class="chat-detail-fact">
+                            <span>Dates</span>
+                            <strong>{{ $context['booking']->check_in->format('M j, Y') }} - {{ $context['booking']->check_out->format('M j, Y') }}</strong>
+                        </div>
+                        <div class="chat-detail-fact">
+                            <span>Booking</span>
+                            <strong>{{ $context['booking']->booking_reference ?: '#'.$context['booking']->booking_id }} · {{ $context['booking']->status }}</strong>
+                        </div>
+                        <div class="chat-detail-fact">
+                            <span>Payment</span>
+                            <strong>{{ $context['paymentStatus'] ?: 'No payment record' }}</strong>
+                        </div>
+                        @if ($context['bookingUrl'])
+                            <a href="{{ $context['bookingUrl'] }}" class="btn btn-outline-primary btn-sm">Open booking</a>
+                        @endif
+                    @else
+                        <p class="chat-detail-empty">No booking is linked to this conversation.</p>
+                    @endif
+                    <div class="chat-detail-fact">
+                        <span>Property address</span>
+                        <strong>{{ $conversation->house->address }}</strong>
+                    </div>
+                    @if ($context['policies'])
+                        <details class="chat-detail-collapsible">
+                            <summary>House policies</summary>
+                            <p>{{ $context['policies'] }}</p>
                         </details>
+                    @endif
+                    @if ($context['amenities']->isNotEmpty())
+                        <details class="chat-detail-collapsible">
+                            <summary>Amenities</summary>
+                            <p>{{ $context['amenities']->pluck('name')->join(', ') }}</p>
+                        </details>
+                    @endif
+                </section>
+
+                <details class="chat-internal-notes">
+                    <summary><i class="fa fa-note-sticky" aria-hidden="true"></i> Internal notes <span>{{ $conversation->notes->count() }}</span></summary>
+                    <div class="chat-notes-body">
+                        @forelse ($conversation->notes as $note)
+                            <article class="chat-note">
+                                <div><strong>{{ $note->author->first_name }}</strong><time datetime="{{ $note->created_at->toIso8601String() }}">{{ $note->created_at->format('M j, g:i A') }}</time></div>
+                                <p>{{ $note->note }}</p>
+                            </article>
+                        @empty
+                            <p class="chat-detail-empty">No private notes yet.</p>
+                        @endforelse
+                        <form method="POST" action="{{ route($notesRoute, $conversation->conversation_id) }}" class="chat-note-form">
+                            @csrf
+                            <label class="form-label" for="note">Add a private note</label>
+                            <textarea class="form-control" id="note" name="note" rows="3" maxlength="5000" required placeholder="Visible only to your team"></textarea>
+                            @error('note')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
+                            <button class="btn btn-outline-primary btn-sm" type="submit">Save note</button>
+                        </form>
                     </div>
                 </details>
             </aside>

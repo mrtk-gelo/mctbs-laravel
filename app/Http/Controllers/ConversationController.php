@@ -127,6 +127,80 @@ class ConversationController extends Controller
         ]);
     }
 
+    public function staffCreate(Request $request): View
+    {
+        $allConversations = $this->staffConversationsFor($request->user());
+        $filter = $this->conversationFilter($request);
+        $houses = TransientHouse::query()
+            ->whereIn('house_id', $this->conversations->accessibleHouseIds($request->user()))
+            ->where('is_active', true)
+            ->whereNull('archived_at')
+            ->orderBy('name')
+            ->get();
+        $selectedHouse = null;
+        $guests = collect();
+
+        if ($request->query('house_id') !== null) {
+            $data = $request->validate([
+                'house_id' => ['required', 'integer'],
+            ]);
+            $selectedHouse = $houses->firstWhere('house_id', (int) $data['house_id']);
+            abort_if($selectedHouse === null, 404);
+            $guests = User::query()
+                ->where('is_active', true)
+                ->whereHas('role', fn ($query) => $query->where('name', 'Guest'))
+                ->whereHas('bookings.unit', fn ($query) => $query->where('house_id', $selectedHouse->house_id))
+                ->orderBy('first_name')
+                ->orderBy('last_name')
+                ->get();
+        }
+
+        return view('conversations.staff-create', [
+            'conversations' => $this->filterStaffConversations($allConversations, $filter),
+            'filter' => $filter,
+            'counts' => [
+                'all' => $allConversations->count(),
+                'unread' => $allConversations->filter(fn (Conversation $conversation): bool => $conversation->unread_message_count > 0)->count(),
+                'guest' => $allConversations->filter(fn (Conversation $conversation): bool => $conversation->guest_user_id === null)->count(),
+            ],
+            'houses' => $houses,
+            'selectedHouse' => $selectedHouse,
+            'guests' => $guests,
+        ]);
+    }
+
+    public function staffCreateStore(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'house_id' => ['required', 'integer'],
+            'guest_user_id' => ['required', 'integer'],
+            'subject' => ['nullable', 'string', 'max:255'],
+            'message' => ['required', 'string', 'max:5000'],
+        ]);
+        $house = TransientHouse::query()
+            ->whereIn('house_id', $this->conversations->accessibleHouseIds($request->user()))
+            ->where('is_active', true)
+            ->whereNull('archived_at')
+            ->findOrFail($data['house_id']);
+        $guest = User::query()
+            ->where('is_active', true)
+            ->whereHas('role', fn ($query) => $query->where('name', 'Guest'))
+            ->whereHas('bookings.unit', fn ($query) => $query->where('house_id', $house->house_id))
+            ->findOrFail($data['guest_user_id']);
+        $conversation = $this->conversations->createForGuest(
+            $guest,
+            $house->house_id,
+            $data['subject'] ?? null
+        );
+        $this->conversations->sendMessage($request->user(), $conversation, $data['message']);
+        $route = $request->user()->role?->name === 'Staff'
+            ? 'staff.conversations.show'
+            : 'owner.conversations.show';
+
+        return redirect()->route($route, $conversation->conversation_id)
+            ->with('success', 'Your conversation has been started.');
+    }
+
     public function staffShow(Request $request, int $conversationId): View
     {
         $conversation = $this->conversation($request->user(), $conversationId);
@@ -140,6 +214,11 @@ class ConversationController extends Controller
             'quickReplies' => $this->assistance->quickRepliesFor($request->user(), $conversation->house_id),
             'context' => $this->bookingContext->forConversation($request->user(), $conversation),
             'filter' => $filter,
+            'counts' => [
+                'all' => $allConversations->count(),
+                'unread' => $allConversations->filter(fn (Conversation $thread): bool => $thread->unread_message_count > 0)->count(),
+                'guest' => $allConversations->filter(fn (Conversation $thread): bool => $thread->guest_user_id === null)->count(),
+            ],
         ]);
     }
 
@@ -169,6 +248,11 @@ class ConversationController extends Controller
 
     private function conversation(User $user, int $conversationId): Conversation
     {
+        $conversation = $this->conversations->conversationQueryFor($user)->find($conversationId);
+        if ($conversation !== null) {
+            return $conversation;
+        }
+
         $conversation = Conversation::query()->findOrFail($conversationId);
         abort_unless($this->conversations->canAccess($user, $conversation), 403);
 

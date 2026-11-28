@@ -46,6 +46,11 @@ class BookingContextService
             ? (float) $booking->payments->where('payment_status', PaymentStatus::VERIFIED)->sum('amount')
             : 0.0;
         $isGuest = $viewer->role?->name === 'Guest';
+        $bookingRoute = match ($viewer->role?->name) {
+            'Guest' => 'guest.bookings.show',
+            'Staff' => 'staff.bookings.show',
+            default => 'owner.bookings.show',
+        };
 
         return [
             'bookings' => $bookings,
@@ -56,7 +61,7 @@ class BookingContextService
             'checkOutTime' => $booking?->unit?->check_out_time,
             'policies' => $booking?->unit?->house?->policies,
             'bookingUrl' => $booking
-                ? route($isGuest ? 'guest.bookings.show' : 'bookings.show', $booking->booking_id)
+                ? route($bookingRoute, $booking->booking_id)
                 : null,
             'ticketUrl' => $booking
                 && $isGuest

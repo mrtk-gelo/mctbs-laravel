@@ -139,6 +139,8 @@ Route::middleware(['auth', 'role:accadmin'])->prefix('accadmin')->name('accadmin
 Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->group(function () {
     Route::get('/dashboard', [OwnerDashboardController::class, 'index'])->name('dashboard');
     Route::get('/messages', [ConversationController::class, 'staffIndex'])->name('conversations.index');
+    Route::get('/messages/new', [ConversationController::class, 'staffCreate'])->name('conversations.create');
+    Route::post('/messages/new', [ConversationController::class, 'staffCreateStore'])->name('conversations.create.store');
     Route::get('/messages/{conversationId}', [ConversationController::class, 'staffShow'])->whereNumber('conversationId')->name('conversations.show');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
     Route::post('/messages/{conversationId}/notes', [ConversationController::class, 'noteStore'])->whereNumber('conversationId')->name('conversations.notes.store');
@@ -224,6 +226,8 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
 Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->group(function () {
     Route::get('/dashboard', [StaffDashboardController::class, 'index'])->name('dashboard');
     Route::get('/messages', [ConversationController::class, 'staffIndex'])->name('conversations.index');
+    Route::get('/messages/new', [ConversationController::class, 'staffCreate'])->name('conversations.create');
+    Route::post('/messages/new', [ConversationController::class, 'staffCreateStore'])->name('conversations.create.store');
     Route::get('/messages/{conversationId}', [ConversationController::class, 'staffShow'])->whereNumber('conversationId')->name('conversations.show');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
     Route::post('/messages/{conversationId}/notes', [ConversationController::class, 'noteStore'])->whereNumber('conversationId')->name('conversations.notes.store');

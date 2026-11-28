@@ -725,6 +725,23 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-chat-details-toggle]').forEach((button) => {
+        const workspace = button.closest('.chat-workspace');
+        const panel = workspace?.querySelector('[data-chat-details-panel]');
+
+        if (!workspace || !panel) {
+            return;
+        }
+
+        button.addEventListener('click', () => {
+            const isOpen = workspace.classList.toggle('chat-workspace--details-open');
+            button.setAttribute('aria-expanded', String(isOpen));
+            button.setAttribute('aria-label', isOpen ? 'Hide guest information' : 'Show guest information');
+            button.title = isOpen ? 'Hide guest information' : 'Show guest information';
+            panel.setAttribute('aria-hidden', String(!isOpen));
+        });
+    });
+
     document.querySelectorAll('[data-chat-search-form]').forEach((form) => {
         const input = form.querySelector('[data-chat-search-input]');
         const clearButton = form.querySelector('[data-chat-search-clear]');

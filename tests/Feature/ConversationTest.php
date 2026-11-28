@@ -197,6 +197,182 @@ test('owner inbox filters all, unread, and anonymous guest conversations', funct
         ->assertDontSee('Registered guest question');
 });
 
+test('owners can start conversations only with registered guests booked at their properties', function () {
+    Mail::fake();
+    $owner = conversationUser('Owner', 'owner-new-chat@example.com');
+    $otherOwner = conversationUser('Owner', 'other-owner-new-chat@example.com');
+    $guest = conversationUser('Guest', 'booked-new-chat@example.com');
+    $unbookedGuest = conversationUser('Guest', 'unbooked-new-chat@example.com');
+    $otherPropertyGuest = conversationUser('Guest', 'other-property-new-chat@example.com');
+    $house = conversationHouse($owner, 'New Chat House');
+    $otherHouse = conversationHouse($otherOwner, 'Other New Chat House');
+    $unit = Unit::create([
+        'house_id' => $house->house_id,
+        'unit_type' => 'New Chat Suite',
+        'capacity' => 2,
+        'maximum_capacity' => 2,
+        'price' => 1800,
+        'status' => 'Available',
+    ]);
+    $otherUnit = Unit::create([
+        'house_id' => $otherHouse->house_id,
+        'unit_type' => 'Other New Chat Suite',
+        'capacity' => 2,
+        'maximum_capacity' => 2,
+        'price' => 1800,
+        'status' => 'Available',
+    ]);
+
+    foreach ([[$guest, $unit], [$otherPropertyGuest, $otherUnit]] as [$bookedGuest, $bookedUnit]) {
+        Booking::create([
+            'user_id' => $bookedGuest->user_id,
+            'unit_id' => $bookedUnit->unit_id,
+            'check_in' => today()->addDays(3),
+            'check_out' => today()->addDays(5),
+            'adult_count' => 1,
+            'child_count' => 0,
+            'total_price' => 3600,
+            'status' => BookingStatus::ACCEPTED,
+        ]);
+    }
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.create', ['house_id' => $house->house_id]))
+        ->assertOk()
+        ->assertSee($guest->email)
+        ->assertDontSee($unbookedGuest->email)
+        ->assertDontSee($otherPropertyGuest->email);
+
+    $this->actingAs($owner)
+        ->post(route('owner.conversations.create.store'), [
+            'house_id' => $house->house_id,
+            'guest_user_id' => $guest->user_id,
+            'subject' => 'Check-in details',
+            'message' => 'Please confirm your expected arrival time.',
+        ])
+        ->assertRedirect();
+
+    $conversation = Conversation::query()->firstOrFail();
+    expect($conversation->guest_user_id)->toBe($guest->user_id)
+        ->and($conversation->house_id)->toBe($house->house_id)
+        ->and($conversation->subject)->toBe('Check-in details')
+        ->and($conversation->messages()->where('sender_type', 'user')->value('message'))
+        ->toBe('Please confirm your expected arrival time.');
+
+    $this->actingAs($owner)
+        ->post(route('owner.conversations.create.store'), [
+            'house_id' => $house->house_id,
+            'guest_user_id' => $unbookedGuest->user_id,
+            'message' => 'This guest has no booking here.',
+        ])
+        ->assertNotFound();
+
+    $this->actingAs($owner)
+        ->post(route('owner.conversations.create.store'), [
+            'house_id' => $otherHouse->house_id,
+            'guest_user_id' => $otherPropertyGuest->user_id,
+            'message' => 'This property is not authorized.',
+        ])
+        ->assertNotFound();
+});
+
+test('staff can start a conversation with a guest booked at an assigned property', function () {
+    Mail::fake();
+    $owner = conversationUser('Owner', 'owner-staff-new-chat@example.com');
+    $staff = conversationUser('Staff', 'staff-new-chat@example.com');
+    $guest = conversationUser('Guest', 'guest-staff-new-chat@example.com');
+    $house = conversationHouse($owner, 'Staff New Chat House');
+    $unit = Unit::create([
+        'house_id' => $house->house_id,
+        'unit_type' => 'Staff New Chat Suite',
+        'capacity' => 2,
+        'maximum_capacity' => 2,
+        'price' => 1800,
+        'status' => 'Available',
+    ]);
+    $owner->invitationsSent()->create([
+        'house_id' => $house->house_id,
+        'role_id' => Role::query()->where('name', 'Staff')->firstOrFail()->role_id,
+        'email' => $staff->email,
+        'token' => 'staff-new-chat-token',
+        'used_at' => now(),
+        'expires_at' => now()->addDay(),
+    ]);
+    Booking::create([
+        'user_id' => $guest->user_id,
+        'unit_id' => $unit->unit_id,
+        'check_in' => today()->addDays(3),
+        'check_out' => today()->addDays(5),
+        'adult_count' => 1,
+        'child_count' => 0,
+        'total_price' => 3600,
+        'status' => BookingStatus::ACCEPTED,
+    ]);
+
+    $this->actingAs($staff)
+        ->post(route('staff.conversations.create.store'), [
+            'house_id' => $house->house_id,
+            'guest_user_id' => $guest->user_id,
+            'message' => 'We are confirming your check-in time.',
+        ])
+        ->assertRedirect();
+
+    $conversation = Conversation::query()->where('guest_user_id', $guest->user_id)->firstOrFail();
+    $this->actingAs($staff)
+        ->get(route('staff.conversations.show', $conversation->conversation_id))
+        ->assertOk()
+        ->assertSee('Accepted')
+        ->assertSee('Guest status');
+});
+
+test('conversation details show booking status and identify public visitors', function () {
+    Mail::fake();
+    $owner = conversationUser('Owner', 'owner-guest-status@example.com');
+    $guest = conversationUser('Guest', 'guest-status@example.com');
+    $house = conversationHouse($owner, 'Guest Status House');
+    $unit = Unit::create([
+        'house_id' => $house->house_id,
+        'unit_type' => 'Guest Status Suite',
+        'capacity' => 2,
+        'maximum_capacity' => 2,
+        'price' => 1800,
+        'status' => 'Available',
+    ]);
+    Booking::create([
+        'user_id' => $guest->user_id,
+        'unit_id' => $unit->unit_id,
+        'check_in' => today()->addDays(3),
+        'check_out' => today()->addDays(5),
+        'adult_count' => 1,
+        'child_count' => 0,
+        'total_price' => 3600,
+        'status' => BookingStatus::ACCEPTED,
+    ]);
+    $registeredConversation = app(ConversationService::class)->createForGuest($guest, $house->house_id);
+
+    $this->post(route('public.visitor-conversations.store'), [
+        'house_id' => $house->house_id,
+        'name' => 'Public Visitor',
+        'email' => 'public-visitor-status@example.com',
+        'message' => 'Can the team help with a question?',
+    ])->assertRedirect();
+    $visitorConversation = Conversation::query()
+        ->where('visitor_email', 'public-visitor-status@example.com')
+        ->firstOrFail();
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.show', $registeredConversation->conversation_id))
+        ->assertOk()
+        ->assertSee('Guest status')
+        ->assertSee('Accepted');
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.show', $visitorConversation->conversation_id))
+        ->assertOk()
+        ->assertSee('Guest status')
+        ->assertSee('Public visitor');
+});
+
 test('guest contextual assistance uses only the guest booking and does not mutate payment records', function () {
     $owner = conversationUser('Owner', 'owner-context@example.com');
     $guest = conversationUser('Guest', 'guest-context@example.com');
