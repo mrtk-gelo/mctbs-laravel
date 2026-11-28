@@ -154,7 +154,7 @@ class PublicController extends Controller
         ]);
     }
 
-    public function unit(Request $request, Unit $unit, AssistanceService $assistance): View
+    public function unit(Unit $unit): View
     {
         $this->ensurePublicUnit($unit);
 
@@ -202,9 +202,6 @@ class PublicController extends Controller
 
         return view('public.unit', [
             'unit' => $unit,
-            'faqs' => $assistance->activeFaqsForGuest($unit->house_id, $unit->unit_id),
-            'faqPrompts' => $assistance->quickQuestionsForUnit(),
-            'questionPrefill' => $request->query('question'),
             'reviews' => $reviews,
             'averageRating' => $reviews->avg('rating'),
             'reviewCount' => $reviews->count(),

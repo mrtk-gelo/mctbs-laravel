@@ -8,9 +8,9 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Services\AssistanceService;
 use App\Services\ConversationService;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Str;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class PublicVisitorConversationController extends Controller
@@ -86,6 +86,71 @@ class PublicVisitorConversationController extends Controller
             ->with('success', 'Your message has been sent.');
     }
 
+    public function context(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'house_id' => ['required', 'integer'],
+            'unit_id' => ['nullable', 'integer'],
+        ]);
+        $house = $this->publicHouse((int) $data['house_id']);
+        $unit = $this->publicUnit($house, isset($data['unit_id']) ? (int) $data['unit_id'] : null);
+
+        return response()->json([
+            'units' => $house->units()
+                ->where('status', 'Available')
+                ->whereNull('archived_at')
+                ->orderBy('unit_type')
+                ->get(['unit_id', 'unit_type'])
+                ->map(fn (Unit $availableUnit): array => [
+                    'id' => $availableUnit->unit_id,
+                    'name' => $availableUnit->unit_type,
+                ]),
+            'quickQuestions' => $unit
+                ? $this->assistance->quickQuestionsForUnit()
+                : $this->assistance->quickQuestionsForHouse(),
+            'faqQuestions' => $this->assistance
+                ->activeFaqsForGuest($house->house_id, $unit?->unit_id)
+                ->map(fn ($faq): string => $faq->question)
+                ->values(),
+        ]);
+    }
+
+    public function answer(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'house_id' => ['required', 'integer'],
+            'unit_id' => ['nullable', 'integer'],
+            'question' => ['required', 'string', 'max:5000'],
+        ]);
+        $question = trim($data['question']);
+
+        if ($this->conversations->visitorQuestionRequiresSignIn($question)) {
+            return response()->json([
+                'requiresSignIn' => true,
+                'signInUrl' => route('login'),
+            ]);
+        }
+
+        $house = $this->publicHouse((int) $data['house_id']);
+        $unit = $this->publicUnit($house, isset($data['unit_id']) ? (int) $data['unit_id'] : null);
+        $answer = $unit
+            ? $this->assistance->answerUnitQuestion($unit, $question)
+            : $this->assistance->answerHouseQuestion($house, $question);
+        $faq = $answer === null
+            ? $this->assistance->findFaq($house->house_id, $question, $unit?->unit_id)
+            : null;
+
+        if ($faq !== null) {
+            $answer = $faq->answer;
+        }
+
+        return response()->json([
+            'answered' => $answer !== null,
+            'answer' => $answer,
+            'relatedUrl' => $faq?->related_url,
+        ]);
+    }
+
     public function show(Request $request, int $conversationId): View|RedirectResponse
     {
         $conversation = Conversation::query()->findOrFail($conversationId);
@@ -101,7 +166,10 @@ class PublicVisitorConversationController extends Controller
         return view('public-conversations.show', [
             'conversation' => $conversation,
             'conversations' => $this->conversations->visitorConversationsFor($request),
-            'faqPrompts' => $conversation->unit ? $this->assistance->quickQuestionsForUnit() : [],
+            'settings' => $this->assistance->settingsFor($conversation->house_id),
+            'faqPrompts' => $conversation->unit
+                ? $this->assistance->quickQuestionsForUnit()
+                : $this->assistance->quickQuestionsForHouse(),
             'faqs' => $this->assistance->activeFaqsForGuest($conversation->house_id, $conversation->unit_id),
             'signInUrl' => route('public.visitor-conversations.sign-in', $conversation->conversation_id),
         ]);
@@ -159,5 +227,32 @@ class PublicVisitorConversationController extends Controller
         );
 
         return redirect()->route('login');
+    }
+
+    private function publicHouse(int $houseId): TransientHouse
+    {
+        return TransientHouse::query()
+            ->where('is_active', true)
+            ->whereNull('archived_at')
+            ->whereHas('owner', fn ($query) => $query->where('is_active', true))
+            ->findOrFail($houseId);
+    }
+
+    private function publicUnit(TransientHouse $house, ?int $unitId): ?Unit
+    {
+        if ($unitId === null) {
+            return null;
+        }
+
+        $unit = Unit::query()
+            ->where('house_id', $house->house_id)
+            ->where('unit_id', $unitId)
+            ->where('status', 'Available')
+            ->whereNull('archived_at')
+            ->first();
+
+        abort_if($unit === null, 404);
+
+        return $unit;
     }
 }

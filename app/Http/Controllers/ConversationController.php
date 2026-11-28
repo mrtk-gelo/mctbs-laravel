@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Booking;
 use App\Models\Conversation;
 use App\Models\TransientHouse;
 use App\Models\Unit;
@@ -10,10 +9,9 @@ use App\Models\User;
 use App\Services\AssistanceService;
 use App\Services\BookingContextService;
 use App\Services\ConversationService;
-use App\Support\BookingStatus;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class ConversationController extends Controller
@@ -115,74 +113,33 @@ class ConversationController extends Controller
 
     public function staffIndex(Request $request): View
     {
-        $bookingStatuses = array_merge(BookingStatus::CANONICAL_LIFECYCLE, [
-            BookingStatus::CANCELLED,
-            BookingStatus::REJECTED,
-        ]);
-        $baseQuery = $this->conversations->conversationQueryFor($request->user())
-            ->with(['guest', 'house', 'unit', 'latestMessage', 'latestHumanMessage']);
-
-        if ($request->filled('search')) {
-            $search = $request->string('search')->toString();
-            $baseQuery->where(function (Builder $conversationQuery) use ($search): void {
-                $conversationQuery
-                    ->where('subject', 'like', '%'.$search.'%')
-                    ->orWhereHas('guest', function (Builder $guestQuery) use ($search): void {
-                        $guestQuery->where('first_name', 'like', '%'.$search.'%')
-                            ->orWhere('last_name', 'like', '%'.$search.'%')
-                            ->orWhere('email', 'like', '%'.$search.'%');
-                    });
-            });
-        }
-
-        $bookingStatusCounts = collect($bookingStatuses)
-            ->mapWithKeys(function (string $bookingStatus) use ($baseQuery): array {
-                $statusQuery = clone $baseQuery;
-                $this->filterByBookingStatus($statusQuery, $bookingStatus);
-
-                return [$bookingStatus => $statusQuery->count()];
-            });
-        $noBookingQuery = clone $baseQuery;
-        $this->filterByBookingStatus($noBookingQuery, null);
-        $noBookingCount = $noBookingQuery->count();
-        $allCount = (clone $baseQuery)->count();
-
-        $query = clone $baseQuery;
-        $selectedBookingStatus = $request->string('booking_status')->toString();
-        if (in_array($selectedBookingStatus, $bookingStatuses, true)) {
-            $this->filterByBookingStatus($query, $selectedBookingStatus);
-        } elseif ($selectedBookingStatus === 'none') {
-            $this->filterByBookingStatus($query, null);
-        }
-
-        $query
-            ->latest('last_message_at')
-            ->latest('created_at');
+        $allConversations = $this->staffConversationsFor($request->user());
+        $filter = $this->conversationFilter($request);
 
         return view('conversations.staff-index', [
-            'conversations' => $query->get(),
-            'filters' => $request->only(['booking_status', 'search']),
-            'bookingStatuses' => $bookingStatuses,
-            'bookingStatusCounts' => $bookingStatusCounts,
-            'noBookingCount' => $noBookingCount,
-            'allCount' => $allCount,
+            'conversations' => $this->filterStaffConversations($allConversations, $filter),
+            'filter' => $filter,
+            'counts' => [
+                'all' => $allConversations->count(),
+                'unread' => $allConversations->filter(fn (Conversation $conversation): bool => $conversation->unread_message_count > 0)->count(),
+                'guest' => $allConversations->filter(fn (Conversation $conversation): bool => $conversation->guest_user_id === null)->count(),
+            ],
         ]);
     }
 
     public function staffShow(Request $request, int $conversationId): View
     {
         $conversation = $this->conversation($request->user(), $conversationId);
+        $allConversations = $this->staffConversationsFor($request->user());
+        $filter = $this->conversationFilter($request);
         $this->conversations->markRead($request->user(), $conversation);
 
         return view('conversations.staff-show', [
             'conversation' => $conversation->load(['guest', 'house', 'unit', 'messages.sender', 'notes.author']),
-            'conversations' => $this->conversations->conversationQueryFor($request->user())
-                ->with(['guest', 'house', 'unit', 'latestMessage', 'latestHumanMessage'])
-                ->latest('last_message_at')
-                ->latest('created_at')
-                ->get(),
+            'conversations' => $this->filterStaffConversations($allConversations, $filter),
             'quickReplies' => $this->assistance->quickRepliesFor($request->user(), $conversation->house_id),
             'context' => $this->bookingContext->forConversation($request->user(), $conversation),
+            'filter' => $filter,
         ]);
     }
 
@@ -218,28 +175,28 @@ class ConversationController extends Controller
         return $conversation;
     }
 
-    private function filterByBookingStatus(Builder $query, ?string $bookingStatus): void
+    private function staffConversationsFor(User $user): Collection
     {
-        $latestBookingStatus = Booking::query()
-            ->select('status')
-            ->whereColumn('bookings.user_id', 'conversations.guest_user_id')
-            ->whereHas('unit', fn (Builder $unitQuery) => $unitQuery->whereColumn('units.house_id', 'conversations.house_id'))
-            ->orderByDesc('check_in')
-            ->orderByDesc('booking_id')
-            ->limit(1);
-        $sql = '('.$latestBookingStatus->toSql().')';
-        $bindings = $latestBookingStatus->getBindings();
+        return $this->conversations->conversationQueryFor($user)
+            ->with(['guest', 'house', 'unit', 'latestMessage', 'latestHumanMessage'])
+            ->latest('last_message_at')
+            ->latest('created_at')
+            ->get();
+    }
 
-        if ($bookingStatus === null) {
-            $query->whereRaw($sql.' IS NULL', $bindings);
+    private function conversationFilter(Request $request): string
+    {
+        $filter = $request->string('filter')->toString();
 
-            return;
-        }
+        return in_array($filter, ['all', 'unread', 'guest'], true) ? $filter : 'all';
+    }
 
-        $statuses = $bookingStatus === BookingStatus::COMPLETED
-            ? BookingStatus::completedStatuses()
-            : [$bookingStatus];
-        $placeholders = implode(', ', array_fill(0, count($statuses), '?'));
-        $query->whereRaw($sql.' IN ('.$placeholders.')', [...$bindings, ...$statuses]);
+    private function filterStaffConversations(Collection $conversations, string $filter): Collection
+    {
+        return match ($filter) {
+            'unread' => $conversations->filter(fn (Conversation $conversation): bool => $conversation->unread_message_count > 0)->values(),
+            'guest' => $conversations->filter(fn (Conversation $conversation): bool => $conversation->guest_user_id === null)->values(),
+            default => $conversations,
+        };
     }
 }

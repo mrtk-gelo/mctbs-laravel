@@ -1,4 +1,4 @@
-@props(['title' => 'MCTBS', 'footer' => false, 'chatUnit' => null])
+@props(['title' => 'MCTBS', 'footer' => false, 'chatUnit' => null, 'chatHouse' => null])
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,8 +21,16 @@
 
 @include('partials.system-interface')
 
-@if (auth()->user()?->role?->name === 'Guest' || (! auth()->check() && $chatUnit))
-    @include('partials.guest-chat-launcher', ['unit' => $chatUnit])
+@php
+    $isGuestUser = auth()->user()?->role?->name === 'Guest';
+    $isPublicBrowsingPage = request()->routeIs('home', 'public.transients', 'public.house', 'public.unit');
+    $isConversationPage = request()->routeIs('guest.conversations.*', 'public.visitor-conversations.*');
+@endphp
+@if (! $isConversationPage && ($isGuestUser || (! auth()->check() && $isPublicBrowsingPage)))
+    @include('partials.guest-chat-launcher', [
+        'unit' => $chatUnit,
+        'house' => $chatHouse ?? $chatUnit?->house,
+    ])
 @endif
 
 @if ($footer)

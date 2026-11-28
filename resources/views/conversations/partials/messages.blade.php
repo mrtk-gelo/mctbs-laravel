@@ -1,10 +1,17 @@
 @foreach (($hideSystemMessages ?? false) ? $messages->where('sender_type', '!=', 'system') : $messages as $message)
     @php
         $isSystemMessage = in_array($message->sender_type, ['assistant', 'system'], true);
-        $isOutgoing = ! $isSystemMessage && (int) $message->sender_id === (int) $viewerUserId;
+        $isOutgoing = ! $isSystemMessage && (
+            ($message->sender_id !== null && (int) $message->sender_id === (int) $viewerUserId)
+            || (
+                $message->sender_type === 'visitor'
+                && (int) ($conversationGuestId ?? 0) === (int) ($viewerUserId ?? 0)
+            )
+        );
         $senderName = match ($message->sender_type) {
             'assistant' => 'MCTBS Connect · automated answer',
             'system' => 'MCTBS Connect',
+            'visitor' => $visitorName ?? 'Public visitor',
             default => trim(($message->sender?->first_name ?? '').' '.($message->sender?->last_name ?? '')) ?: 'Property team',
         };
     @endphp

@@ -158,59 +158,43 @@ test('staff replies without assigning or resolving a property conversation', fun
         ->and($conversation->messages()->where('message', 'We can help with that.')->exists())->toBeTrue();
 });
 
-test('owner inbox filters chats by each guest property latest booking status', function () {
-    $owner = conversationUser('Owner', 'owner-status-filter@example.com');
-    $guest = conversationUser('Guest', 'guest-status-filter@example.com');
-    $acceptedGuest = conversationUser('Guest', 'accepted-status-filter@example.com');
-    $legacyGuest = conversationUser('Guest', 'legacy-status-filter@example.com');
-    $noBookingGuest = conversationUser('Guest', 'no-booking-status-filter@example.com');
-    $house = conversationHouse($owner, 'Status Filter House');
-    $unit = Unit::create([
+test('owner inbox filters all, unread, and anonymous guest conversations', function () {
+    Mail::fake();
+    $owner = conversationUser('Owner', 'owner-inbox-filter@example.com');
+    $guest = conversationUser('Guest', 'registered-inbox-guest@example.com');
+    $house = conversationHouse($owner, 'Inbox Filter House');
+    $registeredConversation = app(ConversationService::class)->createForGuest(
+        $guest,
+        $house->house_id,
+        'Registered guest question'
+    );
+    app(ConversationService::class)->sendMessage($guest, $registeredConversation, 'Can someone help me?');
+
+    $this->post(route('public.visitor-conversations.store'), [
         'house_id' => $house->house_id,
-        'unit_type' => 'Status Suite',
-        'capacity' => 2,
-        'price' => 1800,
-        'status' => 'Available',
-    ]);
-
-    $createBooking = fn (User $bookingGuest, string $status, int $daysAgo): Booking => Booking::create([
-        'user_id' => $bookingGuest->user_id,
-        'unit_id' => $unit->unit_id,
-        'check_in' => now()->subDays($daysAgo),
-        'check_out' => now()->subDays($daysAgo)->addDay(),
-        'adult_count' => 1,
-        'child_count' => 0,
-        'total_price' => 1800,
-        'status' => $status,
-    ]);
-
-    $createBooking($guest, BookingStatus::ACCEPTED, 10);
-    $createBooking($guest, BookingStatus::COMPLETED, 5);
-    $createBooking($acceptedGuest, BookingStatus::ACCEPTED, 3);
-    $createBooking($legacyGuest, BookingStatus::CHECKED_OUT, 4);
-
-    app(ConversationService::class)->createForGuest($guest, $house->house_id, 'Latest complete chat');
-    app(ConversationService::class)->createForGuest($acceptedGuest, $house->house_id, 'Accepted chat');
-    app(ConversationService::class)->createForGuest($legacyGuest, $house->house_id, 'Legacy checked-out chat');
-    app(ConversationService::class)->createForGuest($noBookingGuest, $house->house_id, 'No booking chat');
+        'name' => 'Anonymous Visitor',
+        'email' => 'anonymous-inbox-guest@example.com',
+        'message' => 'Can someone call me about this property?',
+    ])->assertRedirect();
 
     $this->actingAs($owner)
-        ->get(route('owner.conversations.index', ['booking_status' => BookingStatus::COMPLETED]))
+        ->get(route('owner.conversations.index', ['filter' => 'all']))
         ->assertOk()
-        ->assertSee('Latest complete chat')
-        ->assertSee('Legacy checked-out chat')
-        ->assertDontSee('Accepted chat')
-        ->assertDontSee('No booking chat');
+        ->assertSee('All')
+        ->assertSee('Unread')
+        ->assertSee('Guest')
+        ->assertSee('Registered guest question')
+        ->assertSee('Anonymous Visitor');
 
     $this->actingAs($owner)
-        ->get(route('owner.conversations.index', ['booking_status' => BookingStatus::ACCEPTED]))
-        ->assertSee('Accepted chat')
-        ->assertDontSee('Latest complete chat');
+        ->get(route('owner.conversations.index', ['filter' => 'unread']))
+        ->assertSee('Registered guest question')
+        ->assertSee('Anonymous Visitor');
 
     $this->actingAs($owner)
-        ->get(route('owner.conversations.index', ['booking_status' => 'none']))
-        ->assertSee('No booking chat')
-        ->assertDontSee('Accepted chat');
+        ->get(route('owner.conversations.index', ['filter' => 'guest']))
+        ->assertSee('Anonymous Visitor')
+        ->assertDontSee('Registered guest question');
 });
 
 test('guest contextual assistance uses only the guest booking and does not mutate payment records', function () {

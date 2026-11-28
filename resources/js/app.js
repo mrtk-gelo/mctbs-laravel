@@ -723,3 +723,321 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }));
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-chat-search-form]').forEach((form) => {
+        const input = form.querySelector('[data-chat-search-input]');
+        const clearButton = form.querySelector('[data-chat-search-clear]');
+        const sidebar = form.closest('.chat-sidebar');
+        const list = sidebar?.querySelector('[data-chat-inbox-list]');
+        const emptyState = sidebar?.querySelector('[data-chat-search-empty]');
+
+        if (!input || !list) {
+            return;
+        }
+
+        const items = [...list.querySelectorAll('[data-chat-inbox-item]')];
+        const applySearch = () => {
+            const searchTerm = input.value.trim().toLocaleLowerCase();
+            let visibleCount = 0;
+
+            items.forEach((item) => {
+                const matches = (item.dataset.chatGuestName ?? '').includes(searchTerm);
+                item.hidden = !matches;
+                if (matches) {
+                    visibleCount += 1;
+                }
+            });
+
+            if (clearButton) {
+                clearButton.hidden = searchTerm.length === 0;
+            }
+            if (emptyState) {
+                emptyState.hidden = searchTerm.length === 0 || visibleCount > 0;
+            }
+        };
+
+        form.addEventListener('submit', (event) => event.preventDefault());
+        input.addEventListener('input', applySearch);
+        clearButton?.addEventListener('click', () => {
+            input.value = '';
+            applySearch();
+            input.focus();
+        });
+        applySearch();
+    });
+
+    document.querySelectorAll('[data-guest-chat-launcher]').forEach((launcher) => {
+        const closeButton = launcher.querySelector('[data-close-guest-chat]');
+        const trigger = launcher.querySelector('.guest-chat-trigger');
+        const widget = launcher.querySelector('[data-public-chat-widget]');
+
+        closeButton?.addEventListener('click', () => {
+            launcher.open = false;
+            trigger?.focus();
+        });
+
+        if (!widget) {
+            return;
+        }
+
+        const houseSelect = widget.querySelector('[data-chat-house-select]');
+        const unitSelect = widget.querySelector('[data-chat-unit-select]');
+        const unitPicker = widget.querySelector('[data-chat-unit-picker]');
+        const transcript = widget.querySelector('[data-chat-transcript]');
+        const faqList = widget.querySelector('[data-chat-faqs]');
+        const questionForm = widget.querySelector('[data-chat-question-form]');
+        const questionInput = widget.querySelector('[data-chat-question-input]');
+        const contactForm = widget.querySelector('[data-chat-contact-form]');
+        const contactPrompt = widget.querySelector('[data-chat-contact-prompt]');
+        const contactMessage = widget.querySelector('[data-chat-contact-message]');
+        const contactHouse = widget.querySelector('[data-chat-contact-house]');
+        const contactUnit = widget.querySelector('[data-chat-contact-unit]');
+        const contactSubject = widget.querySelector('[data-chat-contact-subject]');
+        const fixedHouseId = widget.dataset.fixedHouseId;
+        const fixedUnitId = widget.dataset.fixedUnitId;
+        let contextController;
+        let contextKey = '';
+        let isSubmitting = false;
+
+        const selectedHouseId = () => fixedHouseId || houseSelect?.value || '';
+        const selectedUnitId = () => fixedUnitId || unitSelect?.value || '';
+        const scrollTranscript = () => {
+            if (transcript) {
+                transcript.scrollTop = transcript.scrollHeight;
+            }
+        };
+        const appendChatMessage = (text, sender, link = null) => {
+            const message = document.createElement('article');
+            message.className = `guest-chat-message guest-chat-message--${sender}`;
+            const label = document.createElement('span');
+            label.textContent = sender === 'guest' ? 'You' : 'MCTBS Connect';
+            const content = document.createElement('p');
+            content.textContent = text;
+            message.append(label, content);
+
+            if (link) {
+                const anchor = document.createElement('a');
+                anchor.href = link.url;
+                anchor.textContent = link.label;
+                if (link.external) {
+                    anchor.target = '_blank';
+                    anchor.rel = 'noopener noreferrer';
+                }
+                message.append(anchor);
+            }
+
+            transcript?.append(message);
+            scrollTranscript();
+            return message;
+        };
+        const populateQuestions = (questions) => {
+            if (!faqList) {
+                return;
+            }
+
+            const heading = document.createElement('span');
+            heading.className = 'guest-chat-section-label';
+            heading.textContent = 'Quick questions';
+            faqList.replaceChildren(heading);
+            [...new Set(questions)].forEach((question) => {
+                const button = document.createElement('button');
+                button.className = 'guest-chat-question';
+                button.type = 'button';
+                button.dataset.chatQuestion = question;
+
+                const questionIcon = document.createElement('i');
+                questionIcon.className = 'fa fa-circle-question';
+                questionIcon.setAttribute('aria-hidden', 'true');
+                const label = document.createElement('span');
+                label.textContent = question;
+                const arrowIcon = document.createElement('i');
+                arrowIcon.className = 'fa fa-arrow-right';
+                arrowIcon.setAttribute('aria-hidden', 'true');
+                button.append(questionIcon, label, arrowIcon);
+                faqList.append(button);
+            });
+            faqList.hidden = questions.length === 0;
+        };
+        const setContactDetails = (question) => {
+            if (!contactForm || !contactMessage || !contactPrompt) {
+                return;
+            }
+
+            contactMessage.value = question;
+            contactHouse.value = selectedHouseId();
+            contactUnit.value = selectedUnitId();
+            contactSubject.value = `Question about ${unitSelect?.selectedOptions?.[0]?.textContent || 'this property'}`;
+            contactPrompt.textContent = 'I could not find an approved answer. Share your name and email so the property team can follow up with you here.';
+            contactForm.hidden = false;
+            contactForm.querySelector('[name="name"]')?.focus();
+            scrollTranscript();
+        };
+        const updateContext = async () => {
+            const houseId = selectedHouseId();
+            if (!houseId) {
+                contextKey = '';
+                if (faqList) {
+                    faqList.hidden = true;
+                }
+                if (unitPicker) {
+                    unitPicker.hidden = true;
+                }
+                questionForm?.querySelector('button[type="submit"]')?.setAttribute('disabled', '');
+                return;
+            }
+
+            const unitId = selectedUnitId();
+            const nextContextKey = `${houseId}:${unitId}`;
+            if (contextKey === nextContextKey) {
+                return;
+            }
+            contextController?.abort();
+            const requestController = new AbortController();
+            contextController = requestController;
+            contextKey = nextContextKey;
+
+            const contextUrl = new URL(widget.dataset.contextUrl, window.location.origin);
+            contextUrl.searchParams.set('house_id', houseId);
+            if (unitId) {
+                contextUrl.searchParams.set('unit_id', unitId);
+            }
+
+            try {
+                const response = await fetch(contextUrl, {
+                    headers: { Accept: 'application/json' },
+                    credentials: 'same-origin',
+                    signal: requestController.signal,
+                });
+                if (!response.ok) {
+                    throw new Error(`Chat context request failed with status ${response.status}`);
+                }
+                const context = await response.json();
+                if (contextController !== requestController) {
+                    return;
+                }
+
+                if (!fixedUnitId && unitSelect) {
+                    const selectedId = unitId;
+                    unitSelect.replaceChildren(new Option('General property question', ''));
+                    context.units.forEach((unit) => unitSelect.add(new Option(unit.name, unit.id)));
+                    unitSelect.value = selectedId;
+                    if (unitPicker) {
+                        unitPicker.hidden = context.units.length === 0;
+                    }
+                }
+
+                if (faqList) {
+                    populateQuestions([...context.quickQuestions, ...context.faqQuestions]);
+                }
+                questionForm?.querySelector('button[type="submit"]')?.removeAttribute('disabled');
+                contactHouse.value = houseId;
+                contactUnit.value = unitId;
+            } catch (chatError) {
+                if (chatError.name === 'AbortError') {
+                    return;
+                }
+                contextKey = '';
+                console.error(chatError);
+                appendChatMessage('Quick questions could not be loaded. Please try again in a moment.', 'assistant');
+            }
+        };
+        const askQuestion = async (question) => {
+            const houseId = selectedHouseId();
+            const unitId = selectedUnitId();
+            if (!houseId || isSubmitting) {
+                return;
+            }
+
+            isSubmitting = true;
+            questionForm?.querySelector('button[type="submit"]')?.setAttribute('disabled', '');
+            appendChatMessage(question, 'guest');
+            if (questionInput) {
+                questionInput.value = '';
+            }
+
+            const formData = new FormData(questionForm);
+            formData.set('house_id', houseId);
+            formData.set('unit_id', unitId);
+            formData.set('question', question);
+
+            try {
+                const response = await fetch(widget.dataset.answerUrl, {
+                    method: 'POST',
+                    headers: { Accept: 'application/json' },
+                    credentials: 'same-origin',
+                    body: formData,
+                });
+                if (!response.ok) {
+                    throw new Error(`Chat answer request failed with status ${response.status}`);
+                }
+
+                const result = await response.json();
+                if (result.requiresSignIn) {
+                    appendChatMessage(
+                        'That request needs a signed-in guest account. Sign in to continue securely.',
+                        'assistant',
+                        { url: result.signInUrl, label: 'Sign in as a guest' }
+                    );
+                } else if (result.answered) {
+                    appendChatMessage(result.answer, 'assistant');
+                    if (result.relatedUrl) {
+                        try {
+                            const relatedUrl = new URL(result.relatedUrl, window.location.origin);
+                            if (['http:', 'https:'].includes(relatedUrl.protocol)) {
+                                appendChatMessage('More information is available at the approved link.', 'assistant', {
+                                    url: relatedUrl.href,
+                                    label: 'More information',
+                                    external: relatedUrl.origin !== window.location.origin,
+                                });
+                            }
+                        } catch (urlError) {
+                            console.error(urlError);
+                        }
+                    }
+                } else {
+                    appendChatMessage('I could not find an approved answer for that question.', 'assistant');
+                    setContactDetails(question);
+                }
+            } catch (chatError) {
+                console.error(chatError);
+                appendChatMessage('I could not load an answer right now. Please try again or send your question to the property team.', 'assistant');
+            } finally {
+                isSubmitting = false;
+                if (selectedHouseId()) {
+                    questionForm?.querySelector('button[type="submit"]')?.removeAttribute('disabled');
+                }
+            }
+        };
+
+        houseSelect?.addEventListener('change', () => {
+            if (unitSelect) {
+                unitSelect.value = '';
+            }
+            contextKey = '';
+            updateContext();
+        });
+        unitSelect?.addEventListener('change', () => {
+            contextKey = '';
+            updateContext();
+        });
+        questionForm?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const question = questionInput?.value.trim();
+            if (question) {
+                askQuestion(question);
+            }
+        });
+        faqList?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-chat-question]');
+            if (button) {
+                askQuestion(button.dataset.chatQuestion);
+            }
+        });
+        launcher.addEventListener('toggle', () => {
+            if (launcher.open) {
+                updateContext();
+            }
+        });
+    });
+});

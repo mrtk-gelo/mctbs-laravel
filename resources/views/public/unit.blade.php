@@ -168,126 +168,6 @@
                     </div>
                 @endif
 
-                <section id="unit-faqs" class="public-chat-card">
-                    <header class="public-chat-header">
-                        <span class="public-chat-avatar"><i class="fa fa-headset" aria-hidden="true"></i></span>
-                        <div>
-                            <span class="chat-eyebrow">MCTBS Connect</span>
-                            <h2>Ask about {{ $unit->unit_type }}</h2>
-                            <p>{{ $unit->house->name }} · Answers use this unit's current property details</p>
-                        </div>
-                        <span class="public-chat-status"><span></span> Unit help</span>
-                    </header>
-
-                    <div class="public-chat-transcript" aria-live="polite">
-                        <div class="public-chat-message public-chat-message--assistant">
-                            <span class="public-chat-message-label">MCTBS Connect</span>
-                            <div class="public-chat-bubble">Hi! Choose a question below or ask something about this unit. I can show approved property answers, and signed-in guests can message the team.</div>
-                        </div>
-
-                        @if (session('unitFaqAnswer'))
-                            <div class="public-chat-message public-chat-message--guest" role="status">
-                                <span class="public-chat-message-label">Your question</span>
-                                <div class="public-chat-bubble">{{ session('unitFaqAnswer.question') }}</div>
-                            </div>
-                            <div class="public-chat-message public-chat-message--assistant" role="status">
-                                <span class="public-chat-message-label">Approved answer</span>
-                                <div class="public-chat-bubble">
-                                    <p>{{ session('unitFaqAnswer.answer') }}</p>
-                                    @if (session('unitFaqAnswer.related_url'))
-                                        <a href="{{ session('unitFaqAnswer.related_url') }}" target="_blank" rel="noopener noreferrer">More information <i class="fa fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
-                                    @endif
-                                </div>
-                            </div>
-                        @elseif (session('unitFaqUnanswered'))
-                            <div class="public-chat-message public-chat-message--guest" role="status">
-                                <span class="public-chat-message-label">Your question</span>
-                                <div class="public-chat-bubble">{{ session('unitFaqQuestion') }}</div>
-                            </div>
-                            <div class="public-chat-message public-chat-message--assistant" role="status">
-                                <span class="public-chat-message-label">MCTBS Connect</span>
-                                <div class="public-chat-bubble">
-                                    I couldn't find an approved answer to that question.
-                                    @guest
-                                        <a href="{{ route('login') }}">Sign in as a guest</a> to send it to the property team.
-                                    @else
-                                        @if (auth()->user()->role?->name === 'Guest')
-                                            <a href="#unit-chat">Send it to the property team</a>.
-                                        @else
-                                            Please use a guest account to start a conversation with the property team.
-                                        @endif
-                                    @endguest
-                                </div>
-                            </div>
-                        @endif
-
-                        @if ($faqs->isNotEmpty())
-                            <div class="public-chat-faqs" aria-label="Approved questions and answers">
-                                <span class="public-chat-section-label">Saved property answers</span>
-                                @foreach ($faqs as $faq)
-                                    <details class="public-chat-faq">
-                                        <summary><i class="fa fa-circle-question" aria-hidden="true"></i>{{ $faq->question }}</summary>
-                                        <div class="public-chat-faq-answer">
-                                            <span>MCTBS Connect · approved answer</span>
-                                            <p>{{ $faq->answer }}</p>
-                                            @if ($faq->related_url)
-                                                <a href="{{ $faq->related_url }}" target="_blank" rel="noopener noreferrer">More information <i class="fa fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
-                                            @endif
-                                        </div>
-                                    </details>
-                                @endforeach
-                            </div>
-                        @endif
-
-                        <div class="public-chat-faqs" aria-label="Quick questions">
-                            <span class="public-chat-section-label">Quick questions</span>
-                            @foreach ($faqPrompts as $prompt)
-                                <form method="POST" action="{{ route('public.units.questions.store', $unit) }}">
-                                    @csrf
-                                    <input type="hidden" name="question" value="{{ $prompt }}">
-                                    <button class="public-chat-quick-question" type="submit">
-                                        <i class="fa fa-circle-question" aria-hidden="true"></i>{{ $prompt }}
-                                        <i class="fa fa-arrow-right" aria-hidden="true"></i>
-                                    </button>
-                                </form>
-                            @endforeach
-                        </div>
-
-                        @if ($faqs->isEmpty())
-                            <div class="public-chat-empty">Answers are generated from the unit and property details currently saved in MCTBS. If a question needs a person, a guest can start a private chat below.</div>
-                        @endif
-                    </div>
-
-                    <div class="public-chat-composer">
-                        @if (auth()->user()?->role?->name === 'Guest')
-                            <form id="unit-chat" method="POST" action="{{ route('guest.conversations.store') }}">
-                                @csrf
-                                <input type="hidden" name="house_id" value="{{ $unit->house_id }}">
-                                <input type="hidden" name="unit_id" value="{{ $unit->unit_id }}">
-                                <input type="hidden" name="subject" value="Question about {{ $unit->unit_type }}">
-                                <label class="sr-only" for="unit-question">Message the property team about {{ $unit->unit_type }}</label>
-                                <textarea class="form-control" id="unit-question" name="message" rows="2" maxlength="5000" required placeholder="Ask the property team...">{{ old('message', $questionPrefill ?? session('unitFaqQuestion')) }}</textarea>
-                                @error('message')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
-                                <div class="public-chat-composer-footer">
-                                    <span><i class="fa fa-lock" aria-hidden="true"></i> Saved to your conversations</span>
-                                    <button class="btn btn-primary" type="submit">Send <i class="fa fa-paper-plane" aria-hidden="true"></i></button>
-                                </div>
-                            </form>
-                        @else
-                            <form id="unit-chat" method="POST" action="{{ route('public.units.questions.store', $unit) }}">
-                                @csrf
-                                <label class="sr-only" for="unit-question">Ask a question about {{ $unit->unit_type }}</label>
-                                <textarea class="form-control" id="unit-question" name="question" rows="2" maxlength="5000" required placeholder="Ask a question about this unit...">{{ old('question', $questionPrefill ?? session('unitFaqQuestion')) }}</textarea>
-                                @error('question')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
-                                <div class="public-chat-composer-footer">
-                                    <span><i class="fa fa-circle-info" aria-hidden="true"></i> Unanswered questions can be sent after guest sign-in</span>
-                                    <button class="btn btn-primary" type="submit">Ask <i class="fa fa-paper-plane" aria-hidden="true"></i></button>
-                                </div>
-                            </form>
-                        @endif
-                    </div>
-                </section>
-
                 <div>
                     <div class="section-title"><i class="fa fa-star"></i> Reviews</div>
                     <div class="card" style="padding:16px">
@@ -423,9 +303,6 @@
                             </div>
                         @endauth
 
-                        <a class="btn btn-outline-primary btn-block mt-2" href="#unit-faqs">
-                            <i class="fa fa-comments" aria-hidden="true"></i> Ask about this unit
-                        </a>
                         <p class="booking-note">
                             <i class="fa fa-info-circle" aria-hidden="true"></i>
                             Choose your dates and guest count to review the booking total.

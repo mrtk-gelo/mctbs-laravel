@@ -18,6 +18,7 @@ use App\Http\Controllers\Owner\AdminController as OwnerAdminController;
 use App\Http\Controllers\Owner\DashboardController as OwnerDashboardController;
 use App\Http\Controllers\Owner\HouseController as OwnerHouseController;
 use App\Http\Controllers\PublicController;
+use App\Http\Controllers\PublicVisitorConversationController;
 use App\Http\Controllers\Staff\DashboardController as StaffDashboardController;
 use App\Livewire\Guest\BookingForm;
 use App\Livewire\Owner\WalkInBookingForm;
@@ -33,6 +34,31 @@ Route::post('/units/{unit}/questions', [PublicController::class, 'unitQuestion']
     ->middleware('throttle:10,1')
     ->name('public.units.questions.store');
 Route::post('/units/{unit}/inquiries', [PublicController::class, 'sendInquiry'])->middleware('throttle:5,1')->name('public.units.inquiries.store');
+Route::get('/public-chat/context', [PublicVisitorConversationController::class, 'context'])
+    ->middleware('throttle:30,1')
+    ->name('public.visitor-chat.context');
+Route::post('/public-chat/answer', [PublicVisitorConversationController::class, 'answer'])
+    ->middleware('throttle:10,1')
+    ->name('public.visitor-chat.answer');
+Route::get('/public-chat/conversations', [PublicVisitorConversationController::class, 'index'])
+    ->name('public.visitor-conversations.index');
+Route::post('/public-chat/conversations', [PublicVisitorConversationController::class, 'store'])
+    ->middleware('throttle:5,1')
+    ->name('public.visitor-conversations.store');
+Route::get('/public-chat/conversations/{conversationId}/access', [PublicVisitorConversationController::class, 'access'])
+    ->whereNumber('conversationId')
+    ->middleware('signed')
+    ->name('public.visitor-conversations.access');
+Route::get('/public-chat/conversations/{conversationId}/sign-in', [PublicVisitorConversationController::class, 'signIn'])
+    ->whereNumber('conversationId')
+    ->name('public.visitor-conversations.sign-in');
+Route::get('/public-chat/conversations/{conversationId}', [PublicVisitorConversationController::class, 'show'])
+    ->whereNumber('conversationId')
+    ->name('public.visitor-conversations.show');
+Route::post('/public-chat/conversations/{conversationId}/reply', [PublicVisitorConversationController::class, 'reply'])
+    ->whereNumber('conversationId')
+    ->middleware('throttle:10,1')
+    ->name('public.visitor-conversations.reply');
 Route::get('/guest/feedback/{booking}/{token}', [GuestFeedbackController::class, 'show'])
     ->name('guest.feedback.show');
 Route::post('/guest/feedback/{booking}/{token}', [GuestFeedbackController::class, 'store'])

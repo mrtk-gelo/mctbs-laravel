@@ -94,6 +94,8 @@
                         @include('conversations.partials.messages', [
                             'messages' => $conversation->messages,
                             'viewerUserId' => auth()->id(),
+                            'conversationGuestId' => $conversation->guest_user_id,
+                            'visitorName' => trim(auth()->user()->first_name.' '.auth()->user()->last_name),
                         ])
                     @else
                         <div class="chat-list-empty">

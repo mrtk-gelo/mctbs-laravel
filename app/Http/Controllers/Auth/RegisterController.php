@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Invitation;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\ConversationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -114,6 +115,7 @@ class RegisterController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+        app(ConversationService::class)->claimVisitorConversations($user, $request);
 
         session()->flash('success', "Welcome to MCTBS, {$user->first_name}! Your account has been created.");
 
