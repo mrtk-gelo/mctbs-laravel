@@ -16,6 +16,7 @@ class Message extends Model
 
     protected $fillable = [
         'conversation_id',
+        'reply_to_message_id',
         'sender_id',
         'sender_type',
         'message',
@@ -39,6 +40,11 @@ class Message extends Model
     public function sender(): BelongsTo
     {
         return $this->belongsTo(User::class, 'sender_id', 'user_id');
+    }
+
+    public function replyToMessage(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reply_to_message_id', 'message_id');
     }
 
     public function attachments(): HasMany

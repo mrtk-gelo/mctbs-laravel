@@ -11,6 +11,7 @@ use App\Services\ConversationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class PublicVisitorConversationController extends Controller
@@ -32,7 +33,6 @@ class PublicVisitorConversationController extends Controller
         return view('public-conversations.index', [
             'conversations' => $this->conversations->visitorConversationsFor($request, $folder),
             'folder' => $folder,
-            'folderCounts' => $this->conversations->visitorConversationCountsFor($request),
         ]);
     }
 
@@ -164,7 +164,8 @@ class PublicVisitorConversationController extends Controller
         abort_if(in_array($request->user()?->role?->name, ['Owner', 'Staff'], true), 404);
         abort_unless($this->conversations->canAccessVisitor($request, $conversation), 404);
 
-        $conversation->load(['house.owner', 'unit', 'messages.sender']);
+        $conversation->load(['house.owner', 'unit', 'messages.sender', 'messages.replyToMessage.sender']);
+        $actorKey = $this->conversations->interactionActorKey(null, $conversation);
         $folder = $request->query->has('folder')
             ? $this->conversationFolder($request)
             : $this->conversations->visitorFolderForConversation($conversation);
@@ -173,7 +174,11 @@ class PublicVisitorConversationController extends Controller
             'conversation' => $conversation,
             'conversations' => $this->conversations->visitorConversationsFor($request, $folder),
             'folder' => $folder,
-            'folderCounts' => $this->conversations->visitorConversationCountsFor($request),
+            'reactionSummaries' => $this->conversations->reactionSummariesForMessages($conversation->messages, $actorKey),
+            'pinnedMessages' => $this->conversations->pinnedMessagesFor($conversation, $actorKey),
+            'interactionActorKey' => $actorKey,
+            'reactionRoute' => 'public.visitor-conversations.reactions',
+            'pinRoute' => 'public.visitor-conversations.pins',
             'settings' => $this->assistance->settingsFor($conversation->house_id),
             'faqPrompts' => $conversation->unit
                 ? $this->assistance->quickQuestionsForUnit()
@@ -187,6 +192,7 @@ class PublicVisitorConversationController extends Controller
     {
         $data = $request->validate([
             'message' => ['required', 'string', 'max:5000'],
+            'reply_to_message_id' => ['nullable', 'integer', 'min:1'],
             'attachments' => ['prohibited'],
         ]);
         $conversation = Conversation::query()->findOrFail($conversationId);
@@ -199,7 +205,12 @@ class PublicVisitorConversationController extends Controller
                 ->with('visitorSignInRequired', true);
         }
 
-        $this->conversations->sendVisitorMessage($request, $conversation, $data['message']);
+        $this->conversations->sendVisitorMessage(
+            $request,
+            $conversation,
+            $data['message'],
+            isset($data['reply_to_message_id']) ? (int) $data['reply_to_message_id'] : null
+        );
 
         return redirect()->route('public.visitor-conversations.show', [
             'conversationId' => $conversation->conversation_id,
@@ -216,12 +227,56 @@ class PublicVisitorConversationController extends Controller
         ]);
         $after = (int) ($data['after'] ?? 0);
         $messages = $this->conversations->messagesAfter($conversation, $after);
+        $actorKey = $this->conversations->interactionActorKey(null, $conversation);
+        $reactionSummaries = $this->conversations->reactionSummariesForConversation($conversation, $actorKey);
+        $pinnedMessages = $this->conversations->pinnedMessagePayloadsFor($conversation, $actorKey);
 
         return response()->json([
             'messages' => $messages
-                ->map(fn (Message $message): array => $this->conversations->messageUpdatePayload($message, $conversation))
+                ->map(fn (Message $message): array => $this->conversations->messageUpdatePayload(
+                    $message,
+                    $conversation,
+                    $reactionSummaries[(string) $message->message_id] ?? []
+                ))
                 ->values(),
             'lastMessageId' => $messages->last()?->message_id ?? $after,
+            'reactionSummaries' => $reactionSummaries,
+            'pinnedMessageIds' => array_column($pinnedMessages, 'id'),
+            'pins' => $pinnedMessages,
+        ])->header('Cache-Control', 'no-store, private');
+    }
+
+    public function toggleReaction(Request $request, int $conversationId, int $messageId): JsonResponse
+    {
+        $conversation = Conversation::query()->findOrFail($conversationId);
+        abort_unless($this->conversations->canAccessVisitor($request, $conversation), 404);
+        $data = $request->validate([
+            'emoji' => ['required', 'string', Rule::in(ConversationService::REACTION_EMOJIS)],
+        ]);
+        $message = $conversation->messages()->findOrFail($messageId);
+        $actorKey = $this->conversations->interactionActorKey(null, $conversation);
+
+        return response()->json([
+            'messageId' => $message->message_id,
+            'reactions' => $this->conversations->toggleMessageReaction(
+                $conversation,
+                $message,
+                $actorKey,
+                $data['emoji']
+            ),
+        ])->header('Cache-Control', 'no-store, private');
+    }
+
+    public function togglePin(Request $request, int $conversationId, int $messageId): JsonResponse
+    {
+        $conversation = Conversation::query()->findOrFail($conversationId);
+        abort_unless($this->conversations->canAccessVisitor($request, $conversation), 404);
+        $message = $conversation->messages()->findOrFail($messageId);
+        $actorKey = $this->conversations->interactionActorKey(null, $conversation);
+
+        return response()->json([
+            'messageId' => $message->message_id,
+            ...$this->conversations->toggleMessagePin($conversation, $message, $actorKey),
         ])->header('Cache-Control', 'no-store, private');
     }
 
@@ -304,18 +359,19 @@ class PublicVisitorConversationController extends Controller
     {
         $folder = $request->string('folder')->toString();
 
-        return in_array($folder, ['inbox', 'archived', 'deleted'], true) ? $folder : 'inbox';
+        return in_array($folder, ['inbox', 'archived'], true) ? $folder : 'inbox';
     }
 
     private function moveVisitorConversation(Request $request, int $conversationId, string $folder): RedirectResponse
     {
         $conversation = Conversation::query()->findOrFail($conversationId);
         $this->conversations->moveVisitorConversationToFolder($request, $conversation, $folder);
+        $returnFolder = $folder === 'deleted' ? 'inbox' : $folder;
 
-        return redirect()->route('public.visitor-conversations.index', ['folder' => $folder])
+        return redirect()->route('public.visitor-conversations.index', ['folder' => $returnFolder])
             ->with('success', match ($folder) {
                 'archived' => 'Conversation moved to Archived.',
-                'deleted' => 'Conversation moved to Deleted.',
+                'deleted' => 'Conversation permanently deleted from your chat list. Other participants keep their copy.',
                 default => 'Conversation restored to your inbox.',
             });
     }

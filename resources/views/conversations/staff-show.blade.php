@@ -84,6 +84,8 @@
                     aria-label="Conversation messages"
                     aria-live="polite"
                     data-chat-poll-url="{{ route($isStaff ? 'staff.conversations.updates' : 'owner.conversations.updates', $conversation->conversation_id) }}"
+                    data-reaction-url-template="{{ route($reactionRoute, ['conversationId' => $conversation->conversation_id, 'messageId' => '__message_id__']) }}"
+                    data-csrf-token="{{ csrf_token() }}"
                     data-conversation-id="{{ $conversation->conversation_id }}"
                     data-viewer-type="team"
                     data-viewer-id="{{ auth()->id() }}"
@@ -96,6 +98,12 @@
                             'conversationGuestId' => $conversation->guest_user_id,
                             'visitorName' => $guestName,
                             'hideSystemMessages' => true,
+                            'conversationId' => $conversation->conversation_id,
+                            'reactionRoute' => $reactionRoute,
+                            'reactionSummaries' => $reactionSummaries,
+                            'pinnedMessageIds' => [],
+                            'pinRoute' => null,
+                            'canPin' => false,
                         ])
                     @else
                         <div class="chat-list-empty">
@@ -118,8 +126,10 @@
                             @endforeach
                         </select>
                     @endif
+                    @include('conversations.partials.reply-preview')
                     <form method="POST" action="{{ route($replyRoute, $conversation->conversation_id) }}" class="chat-composer-form">
                         @csrf
+                        <input type="hidden" name="reply_to_message_id" value="{{ old('reply_to_message_id') }}" data-chat-reply-id>
                         <label class="sr-only" for="message">Write a reply to the guest</label>
                         <textarea class="form-control" id="message" name="message" rows="2" maxlength="5000" required placeholder="Write a reply..." data-message-composer></textarea>
                         @error('message')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror

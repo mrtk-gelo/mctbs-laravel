@@ -117,7 +117,8 @@ test('conversation updates return only new messages and mark them read', functio
         ->toBe($newMessage->message_id);
 });
 
-test('conversation inbox actions are participant-specific and restorable', function () {
+test('conversation archiving is reversible but deletion is permanent for the deleting participant', function () {
+    Mail::fake();
     $owner = conversationUser('Owner', 'owner-folders@example.com');
     $guest = conversationUser('Guest', 'guest-folders@example.com');
     $house = conversationHouse($owner, 'Folder House');
@@ -126,6 +127,15 @@ test('conversation inbox actions are participant-specific and restorable', funct
         $house->house_id,
         'Private folder topic'
     );
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.index'))
+        ->assertSee('Show archive')
+        ->assertDontSee('chat-folder-links', false);
+    $this->actingAs($guest)
+        ->get(route('guest.conversations.index'))
+        ->assertSee('Show archive')
+        ->assertDontSee('chat-folder-links', false);
 
     $this->actingAs($owner)
         ->post(route('owner.conversations.archive', $conversation->conversation_id))
@@ -143,10 +153,16 @@ test('conversation inbox actions are participant-specific and restorable', funct
 
     $this->actingAs($guest)
         ->post(route('guest.conversations.delete', $conversation->conversation_id))
-        ->assertRedirect(route('guest.conversations.index', ['folder' => 'deleted']));
+        ->assertRedirect(route('guest.conversations.index', ['folder' => 'inbox']));
     $this->actingAs($guest)
         ->get(route('guest.conversations.index'))
         ->assertDontSee('Private folder topic');
+    $this->actingAs($guest)
+        ->get(route('guest.conversations.show', $conversation->conversation_id))
+        ->assertForbidden();
+    $this->actingAs($guest)
+        ->post(route('guest.conversations.restore', $conversation->conversation_id))
+        ->assertForbidden();
     $this->actingAs($owner)
         ->get(route('owner.conversations.index', ['folder' => 'archived']))
         ->assertSee('Private folder topic');
@@ -154,16 +170,44 @@ test('conversation inbox actions are participant-specific and restorable', funct
     $this->actingAs($owner)
         ->post(route('owner.conversations.restore', $conversation->conversation_id))
         ->assertRedirect(route('owner.conversations.index', ['folder' => 'inbox']));
+
     $this->actingAs($guest)
-        ->get(route('guest.conversations.index', ['folder' => 'deleted']))
-        ->assertSee('Private folder topic');
+        ->post(route('guest.conversations.store'), [
+            'house_id' => $house->house_id,
+            'subject' => 'Fresh question',
+            'message' => 'Starting a new conversation after deleting the old one.',
+        ])
+        ->assertRedirect();
+    $freshConversation = Conversation::query()
+        ->where('guest_user_id', $guest->user_id)
+        ->where('conversation_id', '!=', $conversation->conversation_id)
+        ->firstOrFail();
+
+    app(ConversationService::class)->sendMessage($owner, $conversation, 'A reply to the old conversation.');
+
     $this->actingAs($guest)
-        ->post(route('guest.conversations.restore', $conversation->conversation_id))
-        ->assertRedirect(route('guest.conversations.index', ['folder' => 'inbox']));
+        ->get(route('guest.conversations.index'))
+        ->assertSee('Fresh question')
+        ->assertDontSee('Private folder topic');
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.index'))
+        ->assertSee('Private folder topic')
+        ->assertSee('Fresh question');
+    $this->actingAs($owner)
+        ->post(route('owner.conversations.delete', $freshConversation->conversation_id))
+        ->assertRedirect(route('owner.conversations.index', ['folder' => 'inbox']));
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.show', $freshConversation->conversation_id))
+        ->assertForbidden();
+    $this->actingAs($guest)
+        ->get(route('guest.conversations.show', $freshConversation->conversation_id))
+        ->assertSee('Fresh question');
 
     expect($conversation->fresh())->not->toBeNull()
         ->and($conversation->participants()->where('user_id', $owner->user_id)->value('archived_at'))->toBeNull()
-        ->and($conversation->participants()->where('user_id', $guest->user_id)->value('deleted_at'))->toBeNull();
+        ->and($conversation->participants()->where('user_id', $guest->user_id)->value('deleted_at'))->not->toBeNull()
+        ->and($freshConversation->participants()->where('user_id', $owner->user_id)->value('deleted_at'))->not->toBeNull()
+        ->and($freshConversation->participants()->where('user_id', $guest->user_id)->value('deleted_at'))->toBeNull();
 });
 
 test('staff can access only conversations for an invited property', function () {

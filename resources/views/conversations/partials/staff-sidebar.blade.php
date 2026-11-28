@@ -4,14 +4,21 @@
             <h2>Inbox</h2>
             <p>{{ $conversations->count() }} {{ \Illuminate\Support\Str::plural('chat', $conversations->count()) }}</p>
         </div>
-        <a
-            class="chat-new-button"
-            href="{{ route($createRoute, ['filter' => $filter, 'folder' => 'inbox']) }}"
-            aria-label="Start a new chat"
-            title="Start a new chat"
-        >
-            <i class="fa fa-plus" aria-hidden="true"></i>
-        </a>
+        <div class="chat-sidebar-header-actions">
+            <a
+                class="chat-new-button"
+                href="{{ route($createRoute, ['filter' => $filter, 'folder' => 'inbox']) }}"
+                aria-label="Start a new chat"
+                title="Start a new chat"
+            >
+                <i class="fa fa-plus" aria-hidden="true"></i>
+            </a>
+            @include('conversations.partials.folder-menu', [
+                'folder' => $folder,
+                'inboxUrl' => route($inboxRoute, ['folder' => 'inbox', 'filter' => 'all']),
+                'archiveUrl' => route($inboxRoute, ['folder' => 'archived']),
+            ])
+        </div>
     </div>
 
     <form class="chat-filter-form" role="search" data-chat-search-form>
@@ -40,24 +47,11 @@
         </nav>
     @endif
 
-    <nav class="chat-folder-links" aria-label="Conversation folders">
-        @foreach (['inbox' => ['Inbox', 'inbox'], 'archived' => ['Archived', 'box-archive'], 'deleted' => ['Deleted', 'trash']] as $folderKey => [$folderLabel, $folderIcon])
-            <a
-                class="chat-folder-link{{ $folder === $folderKey ? ' is-active' : '' }}"
-                href="{{ route($inboxRoute, ['folder' => $folderKey, 'filter' => 'all']) }}"
-                @if ($folder === $folderKey) aria-current="page" @endif
-            >
-                <span><i class="fa fa-{{ $folderIcon }}" aria-hidden="true"></i> {{ $folderLabel }}</span>
-                <span>{{ $counts[$folderKey] }}</span>
-            </a>
-        @endforeach
-    </nav>
-
     <div class="chat-sidebar-section-title">
-        <span>{{ ['inbox' => 'Recent conversations', 'archived' => 'Archived conversations', 'deleted' => 'Deleted conversations'][$folder] }}</span>
+        <span>{{ $folder === 'archived' ? 'Archived conversations' : 'Recent conversations' }}</span>
         <span class="chat-recent-count">{{ $conversations->count() }}</span>
     </div>
-    <nav class="chat-conversation-list" aria-label="Inbox conversation list" data-chat-inbox-list>
+    <nav class="chat-conversation-list" aria-label="Conversation list" data-chat-inbox-list>
         @forelse ($conversations as $conversation)
             @include('conversations.partials.list-item', [
                 'conversation' => $conversation,
@@ -68,8 +62,8 @@
         @empty
             <div class="chat-list-empty">
                 <span class="chat-empty-icon"><i class="fa fa-inbox" aria-hidden="true"></i></span>
-                <strong>No conversations found</strong>
-                <span>New guest messages will appear here.</span>
+                <strong>{{ $folder === 'archived' ? 'No archived conversations' : 'No conversations found' }}</strong>
+                <span>{{ $folder === 'archived' ? 'Chats you archive will appear here.' : 'New guest messages will appear here.' }}</span>
             </div>
         @endforelse
     </nav>
