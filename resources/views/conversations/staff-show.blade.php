@@ -131,10 +131,10 @@
                         @csrf
                         <input type="hidden" name="reply_to_message_id" value="{{ old('reply_to_message_id') }}" data-chat-reply-id>
                         <label class="sr-only" for="message">Write a reply to the guest</label>
-                        <textarea class="form-control" id="message" name="message" rows="2" maxlength="5000" required placeholder="Write a reply..." data-message-composer></textarea>
+                        <textarea class="form-control" id="message" name="message" rows="1" maxlength="5000" required placeholder="Write a reply..." data-message-composer></textarea>
                         @error('message')<div class="text-danger fs-sm mt-1">{{ $message }}</div>@enderror
                         <button class="btn btn-primary" type="submit" aria-label="Send reply">
-                            <i class="fa fa-paper-plane" aria-hidden="true"></i> Send
+                            <i class="fa fa-paper-plane" aria-hidden="true"></i>
                         </button>
                     </form>
                 </div>

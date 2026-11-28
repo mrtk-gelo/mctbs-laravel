@@ -4,7 +4,7 @@
     @endif
 
     @php
-        $isSystemMessage = in_array($message->sender_type, ['assistant', 'system'], true);
+        $isSystemMessage = $message->sender_type === 'system';
         $isOutgoing = ! $isSystemMessage && (
             ($message->sender_id !== null && (int) $message->sender_id === (int) $viewerUserId)
             || (
@@ -48,10 +48,15 @@
             <i class="fa fa-thumbtack" aria-hidden="true"></i> Pinned for you
         </span>
         @if ($message->replyToMessage)
-            <div class="chat-message-reply-quote">
+            <button
+                type="button"
+                class="chat-message-reply-quote"
+                data-chat-jump-to-message
+                data-message-id="{{ $message->replyToMessage->message_id }}"
+            >
                 <strong>Replying to {{ $replySenderName }}</strong>
                 <span>{{ \Illuminate\Support\Str::limit($replyText, 120) }}</span>
-            </div>
+            </button>
         @endif
         <div class="chat-message-bubble">{{ $message->message }}</div>
         <details class="chat-message-menu" data-chat-message-menu>
