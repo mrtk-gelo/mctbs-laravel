@@ -6,6 +6,7 @@
         $conversationRoute = $isStaff ? 'staff.conversations.show' : 'owner.conversations.show';
         $inboxRoute = $isStaff ? 'staff.conversations.index' : 'owner.conversations.index';
         $replyRoute = $isStaff ? 'staff.conversations.store' : 'owner.conversations.store';
+        $unsendRoute = $isStaff ? 'staff.conversations.unsend' : 'owner.conversations.unsend';
         $notesRoute = $isStaff ? 'staff.conversations.notes.store' : 'owner.conversations.notes.store';
         $archiveRoute = $isStaff ? 'staff.conversations.archive' : 'owner.conversations.archive';
         $deleteRoute = $isStaff ? 'staff.conversations.delete' : 'owner.conversations.delete';
@@ -84,7 +85,7 @@
                     aria-label="Conversation messages"
                     aria-live="polite"
                     data-chat-poll-url="{{ route($isStaff ? 'staff.conversations.updates' : 'owner.conversations.updates', $conversation->conversation_id) }}"
-                    data-reaction-url-template="{{ route($reactionRoute, ['conversationId' => $conversation->conversation_id, 'messageId' => '__message_id__']) }}"
+                    data-unsend-url-template="{{ route($unsendRoute, ['conversationId' => $conversation->conversation_id, 'messageId' => '__message_id__']) }}"
                     data-csrf-token="{{ csrf_token() }}"
                     data-conversation-id="{{ $conversation->conversation_id }}"
                     data-viewer-type="team"
@@ -99,10 +100,9 @@
                             'visitorName' => $guestName,
                             'hideSystemMessages' => true,
                             'conversationId' => $conversation->conversation_id,
-                            'reactionRoute' => $reactionRoute,
-                            'reactionSummaries' => $reactionSummaries,
                             'pinnedMessageIds' => [],
                             'pinRoute' => null,
+                            'unsendRoute' => $unsendRoute,
                             'canPin' => false,
                         ])
                     @else

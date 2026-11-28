@@ -71,13 +71,16 @@ class Conversation extends Model
 
     public function latestMessage(): HasOne
     {
-        return $this->hasOne(Message::class, 'conversation_id', 'conversation_id')->latestOfMany('sent_at');
+        return $this->hasOne(Message::class, 'conversation_id', 'conversation_id')
+            ->whereNull('unsent_at')
+            ->latestOfMany('sent_at');
     }
 
     public function latestHumanMessage(): HasOne
     {
         return $this->hasOne(Message::class, 'conversation_id', 'conversation_id')
             ->whereIn('sender_type', ['user', 'visitor'])
+            ->whereNull('unsent_at')
             ->latestOfMany('sent_at');
     }
 }

@@ -25,8 +25,6 @@ use Illuminate\Validation\ValidationException;
 
 class ConversationService
 {
-    public const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-
     public function __construct(private BookingContextService $bookingContext) {}
 
     public function accessibleHouseIds(User $user): Collection
@@ -206,7 +204,6 @@ class ConversationService
             $deletedAt = $conversation->visitor_deleted_at;
             $visitorActorKey = 'visitor:'.$conversation->visitor_session_hash;
             $userActorKey = 'user:'.$user->user_id;
-            $messageIds = $conversation->messages()->pluck('message_id');
             $conversation->forceFill([
                 'guest_user_id' => $user->user_id,
                 'visitor_session_hash' => null,
@@ -220,10 +217,6 @@ class ConversationService
                 'archived_at' => $archivedAt,
                 'deleted_at' => $deletedAt,
             ])->save();
-            DB::table('conversation_message_reactions')
-                ->whereIn('message_id', $messageIds)
-                ->where('actor_key', $visitorActorKey)
-                ->update(['actor_key' => $userActorKey]);
             DB::table('conversation_message_pins')
                 ->where('conversation_id', $conversation->conversation_id)
                 ->where('actor_key', $visitorActorKey)
@@ -394,6 +387,7 @@ class ConversationService
     {
         return $conversation->messages()
             ->with(['sender', 'replyToMessage.sender'])
+            ->whereNull('unsent_at')
             ->where('message_id', '>', $messageId)
             ->orderBy('message_id')
             ->limit(100)
@@ -401,13 +395,11 @@ class ConversationService
     }
 
     /**
-     * @param  list<array{emoji: string, count: int, reactedByMe: bool}>  $reactions
-     * @return array{id: int, senderType: string, senderId: ?int, senderName: string, text: string, sentAt: string, timeLabel: string, replyTo: ?array{id: int, senderName: string, text: string}, reactions: list<array{emoji: string, count: int, reactedByMe: bool}>}
+     * @return array{id: int, senderType: string, senderId: ?int, senderName: string, text: string, sentAt: string, timeLabel: string, replyTo: ?array{id: int, senderName: string, text: string}}
      */
     public function messageUpdatePayload(
         Message $message,
-        Conversation $conversation,
-        array $reactions = []
+        Conversation $conversation
     ): array {
         return [
             'id' => (int) $message->message_id,
@@ -420,7 +412,6 @@ class ConversationService
             'replyTo' => $message->replyToMessage
                 ? $this->messageSummaryPayload($message->replyToMessage, $conversation)
                 : null,
-            'reactions' => $reactions,
         ];
     }
 
@@ -436,84 +427,6 @@ class ConversationService
     }
 
     /**
-     * @return array<string, list<array{emoji: string, count: int, reactedByMe: bool}>>
-     */
-    public function reactionSummariesForMessages(EloquentCollection $messages, string $actorKey): array
-    {
-        if ($messages->isEmpty()) {
-            return [];
-        }
-
-        $rowsByMessage = DB::table('conversation_message_reactions')
-            ->whereIn('message_id', $messages->pluck('message_id'))
-            ->get(['message_id', 'actor_key', 'emoji'])
-            ->groupBy('message_id');
-
-        return $this->formatReactionGroups($rowsByMessage, $actorKey);
-    }
-
-    /**
-     * @return array<string, list<array{emoji: string, count: int, reactedByMe: bool}>>
-     */
-    public function reactionSummariesForConversation(Conversation $conversation, string $actorKey): array
-    {
-        $rowsByMessage = DB::table('conversation_message_reactions')
-            ->join('messages', 'messages.message_id', '=', 'conversation_message_reactions.message_id')
-            ->where('messages.conversation_id', $conversation->conversation_id)
-            ->get([
-                'conversation_message_reactions.message_id',
-                'conversation_message_reactions.actor_key',
-                'conversation_message_reactions.emoji',
-            ])
-            ->groupBy('message_id');
-
-        return $this->formatReactionGroups($rowsByMessage, $actorKey);
-    }
-
-    /**
-     * @return list<array{emoji: string, count: int, reactedByMe: bool}>
-     */
-    public function toggleMessageReaction(
-        Conversation $conversation,
-        Message $message,
-        string $actorKey,
-        string $emoji
-    ): array {
-        abort_unless((int) $message->conversation_id === (int) $conversation->conversation_id, 404);
-        abort_unless(in_array($emoji, self::REACTION_EMOJIS, true), 422);
-
-        $existing = DB::table('conversation_message_reactions')
-            ->where('message_id', $message->message_id)
-            ->where('actor_key', $actorKey)
-            ->first();
-
-        if ($existing?->emoji === $emoji) {
-            DB::table('conversation_message_reactions')
-                ->where('message_id', $message->message_id)
-                ->where('actor_key', $actorKey)
-                ->delete();
-        } elseif ($existing !== null) {
-            DB::table('conversation_message_reactions')
-                ->where('message_id', $message->message_id)
-                ->where('actor_key', $actorKey)
-                ->update(['emoji' => $emoji]);
-        } else {
-            DB::table('conversation_message_reactions')->insert([
-                'message_id' => $message->message_id,
-                'actor_key' => $actorKey,
-                'emoji' => $emoji,
-            ]);
-        }
-
-        $summaries = $this->reactionSummariesForMessages(
-            new EloquentCollection([$message]),
-            $actorKey
-        );
-
-        return $summaries[(string) $message->message_id] ?? [];
-    }
-
-    /**
      * @return EloquentCollection<int, Message>
      */
     public function pinnedMessagesFor(Conversation $conversation, string $actorKey): EloquentCollection
@@ -521,6 +434,10 @@ class ConversationService
         $pins = DB::table('conversation_message_pins')
             ->where('conversation_id', $conversation->conversation_id)
             ->where('actor_key', $actorKey)
+            ->whereIn('message_id', Message::query()
+                ->where('conversation_id', $conversation->conversation_id)
+                ->whereNull('unsent_at')
+                ->select('message_id'))
             ->orderBy('pinned_at')
             ->get(['message_id']);
 
@@ -543,7 +460,7 @@ class ConversationService
     }
 
     /**
-     * @return list<array{id: int, senderName: string, text: string}>
+     * @return list<array{id: int, senderName: string, text: string, sentAt: string, timeLabel: string}>
      */
     public function pinnedMessagePayloadsFor(Conversation $conversation, string $actorKey): array
     {
@@ -553,7 +470,7 @@ class ConversationService
     }
 
     /**
-     * @return array{pinnedMessageIds: list<int>, pins: list<array{id: int, senderName: string, text: string}>}
+     * @return array{pinnedMessageIds: list<int>, pins: list<array{id: int, senderName: string, text: string, sentAt: string, timeLabel: string}>}
      */
     public function toggleMessagePin(
         Conversation $conversation,
@@ -561,6 +478,7 @@ class ConversationService
         string $actorKey
     ): array {
         abort_unless((int) $message->conversation_id === (int) $conversation->conversation_id, 404);
+        abort_if($message->unsent_at !== null, 404);
 
         $pinQuery = DB::table('conversation_message_pins')
             ->where('conversation_id', $conversation->conversation_id)
@@ -588,22 +506,64 @@ class ConversationService
         ];
     }
 
-    /**
-     * @param  Collection<int|string, Collection<int, object>>  $rowsByMessage
-     * @return array<string, list<array{emoji: string, count: int, reactedByMe: bool}>>
-     */
-    private function formatReactionGroups(Collection $rowsByMessage, string $actorKey): array
+    public function unsendMessage(Conversation $conversation, Message $message, User|Request $sender): void
     {
-        return $rowsByMessage->map(function (Collection $rows) use ($actorKey): array {
-            return $rows->groupBy('emoji')
-                ->map(fn (Collection $emojiRows, string $emoji): array => [
-                    'emoji' => $emoji,
-                    'count' => $emojiRows->count(),
-                    'reactedByMe' => $emojiRows->contains('actor_key', $actorKey),
-                ])
-                ->values()
-                ->all();
-        })->all();
+        abort_unless((int) $message->conversation_id === (int) $conversation->conversation_id, 404);
+        abort_if($message->unsent_at !== null, 404);
+
+        if ($sender instanceof User) {
+            abort_unless($this->canAccess($sender, $conversation), 403);
+            $isSender = (
+                $message->sender_type === 'user'
+                && (int) $message->sender_id === (int) $sender->user_id
+            ) || (
+                $message->sender_type === 'visitor'
+                && (int) $conversation->guest_user_id === (int) $sender->user_id
+            );
+        } else {
+            abort_unless($this->canAccessVisitor($sender, $conversation), 404);
+            $isSender = $message->sender_type === 'visitor' && $message->sender_id === null;
+        }
+
+        abort_unless($isSender, 403);
+
+        DB::transaction(function () use ($conversation, $message): void {
+            $message->forceFill([
+                'message' => '',
+                'unsent_at' => now(),
+            ])->save();
+
+            DB::table('conversation_message_pins')
+                ->where('conversation_id', $conversation->conversation_id)
+                ->where('message_id', $message->message_id)
+                ->delete();
+        });
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function unsentMessageIdsForConversation(Conversation $conversation): array
+    {
+        return $conversation->messages()
+            ->whereNotNull('unsent_at')
+            ->pluck('message_id')
+            ->map(fn (int $messageId): int => $messageId)
+            ->all();
+    }
+
+    /**
+     * @return array{id: int, senderName: string, text: string, sentAt: string, timeLabel: string}
+     */
+    private function messageSummaryPayload(Message $message, Conversation $conversation): array
+    {
+        return [
+            'id' => (int) $message->message_id,
+            'senderName' => $this->senderName($message, $conversation),
+            'text' => $message->unsent_at !== null ? 'This message was unsent.' : (string) $message->message,
+            'sentAt' => $message->sent_at->toIso8601String(),
+            'timeLabel' => $message->sent_at->format('M j, g:i A'),
+        ];
     }
 
     public function conversationQueryFor(User $user, string $folder = 'inbox'): Builder
@@ -826,18 +786,6 @@ class ConversationService
             'visitor' => trim((string) $conversation->visitor_name) ?: 'Public visitor',
             default => trim(($message->sender?->first_name ?? '').' '.($message->sender?->last_name ?? '')) ?: 'Property team',
         };
-    }
-
-    /**
-     * @return array{id: int, senderName: string, text: string}
-     */
-    private function messageSummaryPayload(Message $message, Conversation $conversation): array
-    {
-        return [
-            'id' => (int) $message->message_id,
-            'senderName' => $this->senderName($message, $conversation),
-            'text' => (string) $message->message,
-        ];
     }
 
     private function applyConversationFolder(Builder $query, User $user, string $folder): void

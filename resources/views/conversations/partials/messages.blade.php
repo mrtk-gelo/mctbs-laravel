@@ -1,4 +1,8 @@
 @foreach (($hideSystemMessages ?? false) ? $messages->where('sender_type', '!=', 'system') : $messages as $message)
+    @if ($message->unsent_at !== null)
+        @continue
+    @endif
+
     @php
         $isSystemMessage = in_array($message->sender_type, ['assistant', 'system'], true);
         $isOutgoing = ! $isSystemMessage && (
@@ -22,9 +26,13 @@
                 default => trim(($message->replyToMessage->sender?->first_name ?? '').' '.($message->replyToMessage->sender?->last_name ?? '')) ?: 'Property team',
             }
             : null;
+        $replyText = $message->replyToMessage?->unsent_at !== null
+            ? 'This message was unsent.'
+            : $message->replyToMessage?->message;
         $messageId = (int) $message->message_id;
         $isPinned = in_array($messageId, $pinnedMessageIds ?? [], true);
-        $messageReactions = $reactionSummaries[(string) $messageId] ?? [];
+        $canUnsend = $isOutgoing && in_array($message->sender_type, ['user', 'visitor'], true);
+        $canPinMessage = ($canPin ?? false) && ! $isOutgoing;
     @endphp
 
     <article
@@ -42,59 +50,41 @@
         @if ($message->replyToMessage)
             <div class="chat-message-reply-quote">
                 <strong>Replying to {{ $replySenderName }}</strong>
-                <span>{{ \Illuminate\Support\Str::limit($message->replyToMessage->message, 120) }}</span>
+                <span>{{ \Illuminate\Support\Str::limit($replyText, 120) }}</span>
             </div>
         @endif
         <div class="chat-message-bubble">{{ $message->message }}</div>
-        <div class="chat-message-interactions">
-            <div class="chat-reaction-list" data-chat-reaction-list>
-                @foreach ($messageReactions as $reaction)
-                    <button
-                        class="chat-reaction-chip{{ $reaction['reactedByMe'] ? ' is-selected' : '' }}"
-                        type="button"
-                        data-chat-react
-                        data-emoji="{{ $reaction['emoji'] }}"
-                        data-reaction-url="{{ route($reactionRoute, ['conversationId' => $conversationId, 'messageId' => $messageId]) }}"
-                        aria-pressed="{{ $reaction['reactedByMe'] ? 'true' : 'false' }}"
-                        aria-label="{{ $reaction['emoji'] }} reaction, {{ $reaction['count'] }}"
-                    >
-                        <span>{{ $reaction['emoji'] }}</span><span>{{ $reaction['count'] }}</span>
-                    </button>
-                @endforeach
-            </div>
-            <details class="chat-reaction-picker">
-                <summary aria-label="React to message" title="React to message">☺</summary>
-                <div class="chat-reaction-picker-panel">
-                    @foreach (\App\Services\ConversationService::REACTION_EMOJIS as $emoji)
-                        <button
-                            type="button"
-                            data-chat-react
-                            data-emoji="{{ $emoji }}"
-                            data-reaction-url="{{ route($reactionRoute, ['conversationId' => $conversationId, 'messageId' => $messageId]) }}"
-                            aria-label="React with {{ $emoji }}"
-                        >{{ $emoji }}</button>
-                    @endforeach
-                </div>
-            </details>
-            <button
-                class="chat-message-action"
-                type="button"
-                data-chat-reply-message
-                data-message-id="{{ $messageId }}"
-            >Reply</button>
-            @if ($canPin ?? false)
+        <details class="chat-message-menu" data-chat-message-menu>
+            <summary class="chat-message-menu-trigger" aria-label="Message options" title="Message options">
+                <i class="fa fa-ellipsis" aria-hidden="true"></i>
+            </summary>
+            <div class="chat-message-menu-panel">
                 <button
                     class="chat-message-action"
                     type="button"
-                    data-chat-pin-toggle
+                    data-chat-reply-message
                     data-message-id="{{ $messageId }}"
-                    data-is-pinned="{{ $isPinned ? 'true' : 'false' }}"
-                    data-pin-url="{{ route($pinRoute, ['conversationId' => $conversationId, 'messageId' => $messageId]) }}"
-                >
-                    <i class="fa fa-thumbtack" aria-hidden="true"></i>
-                    <span>{{ $isPinned ? 'Unpin' : 'Pin' }}</span>
-                </button>
-            @endif
-        </div>
+                ><i class="fa fa-reply" aria-hidden="true"></i> Reply</button>
+                @if ($canPinMessage)
+                    <button
+                        class="chat-message-action"
+                        type="button"
+                        data-chat-pin-toggle
+                        data-message-id="{{ $messageId }}"
+                        data-is-pinned="{{ $isPinned ? 'true' : 'false' }}"
+                        data-pin-url="{{ route($pinRoute, ['conversationId' => $conversationId, 'messageId' => $messageId]) }}"
+                    ><i class="fa fa-thumbtack" aria-hidden="true"></i> {{ $isPinned ? 'Unpin' : 'Pin' }}</button>
+                @endif
+                @if ($canUnsend)
+                    <button
+                        class="chat-message-action is-danger"
+                        type="button"
+                        data-chat-unsend
+                        data-message-id="{{ $messageId }}"
+                        data-unsend-url="{{ route($unsendRoute, ['conversationId' => $conversationId, 'messageId' => $messageId]) }}"
+                    ><i class="fa fa-trash" aria-hidden="true"></i> Unsend</button>
+                @endif
+            </div>
+        </details>
     </article>
 @endforeach

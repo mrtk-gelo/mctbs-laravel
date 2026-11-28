@@ -560,6 +560,94 @@ test('guest contextual assistance uses only the guest booking and does not mutat
         ->assertDontSee('CTX-001');
 });
 
+test('message menus let each participant unsend only their own messages and guests pin the other side', function () {
+    $owner = conversationUser('Owner', 'owner-message-actions@example.com');
+    $guest = conversationUser('Guest', 'guest-message-actions@example.com');
+    $house = conversationHouse($owner, 'Message Actions House');
+    $conversation = app(ConversationService::class)->createForGuest($guest, $house->house_id);
+    $guestMessage = $conversation->messages()->create([
+        'conversation_id' => $conversation->conversation_id,
+        'sender_id' => $guest->user_id,
+        'sender_type' => 'user',
+        'message' => 'Guest message that will be unsent.',
+        'message_type' => 'user',
+        'sent_at' => now()->subMinute(),
+    ]);
+    $ownerSentAt = now()->setTime(11, 41);
+    $ownerMessage = $conversation->messages()->create([
+        'conversation_id' => $conversation->conversation_id,
+        'sender_id' => $owner->user_id,
+        'sender_type' => 'user',
+        'message' => 'Owner message saved by the guest.',
+        'message_type' => 'user',
+        'sent_at' => $ownerSentAt,
+    ]);
+
+    $this->actingAs($guest)
+        ->get(route('guest.conversations.show', $conversation->conversation_id))
+        ->assertSee('data-chat-unsend', false)
+        ->assertSee('data-chat-pin-toggle', false)
+        ->assertSee('Pinned messages')
+        ->assertSee('Owner message saved by the guest.')
+        ->assertSee('11:41 AM')
+        ->assertDontSee('data-chat-react', false);
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.show', $conversation->conversation_id))
+        ->assertSee('data-chat-unsend', false)
+        ->assertDontSee('data-chat-pin-toggle', false);
+
+    $this->actingAs($guest)
+        ->postJson(route('guest.conversations.pins', [
+            'conversationId' => $conversation->conversation_id,
+            'messageId' => $guestMessage->message_id,
+        ]))
+        ->assertNotFound();
+
+    $this->actingAs($guest)
+        ->postJson(route('guest.conversations.pins', [
+            'conversationId' => $conversation->conversation_id,
+            'messageId' => $ownerMessage->message_id,
+        ]))
+        ->assertOk()
+        ->assertJsonPath('pins.0.text', 'Owner message saved by the guest.')
+        ->assertJsonPath('pins.0.timeLabel', $ownerSentAt->format('M j, g:i A'));
+
+    $this->actingAs($owner)
+        ->postJson(route('owner.conversations.unsend', [
+            'conversationId' => $conversation->conversation_id,
+            'messageId' => $guestMessage->message_id,
+        ]))
+        ->assertForbidden();
+
+    $this->actingAs($guest)
+        ->postJson(route('guest.conversations.unsend', [
+            'conversationId' => $conversation->conversation_id,
+            'messageId' => $guestMessage->message_id,
+        ]))
+        ->assertOk()
+        ->assertJsonPath('messageId', $guestMessage->message_id);
+
+    expect($guestMessage->fresh()->message)->toBe('')
+        ->and($guestMessage->fresh()->unsent_at)->not->toBeNull();
+
+    $this->actingAs($owner)
+        ->postJson(route('owner.conversations.unsend', [
+            'conversationId' => $conversation->conversation_id,
+            'messageId' => $ownerMessage->message_id,
+        ]))
+        ->assertOk();
+
+    $this->actingAs($owner)
+        ->getJson(route('owner.conversations.updates', [
+            'conversationId' => $conversation->conversation_id,
+        ]))
+        ->assertOk()
+        ->assertJsonPath('unsentMessageIds.0', $guestMessage->message_id)
+        ->assertJsonMissing(['text' => 'Guest message that will be unsent.'])
+        ->assertJsonMissing(['text' => 'Owner message saved by the guest.']);
+});
+
 test('example', function () {
     $response = $this->get('/');
 

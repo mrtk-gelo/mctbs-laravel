@@ -1,6 +1,9 @@
-<section class="chat-pinned-panel" aria-label="Pinned messages" data-chat-pinned-panel hidden>
-    <header class="chat-pinned-panel-header">
-        <h3>Pinned messages <span data-chat-pin-count>{{ $pinnedMessages->count() }}</span></h3>
+<dialog class="chat-pinned-modal" data-chat-pinned-modal aria-labelledby="chat-pinned-modal-title">
+    <header class="chat-pinned-modal-header">
+        <div>
+            <h3 id="chat-pinned-modal-title">Pinned messages</h3>
+            <p><span data-chat-pin-count>{{ $pinnedMessages->count() }}</span> saved in this conversation</p>
+        </div>
         <button type="button" class="chat-pinned-close" aria-label="Close pinned messages" data-chat-pinned-close>
             <i class="fa fa-xmark" aria-hidden="true"></i>
         </button>
@@ -15,27 +18,34 @@
                     default => trim(($pinnedMessage->sender?->first_name ?? '').' '.($pinnedMessage->sender?->last_name ?? '')) ?: 'Property team',
                 };
             @endphp
-            <div class="chat-pinned-item" data-pinned-message-id="{{ $pinnedMessage->message_id }}">
+            <article class="chat-pinned-item" data-pinned-message-id="{{ $pinnedMessage->message_id }}">
+                <span class="chat-pinned-avatar" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($pinnedSenderName, 0, 1)) }}</span>
                 <button
                     type="button"
                     class="chat-pinned-message-link"
                     data-chat-jump-to-message
                     data-message-id="{{ $pinnedMessage->message_id }}"
                 >
-                    <strong>{{ $pinnedSenderName }}</strong>
-                    <span>{{ \Illuminate\Support\Str::limit($pinnedMessage->message, 150) }}</span>
+                    <div class="chat-pinned-meta">
+                        <strong>{{ $pinnedSenderName }}</strong>
+                        <time datetime="{{ $pinnedMessage->sent_at->toIso8601String() }}">{{ $pinnedMessage->sent_at->format('M j, g:i A') }}</time>
+                    </div>
+                    <p class="chat-pinned-bubble">{{ $pinnedMessage->message }}</p>
                 </button>
                 <button
                     type="button"
-                    class="chat-message-action"
+                    class="chat-message-action chat-pinned-unpin"
+                    aria-label="Unpin message"
                     data-chat-pin-toggle
                     data-message-id="{{ $pinnedMessage->message_id }}"
                     data-is-pinned="true"
                     data-pin-url="{{ route($pinRoute, ['conversationId' => $conversationId, 'messageId' => $pinnedMessage->message_id]) }}"
-                >Unpin</button>
-            </div>
+                >
+                    <i class="fa fa-thumbtack" aria-hidden="true"></i>
+                </button>
+            </article>
         @empty
             <p class="chat-pinned-empty" data-chat-pins-empty>No messages pinned yet.</p>
         @endforelse
     </div>
-</section>
+</dialog>

@@ -74,8 +74,8 @@
                     aria-label="Conversation messages"
                     aria-live="polite"
                     data-chat-poll-url="{{ route('guest.conversations.updates', $conversation->conversation_id) }}"
-                    data-reaction-url-template="{{ route($reactionRoute, ['conversationId' => $conversation->conversation_id, 'messageId' => '__message_id__']) }}"
                     data-pin-url-template="{{ route($pinRoute, ['conversationId' => $conversation->conversation_id, 'messageId' => '__message_id__']) }}"
+                    data-unsend-url-template="{{ route($unsendRoute, ['conversationId' => $conversation->conversation_id, 'messageId' => '__message_id__']) }}"
                     data-csrf-token="{{ csrf_token() }}"
                     data-conversation-id="{{ $conversation->conversation_id }}"
                     data-viewer-type="guest"
@@ -89,10 +89,9 @@
                             'conversationGuestId' => $conversation->guest_user_id,
                             'visitorName' => trim(auth()->user()->first_name.' '.auth()->user()->last_name),
                             'conversationId' => $conversation->conversation_id,
-                            'reactionRoute' => $reactionRoute,
-                            'reactionSummaries' => $reactionSummaries,
                             'pinnedMessageIds' => $pinnedMessages->map(fn ($message): int => (int) $message->message_id)->all(),
                             'pinRoute' => $pinRoute,
+                            'unsendRoute' => $unsendRoute,
                             'canPin' => true,
                         ])
                     @else

@@ -59,11 +59,11 @@ Route::get('/public-chat/conversations/{conversationId}/updates', [PublicVisitor
     ->whereNumber('conversationId')
     ->middleware('throttle:60,1')
     ->name('public.visitor-conversations.updates');
-Route::post('/public-chat/conversations/{conversationId}/messages/{messageId}/reactions', [PublicVisitorConversationController::class, 'toggleReaction'])
+Route::post('/public-chat/conversations/{conversationId}/messages/{messageId}/unsend', [PublicVisitorConversationController::class, 'unsend'])
     ->whereNumber('conversationId')
     ->whereNumber('messageId')
-    ->middleware('throttle:60,1')
-    ->name('public.visitor-conversations.reactions');
+    ->middleware('throttle:10,1')
+    ->name('public.visitor-conversations.unsend');
 Route::post('/public-chat/conversations/{conversationId}/messages/{messageId}/pins', [PublicVisitorConversationController::class, 'togglePin'])
     ->whereNumber('conversationId')
     ->whereNumber('messageId')
@@ -132,11 +132,11 @@ Route::middleware(['auth', 'role:guest'])->group(function () {
         ->whereNumber('conversationId')
         ->middleware('throttle:60,1')
         ->name('guest.conversations.updates');
-    Route::post('/guest/conversations/{conversationId}/messages/{messageId}/reactions', [ConversationController::class, 'toggleReaction'])
+    Route::post('/guest/conversations/{conversationId}/messages/{messageId}/unsend', [ConversationController::class, 'unsend'])
         ->whereNumber('conversationId')
         ->whereNumber('messageId')
-        ->middleware('throttle:60,1')
-        ->name('guest.conversations.reactions');
+        ->middleware('throttle:10,1')
+        ->name('guest.conversations.unsend');
     Route::post('/guest/conversations/{conversationId}/messages/{messageId}/pins', [ConversationController::class, 'togglePin'])
         ->whereNumber('conversationId')
         ->whereNumber('messageId')
@@ -192,11 +192,11 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
         ->whereNumber('conversationId')
         ->middleware('throttle:60,1')
         ->name('conversations.updates');
-    Route::post('/messages/{conversationId}/messages/{messageId}/reactions', [ConversationController::class, 'toggleReaction'])
+    Route::post('/messages/{conversationId}/messages/{messageId}/unsend', [ConversationController::class, 'unsend'])
         ->whereNumber('conversationId')
         ->whereNumber('messageId')
-        ->middleware('throttle:60,1')
-        ->name('conversations.reactions');
+        ->middleware('throttle:10,1')
+        ->name('conversations.unsend');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
     Route::post('/messages/{conversationId}/archive', [ConversationController::class, 'archive'])->whereNumber('conversationId')->name('conversations.archive');
     Route::post('/messages/{conversationId}/delete', [ConversationController::class, 'deleteConversation'])->whereNumber('conversationId')->name('conversations.delete');
@@ -291,11 +291,11 @@ Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->grou
         ->whereNumber('conversationId')
         ->middleware('throttle:60,1')
         ->name('conversations.updates');
-    Route::post('/messages/{conversationId}/messages/{messageId}/reactions', [ConversationController::class, 'toggleReaction'])
+    Route::post('/messages/{conversationId}/messages/{messageId}/unsend', [ConversationController::class, 'unsend'])
         ->whereNumber('conversationId')
         ->whereNumber('messageId')
-        ->middleware('throttle:60,1')
-        ->name('conversations.reactions');
+        ->middleware('throttle:10,1')
+        ->name('conversations.unsend');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
     Route::post('/messages/{conversationId}/archive', [ConversationController::class, 'archive'])->whereNumber('conversationId')->name('conversations.archive');
     Route::post('/messages/{conversationId}/delete', [ConversationController::class, 'deleteConversation'])->whereNumber('conversationId')->name('conversations.delete');

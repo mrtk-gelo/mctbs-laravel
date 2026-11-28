@@ -296,3 +296,82 @@ test('login claims only visitor chats with the matching email from the same brow
         ->where('user_id', $guest->user_id)
         ->value('archived_at'))->not->toBeNull();
 });
+
+test('public visitors can unsend their own messages and view pinned owner messages with timestamps', function () {
+    Mail::fake();
+    $owner = User::create([
+        'role_id' => Role::query()->where('name', 'Owner')->firstOrFail()->role_id,
+        'first_name' => 'Modal',
+        'last_name' => 'Owner',
+        'email' => 'public-message-actions-owner@example.com',
+        'password' => 'Password123!',
+        'is_active' => true,
+    ]);
+    $house = TransientHouse::create([
+        'owner_id' => $owner->user_id,
+        'name' => 'Public Message Actions House',
+        'address' => '1 Actions Road',
+        'city' => 'Baguio',
+        'contact_number' => '5557005',
+        'is_active' => true,
+    ]);
+
+    $this->post(route('public.visitor-conversations.store'), [
+        'house_id' => $house->house_id,
+        'name' => 'Actions Visitor',
+        'email' => 'public-message-actions@example.com',
+        'message' => 'Visitor message to unsend.',
+    ])->assertRedirect();
+    $conversation = Conversation::query()->firstOrFail();
+    $visitorMessage = $conversation->messages()->where('sender_type', 'visitor')->firstOrFail();
+    $ownerSentAt = now()->setTime(7, 15);
+    $ownerMessage = $conversation->messages()->create([
+        'sender_id' => $owner->user_id,
+        'sender_type' => 'user',
+        'message' => 'Pinned owner reply with the exact date.',
+        'message_type' => 'user',
+        'sent_at' => $ownerSentAt,
+    ]);
+
+    $this->postJson(route('public.visitor-conversations.pins', [
+        'conversationId' => $conversation->conversation_id,
+        'messageId' => $ownerMessage->message_id,
+    ]))
+        ->assertOk()
+        ->assertJsonPath('pins.0.timeLabel', $ownerSentAt->format('M j, g:i A'));
+
+    $this->get(route('public.visitor-conversations.show', $conversation->conversation_id))
+        ->assertOk()
+        ->assertSee('data-chat-pinned-modal', false)
+        ->assertSee('Pinned owner reply with the exact date.')
+        ->assertSee('7:15 AM')
+        ->assertSee('Unsend')
+        ->assertDontSee('data-chat-react', false);
+
+    $this->postJson(route('public.visitor-conversations.unsend', [
+        'conversationId' => $conversation->conversation_id,
+        'messageId' => $visitorMessage->message_id,
+    ]))
+        ->assertOk()
+        ->assertJsonPath('messageId', $visitorMessage->message_id);
+
+    expect($visitorMessage->fresh()->message)->toBe('')
+        ->and($visitorMessage->fresh()->unsent_at)->not->toBeNull();
+
+    $this->getJson(route('public.visitor-conversations.updates', [
+        'conversationId' => $conversation->conversation_id,
+    ]))
+        ->assertOk()
+        ->assertJsonPath('unsentMessageIds.0', $visitorMessage->message_id)
+        ->assertJsonMissing(['text' => 'Visitor message to unsend.']);
+
+    $this->postJson(route('public.visitor-conversations.unsend', [
+        'conversationId' => $conversation->conversation_id,
+        'messageId' => $ownerMessage->message_id,
+    ]))->assertForbidden();
+
+    $this->postJson(route('public.visitor-conversations.pins', [
+        'conversationId' => $conversation->conversation_id,
+        'messageId' => $visitorMessage->message_id,
+    ]))->assertNotFound();
+});
