@@ -101,6 +101,11 @@ Route::middleware('guest')->group(function () {
         ->name('password.update');
 });
 
+Route::get('/sysadmin/login', [LoginController::class, 'createSystemAdmin'])->name('sysadmin.login');
+Route::post('/sysadmin/login', [LoginController::class, 'storeSystemAdmin'])
+    ->middleware('throttle:5,1')
+    ->name('sysadmin.login.store');
+
 Route::get('/register', [RegisterController::class, 'create'])->name('register');
 Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
 

@@ -19,7 +19,38 @@ class LoginController extends Controller
         return view('auth.login');
     }
 
+    public function createSystemAdmin(): View|RedirectResponse
+    {
+        if (Auth::check()) {
+            $user = Auth::user();
+
+            return $user->role?->name === 'Account Admin'
+                ? redirect()->route('accadmin.dashboard')
+                : redirect($user->dashboardPath());
+        }
+
+        return view('auth.login', ['systemAdminLogin' => true]);
+    }
+
     public function store(Request $request): RedirectResponse
+    {
+        return $this->authenticate($request);
+    }
+
+    public function storeSystemAdmin(Request $request): RedirectResponse
+    {
+        if (Auth::check()) {
+            $user = Auth::user();
+
+            return $user->role?->name === 'Account Admin'
+                ? redirect()->route('accadmin.dashboard')
+                : redirect($user->dashboardPath());
+        }
+
+        return $this->authenticate($request, true);
+    }
+
+    private function authenticate(Request $request, bool $systemAdminOnly = false): RedirectResponse
     {
         $credentials = $request->validate([
             'email' => ['required', 'email'],
@@ -33,6 +64,12 @@ class LoginController extends Controller
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
                 'email' => 'Invalid email or password.',
+            ]);
+        }
+
+        if ($systemAdminOnly && $user->role?->name !== 'Account Admin') {
+            throw ValidationException::withMessages([
+                'email' => 'This sign-in is for System Admin accounts only.',
             ]);
         }
 
@@ -55,6 +92,10 @@ class LoginController extends Controller
         app(ConversationService::class)->claimVisitorConversations($user, $request);
 
         session()->flash('success', "Welcome back, {$user->first_name}!");
+
+        if ($systemAdminOnly) {
+            return redirect()->route('accadmin.dashboard');
+        }
 
         return redirect()->intended($user->dashboardPath());
     }

@@ -1,6 +1,8 @@
 @extends('layouts.auth')
 
-@section('title', 'Login | MCTBS')
+@php($systemAdminLogin = $systemAdminLogin ?? false)
+
+@section('title', $systemAdminLogin ? 'System Admin Login | MCTBS' : 'Login | MCTBS')
 
 @section('content')
 <div class="auth-wrapper">
@@ -25,16 +27,18 @@
         <div class="auth-card">
             <div class="card-eyebrow">
                 <span class="card-eyebrow-dot"></span>
-                Welcome back
+                {{ $systemAdminLogin ? 'System Admin access' : 'Welcome back' }}
             </div>
-            <h2 class="card-title">Sign in to your account</h2>
-            <p class="card-subtitle">Enter your credentials to access your dashboard.</p>
+            <h2 class="card-title">{{ $systemAdminLogin ? 'System Admin sign in' : 'Sign in to your account' }}</h2>
+            <p class="card-subtitle">
+                {{ $systemAdminLogin ? 'Sign in with your Account Admin credentials to open the Account Admin dashboard.' : 'Enter your credentials to access your dashboard.' }}
+            </p>
 
             @if (session('status'))
                 <div class="auth-alert success" role="status">{{ session('status') }}</div>
             @endif
 
-            <form method="POST" action="{{ route('login') }}" autocomplete="on">
+            <form method="POST" action="{{ route($systemAdminLogin ? 'sysadmin.login.store' : 'login') }}" autocomplete="on">
                 @csrf
 
                 <div class="form-field">
@@ -78,10 +82,17 @@
 
             <div class="divider">or</div>
 
-            <p class="auth-link">
-                Don't have an account?&nbsp;
-                <a href="{{ route('register') }}">Register as Guest</a>
-            </p>
+            @if ($systemAdminLogin)
+                <p class="auth-link">
+                    Not a System Admin?&nbsp;
+                    <a href="{{ route('login') }}">Return to regular sign in</a>
+                </p>
+            @else
+                <p class="auth-link">
+                    Don't have an account?&nbsp;
+                    <a href="{{ route('register') }}">Register as Guest</a>
+                </p>
+            @endif
         </div>
     </div>
 </div>
