@@ -27,13 +27,16 @@ class AccountInvitation extends Mailable
 
     public function content(): Content
     {
+        $inviter = $this->invitation->invitedBy;
+        $inviterName = $inviter?->role?->name === 'Account Admin'
+            ? 'The MCTBS team'
+            : ($inviter ? trim($inviter->first_name.' '.$inviter->last_name) : null);
+
         return new Content(
             html: 'emails.account-invitation',
             text: 'emails.text.account-invitation',
             with: [
-                'inviterName' => $this->invitation->invitedBy
-                    ? trim($this->invitation->invitedBy->first_name.' '.$this->invitation->invitedBy->last_name)
-                    : null,
+                'inviterName' => $inviterName,
                 'roleName' => $this->invitation->role->displayName(),
                 'houseName' => $this->invitation->house?->name,
             ],

@@ -37,9 +37,17 @@ test('a sysadmin invitation creates an owner account and consumes the invitation
     expect($invitation->role->name)->toBe('Owner')
         ->and($invitation->house_id)->toBeNull()
         ->and($invitation->expires_at->isFuture())->toBeTrue();
-    Mail::assertSent(AccountInvitation::class, fn (AccountInvitation $mail): bool => $mail->hasTo($invitation->email)
-        && str_contains($mail->render(), route('register', ['token' => $invitation->token]))
-        && str_contains($mail->render(), 'Owner'));
+    Mail::assertSent(AccountInvitation::class, function (AccountInvitation $mail) use ($invitation): bool {
+        if (! $mail->hasTo($invitation->email)) {
+            return false;
+        }
+
+        $mail->assertSeeInHtml('The MCTBS team invited you to create an account as Owner.');
+        $mail->assertSeeInText('The MCTBS team invited you to create an account as Owner.');
+
+        return str_contains($mail->render(), route('register', ['token' => $invitation->token]))
+            && str_contains($mail->render(), 'Owner');
+    });
 
     $this->actingAs($this->sysadmin)
         ->post(route('accadmin.owners.invite'), ['email' => 'invited-owner@example.com'])
