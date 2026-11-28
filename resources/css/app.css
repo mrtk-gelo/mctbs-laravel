@@ -1790,11 +1790,15 @@
     max-width: min(82%, 620px);
     flex-direction: column;
     gap: 5px;
+    box-sizing: border-box;
+    padding-right: 34px;
 }
 
 .chat-message-row--outgoing {
     align-self: flex-end;
     align-items: flex-end;
+    padding-right: 0;
+    padding-left: 34px;
 }
 
 .chat-message-row--incoming {
@@ -1806,6 +1810,7 @@
     max-width: min(92%, 650px);
     align-self: center;
     align-items: center;
+    padding-left: 34px;
 }
 
 .chat-message-meta {
@@ -1850,16 +1855,17 @@
 .chat-message-menu {
     position: absolute;
     z-index: 4;
-    top: -5px;
-    right: -42px;
+    top: 50%;
+    right: 0;
     visibility: hidden;
     opacity: 0;
+    transform: translateY(-50%);
     transition: opacity .15s ease;
 }
 
 .chat-message-row--outgoing .chat-message-menu {
     right: auto;
-    left: -42px;
+    left: 0;
 }
 
 .chat-message-row:hover .chat-message-menu,
@@ -3143,15 +3149,8 @@
     }
 
     .chat-message-menu {
-        top: -8px;
-        right: 4px;
         visibility: visible;
         opacity: 1;
-    }
-
-    .chat-message-row--outgoing .chat-message-menu {
-        right: auto;
-        left: 4px;
     }
 
     .chat-thread-header {
