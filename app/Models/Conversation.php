@@ -17,6 +17,9 @@ class Conversation extends Model
         'house_id',
         'unit_id',
         'guest_user_id',
+        'visitor_name',
+        'visitor_email',
+        'visitor_session_hash',
         'assigned_to',
         'status',
         'subject',
@@ -72,7 +75,7 @@ class Conversation extends Model
     public function latestHumanMessage(): HasOne
     {
         return $this->hasOne(Message::class, 'conversation_id', 'conversation_id')
-            ->where('sender_type', 'user')
+            ->whereIn('sender_type', ['user', 'visitor'])
             ->latestOfMany('sent_at');
     }
 }
