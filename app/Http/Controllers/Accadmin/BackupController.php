@@ -5,23 +5,31 @@ namespace App\Http\Controllers\Accadmin;
 use App\Http\Controllers\Controller;
 use App\Services\DatabaseBackupService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BackupController extends Controller
 {
+    public function index(DatabaseBackupService $backups): View
+    {
+        return view('accadmin.backups', [
+            'backups' => $backups->recent(),
+        ]);
+    }
+
     public function store(DatabaseBackupService $backups): RedirectResponse
     {
         try {
             $backups->create();
         } catch (RuntimeException $exception) {
             return redirect()
-                ->route('accadmin.dashboard')
+                ->route('accadmin.backups.index')
                 ->with('error', $exception->getMessage());
         }
 
         return redirect()
-            ->route('accadmin.dashboard')
+            ->route('accadmin.backups.index')
             ->with('success', 'Database backup created.');
     }
 

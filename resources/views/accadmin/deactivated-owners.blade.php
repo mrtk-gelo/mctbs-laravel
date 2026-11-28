@@ -1,4 +1,4 @@
-<x-accadmin-shell title="Deactivated Owners | MCTBS" heading="Deactivated owners">
+<x-accadmin-shell title="Deactivated Owners | MCTBS">
     <main class="container workspace-page account-lifecycle-page">
         <a href="{{ route('accadmin.owners.index') }}" class="text-muted fs-sm account-lifecycle-back">
             <i class="fa fa-arrow-left"></i> Back to owner management

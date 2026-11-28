@@ -29,21 +29,32 @@ it('allows account admins to sign in through the dedicated system admin page', f
 
     $this->get(route('sysadmin.login'))
         ->assertOk()
+        ->assertSee('Welcome back, Admin')
         ->assertSee('System Admin sign in')
         ->assertSee(route('sysadmin.login.store'), false);
 
     $this->post(route('sysadmin.login.store'), [
         'email' => $accountAdmin->email,
         'password' => 'ValidPassword123!',
-    ])->assertRedirect(route('accadmin.dashboard'));
+    ])
+        ->assertRedirect(route('accadmin.dashboard'))
+        ->assertSessionHas('success', 'Welcome back, Admin!');
 
     $this->assertAuthenticatedAs($accountAdmin);
 
     $this->get(route('accadmin.dashboard'))
         ->assertOk()
         ->assertSee('Account Admin Dashboard')
+        ->assertSee('class="topnav"', false)
+        ->assertSee(route('accadmin.owners.deactivated'), false)
+        ->assertSee(route('accadmin.backups.index'), false)
+        ->assertDontSee('aa-app', false)
         ->assertSee('Manage Owners')
-        ->assertSee('Database backups');
+        ->assertDontSee('Database backups');
+
+    $this->get(route('accadmin.backups.index'))
+        ->assertSee('Database backups')
+        ->assertSee('Create backup');
 });
 
 it('rejects non-admin accounts from the dedicated system admin login', function (): void {
@@ -62,13 +73,18 @@ it('rejects non-admin accounts from the dedicated system admin login', function 
     $this->assertGuest();
 });
 
-it('keeps the existing account admin login destination unchanged', function (): void {
+it('requires account admins to use the dedicated system admin login', function (): void {
     $accountAdmin = createSystemAdminLoginTestUser('Account Admin', 'account-admin-login@example.com');
 
-    $this->post(route('login'), [
-        'email' => $accountAdmin->email,
-        'password' => 'ValidPassword123!',
-    ])->assertRedirect('/accadmin/dashboard');
+    $this->from(route('login'))
+        ->post(route('login'), [
+            'email' => $accountAdmin->email,
+            'password' => 'ValidPassword123!',
+        ])
+        ->assertRedirect(route('login'))
+        ->assertSessionHasErrors([
+            'email' => 'Account Admins must sign in through the dedicated System Admin login page.',
+        ]);
 
-    $this->assertAuthenticatedAs($accountAdmin);
+    $this->assertGuest();
 });

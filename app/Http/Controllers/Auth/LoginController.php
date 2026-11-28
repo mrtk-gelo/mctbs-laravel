@@ -73,6 +73,12 @@ class LoginController extends Controller
             ]);
         }
 
+        if (! $systemAdminOnly && $user->role?->name === 'Account Admin') {
+            throw ValidationException::withMessages([
+                'email' => 'Account Admins must sign in through the dedicated System Admin login page.',
+            ]);
+        }
+
         if (! $user->is_active) {
             $message = $user->role?->name === 'Owner'
                 ? 'Account Deactivated. Your account is currently deactivated and cannot access MCTBS. Contact the Account Admin to restore access.'
@@ -91,7 +97,8 @@ class LoginController extends Controller
         $request->session()->regenerate();
         app(ConversationService::class)->claimVisitorConversations($user, $request);
 
-        session()->flash('success', "Welcome back, {$user->first_name}!");
+        $greetingName = $user->role?->name === 'Account Admin' ? 'Admin' : $user->first_name;
+        session()->flash('success', "Welcome back, {$greetingName}!");
 
         if ($systemAdminOnly) {
             return redirect()->route('accadmin.dashboard');

@@ -20,7 +20,7 @@ beforeEach(function (): void {
     ]);
 });
 
-it('shows registered owners and recent private backups on the dashboard', function (): void {
+it('shows registered owners on the dashboard and recent backups on the backups page', function (): void {
     $this->freezeTime();
     $owner = User::create([
         'role_id' => Role::query()->where('name', 'Owner')->value('role_id'),
@@ -54,13 +54,17 @@ it('shows registered owners and recent private backups on the dashboard', functi
         ->assertSee('harbor@example.com')
         ->assertSee('<td>1</td>', false)
         ->assertSee('Active')
-        ->assertSee('Oct 25, 2026')
+        ->assertDontSee('Database backups');
+
+    $this->get(route('accadmin.backups.index'))
         ->assertSee('Database backups')
+        ->assertSee('Recent backups')
+        ->assertSee('Oct 25, 2026')
         ->assertSee('8 B')
         ->assertSee(route('accadmin.backups.download', $filename));
 });
 
-it('creates a backup immediately from the admin dashboard action', function (): void {
+it('creates a backup from the dedicated backups page', function (): void {
     $filename = 'database_20261025_110000_1234abcd.sql';
     Storage::fake('backups');
     $backupService = Mockery::mock(DatabaseBackupService::class);
@@ -80,16 +84,16 @@ it('creates a backup immediately from the admin dashboard action', function (): 
 
     $this->actingAs($this->sysadmin)
         ->post(route('accadmin.backups.store'))
-        ->assertRedirect(route('accadmin.dashboard'))
+        ->assertRedirect(route('accadmin.backups.index'))
         ->assertSessionHas('success', 'Database backup created.');
 
     Storage::disk('backups')->assertExists($filename);
-    $this->get(route('accadmin.dashboard'))
+    $this->get(route('accadmin.backups.index'))
         ->assertSee($filename)
         ->assertSee(route('accadmin.backups.download', $filename));
 });
 
-it('shows a useful error when the dashboard backup action fails', function (): void {
+it('shows a useful error when backup creation fails', function (): void {
     $backupService = Mockery::mock(DatabaseBackupService::class);
     $backupService->shouldReceive('create')
         ->once()
@@ -98,8 +102,23 @@ it('shows a useful error when the dashboard backup action fails', function (): v
 
     $this->actingAs($this->sysadmin)
         ->post(route('accadmin.backups.store'))
-        ->assertRedirect(route('accadmin.dashboard'))
+        ->assertRedirect(route('accadmin.backups.index'))
         ->assertSessionHas('error', 'The database backup failed. Check the application log.');
+});
+
+it('does not allow non-admins to view the backups page', function (): void {
+    $owner = User::create([
+        'role_id' => Role::query()->where('name', 'Owner')->value('role_id'),
+        'first_name' => 'Owner',
+        'last_name' => 'Account',
+        'email' => 'backup-page-owner@example.com',
+        'password' => 'OwnerPass123!',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('accadmin.backups.index'))
+        ->assertForbidden();
 });
 
 it('downloads a private backup only for account admins', function (): void {
