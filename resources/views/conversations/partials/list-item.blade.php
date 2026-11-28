@@ -9,8 +9,16 @@
     $subtitle = $isStaffInbox
         ? $conversation->house->name.($conversation->unit ? ' · '.$conversation->unit->unit_type : '')
         : ($conversation->unit ? $conversation->unit->unit_type : 'Property conversation');
-    $lastMessageAt = $conversation->latestMessage?->sent_at ?? $conversation->created_at;
+    $previewMessage = $isStaffInbox ? $conversation->latestHumanMessage : $conversation->latestMessage;
+    $lastMessageAt = $previewMessage?->sent_at ?? $conversation->created_at;
     $isActive = (int) $activeConversationId === (int) $conversation->conversation_id;
+    $bookingStatus = $conversation->booking_status
+        ? \App\Support\BookingStatus::canonical($conversation->booking_status)
+        : 'No booking';
+    $statusClass = \Illuminate\Support\Str::slug($bookingStatus);
+    $statusHint = $bookingStatus === \App\Support\BookingStatus::ACCEPTED
+        ? 'Dates are reserved while the guest submits the downpayment.'
+        : $bookingStatus;
 @endphp
 
 <a
@@ -31,10 +39,10 @@
         @endif
         <span class="chat-list-subtitle">{{ $subtitle }}</span>
         <span class="chat-list-preview">
-            {{ $conversation->latestMessage ? \Illuminate\Support\Str::limit($conversation->latestMessage->message, 76) : 'No messages yet' }}
+            {{ $previewMessage ? \Illuminate\Support\Str::limit($previewMessage->message, 76) : 'No messages yet' }}
         </span>
         <span class="chat-list-foot">
-            <span class="chat-status chat-status--{{ $conversation->status }}">{{ str_replace('_', ' ', ucfirst($conversation->status)) }}</span>
+            <span class="chat-status chat-status--{{ $statusClass }}" title="{{ $statusHint }}">{{ $bookingStatus }}</span>
             @if ($conversation->unread_message_count > 0)
                 <span class="chat-unread-count" aria-label="{{ $conversation->unread_message_count }} unread messages">{{ $conversation->unread_message_count }}</span>
             @endif

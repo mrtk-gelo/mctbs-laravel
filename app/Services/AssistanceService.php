@@ -11,6 +11,7 @@ use App\Models\Invitation;
 use App\Models\Role;
 use App\Models\Unit;
 use App\Models\User;
+use App\Support\UnitTimeFormatter;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
@@ -121,26 +122,139 @@ class AssistanceService
             ->get();
     }
 
+    /**
+     * @return list<string>
+     */
+    public function quickQuestionsForUnit(): array
+    {
+        return [
+            'What is the price per night?',
+            'What time are check-in and check-out?',
+            'How many guests can stay?',
+            'What amenities are included?',
+            'What are the property policies?',
+            'Is there an extra guest fee?',
+        ];
+    }
+
+    public function answerUnitQuestion(Unit $unit, string $question): ?string
+    {
+        $unit->loadMissing('house.amenities');
+        $question = Str::lower(preg_replace('/[^a-z0-9]+/i', ' ', $question) ?? '');
+
+        if (str_contains($question, 'check in') && str_contains($question, 'check out')) {
+            return 'Check-in is '.UnitTimeFormatter::format((string) $unit->check_in_time)
+                .' and check-out is '.UnitTimeFormatter::format((string) $unit->check_out_time).'.';
+        }
+
+        if ($this->questionContainsAny($question, ['price', 'rate', 'cost', 'how much', 'per night'])) {
+            return "The current listed rate for {$unit->unit_type} is ₱".number_format((float) $unit->price, 2).' per night.';
+        }
+
+        if ($this->questionContainsAny($question, ['check in', 'arrival time'])) {
+            return 'Check-in time for '.$unit->unit_type.' is '.UnitTimeFormatter::format((string) $unit->check_in_time).'.';
+        }
+
+        if ($this->questionContainsAny($question, ['check out', 'departure time'])) {
+            return 'Check-out time for '.$unit->unit_type.' is '.UnitTimeFormatter::format((string) $unit->check_out_time).'.';
+        }
+
+        if ($this->questionContainsAny($question, ['capacity', 'how many guest', 'how many people', 'how many person', 'sleeps'])) {
+            $answer = "The unit accommodates {$unit->capacity} standard guests";
+            if ($unit->maximum_capacity && $unit->maximum_capacity > $unit->capacity) {
+                $answer .= " and up to {$unit->maximum_capacity} counted guests";
+            }
+
+            return $answer.'.';
+        }
+
+        if ($this->questionContainsAny($question, ['extra guest', 'additional guest'])) {
+            if (! $unit->maximum_capacity || $unit->maximum_capacity <= $unit->capacity) {
+                return 'There is no extra-guest capacity listed for this unit.';
+            }
+
+            return 'The extra guest fee is ₱'.number_format((float) $unit->extra_guest_fee, 2).' per guest per night above the standard capacity.';
+        }
+
+        if ($this->questionContainsAny($question, ['free child', 'child age', 'children free'])) {
+            return $unit->child_free_through_age === null
+                ? 'There is no free-child age policy listed for this unit.'
+                : "Children aged {$unit->child_free_through_age} and under are not counted toward the unit capacity.";
+        }
+
+        if ($this->questionContainsAny($question, ['amenity', 'amenities', 'facilities', 'included'])) {
+            $amenities = $unit->house?->amenities->pluck('name')->filter()->values();
+
+            return $amenities && $amenities->isNotEmpty()
+                ? 'Amenities listed for this property include: '.$amenities->join(', ').'.'
+                : 'No amenities have been listed for this property yet.';
+        }
+
+        if ($this->questionContainsAny($question, ['policy', 'policies', 'house rule', 'rules'])) {
+            $policies = trim((string) $unit->house?->policies);
+
+            return $policies !== ''
+                ? 'The property policies are: '.$policies
+                : 'No property policies have been added yet. A team member can help with specific questions.';
+        }
+
+        if ($this->questionContainsAny($question, ['address', 'location', 'where is', 'contact number', 'phone number'])) {
+            $house = $unit->house;
+            if (! $house) {
+                return null;
+            }
+
+            $details = array_filter([
+                $house->address,
+                $house->barangay,
+                $house->city,
+                $house->contact_number ? 'Contact: '.$house->contact_number : null,
+            ]);
+
+            return 'Property details: '.implode(', ', $details).'.';
+        }
+
+        return null;
+    }
+
+    private function questionContainsAny(string $question, array $phrases): bool
+    {
+        foreach ($phrases as $phrase) {
+            if (str_contains($question, $phrase)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function addFaqResponse(Conversation $conversation, ChatFaq $faq): void
     {
+        $this->addAssistantResponse(
+            $conversation,
+            $faq->answer.($faq->related_url ? "\n\n".$faq->related_url : '')
+        );
+    }
+
+    public function addAssistantResponse(Conversation $conversation, string $answer): void
+    {
         $message = $conversation->messages()->create([
-            'message' => $faq->answer.($faq->related_url ? "\n\n".$faq->related_url : ''),
+            'message' => $answer,
             'message_type' => 'assistant',
             'sender_type' => 'assistant',
             'sent_at' => now(),
         ]);
         $conversation->update([
             'last_message_at' => $message->sent_at,
-            'status' => 'resolved',
-            'resolved_at' => now(),
+            'status' => 'open',
+            'resolved_at' => null,
         ]);
     }
 
     public function handoff(Conversation $conversation): void
     {
-        $settings = $this->settingsFor($conversation->house_id);
         $message = $conversation->messages()->create([
-            'message' => $settings->handoff_message,
+            'message' => 'Your message has been received. A member of our team will assist you as soon as possible.',
             'message_type' => 'system',
             'sender_type' => 'system',
             'sent_at' => now(),

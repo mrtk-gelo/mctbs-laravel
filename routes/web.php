@@ -82,9 +82,6 @@ Route::middleware(['auth', 'role:guest'])->group(function () {
     Route::post('/guest/conversations/{conversationId}/reply', [ConversationController::class, 'guestReply'])
         ->whereNumber('conversationId')
         ->name('guest.conversations.reply');
-    Route::post('/guest/conversations/{conversationId}/reopen', [ConversationController::class, 'reopen'])
-        ->whereNumber('conversationId')
-        ->name('guest.conversations.reopen');
     Route::get('/units/{unit}/book', BookingForm::class)->name('guest.book');
 
     Route::get('/guest/bookings/{booking_id}', [GuestBookingController::class, 'show'])->name('guest.bookings.show');
@@ -118,9 +115,6 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
     Route::get('/messages', [ConversationController::class, 'staffIndex'])->name('conversations.index');
     Route::get('/messages/{conversationId}', [ConversationController::class, 'staffShow'])->whereNumber('conversationId')->name('conversations.show');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
-    Route::post('/messages/{conversationId}/assign', [ConversationController::class, 'assign'])->whereNumber('conversationId')->name('conversations.assign');
-    Route::post('/messages/{conversationId}/resolve', [ConversationController::class, 'resolve'])->whereNumber('conversationId')->name('conversations.resolve');
-    Route::post('/messages/{conversationId}/reopen', [ConversationController::class, 'reopen'])->whereNumber('conversationId')->name('conversations.reopen');
     Route::post('/messages/{conversationId}/notes', [ConversationController::class, 'noteStore'])->whereNumber('conversationId')->name('conversations.notes.store');
     Route::get('/messages/assistance', [AssistanceController::class, 'index'])->name('assistance.index');
     Route::post('/messages/assistance/settings', [AssistanceController::class, 'updateSettings'])->name('assistance.settings.update');
@@ -206,9 +200,6 @@ Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->grou
     Route::get('/messages', [ConversationController::class, 'staffIndex'])->name('conversations.index');
     Route::get('/messages/{conversationId}', [ConversationController::class, 'staffShow'])->whereNumber('conversationId')->name('conversations.show');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
-    Route::post('/messages/{conversationId}/assign', [ConversationController::class, 'assign'])->whereNumber('conversationId')->name('conversations.assign');
-    Route::post('/messages/{conversationId}/resolve', [ConversationController::class, 'resolve'])->whereNumber('conversationId')->name('conversations.resolve');
-    Route::post('/messages/{conversationId}/reopen', [ConversationController::class, 'reopen'])->whereNumber('conversationId')->name('conversations.reopen');
     Route::post('/messages/{conversationId}/notes', [ConversationController::class, 'noteStore'])->whereNumber('conversationId')->name('conversations.notes.store');
     Route::get('/messages/assistance', [AssistanceController::class, 'index'])->name('assistance.index');
     Route::post('/messages/assistance/settings', [AssistanceController::class, 'updateSettings'])->name('assistance.settings.update');

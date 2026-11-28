@@ -174,7 +174,7 @@
                         <div>
                             <span class="chat-eyebrow">MCTBS Connect</span>
                             <h2>Ask about {{ $unit->unit_type }}</h2>
-                            <p>{{ $unit->house->name }} · Approved answers and in-site guest support</p>
+                            <p>{{ $unit->house->name }} · Answers use this unit's current property details</p>
                         </div>
                         <span class="public-chat-status"><span></span> Unit help</span>
                     </header>
@@ -223,7 +223,7 @@
 
                         @if ($faqs->isNotEmpty())
                             <div class="public-chat-faqs" aria-label="Approved questions and answers">
-                                <span class="public-chat-section-label">Popular questions</span>
+                                <span class="public-chat-section-label">Saved property answers</span>
                                 @foreach ($faqs as $faq)
                                     <details class="public-chat-faq">
                                         <summary><i class="fa fa-circle-question" aria-hidden="true"></i>{{ $faq->question }}</summary>
@@ -237,8 +237,24 @@
                                     </details>
                                 @endforeach
                             </div>
-                        @else
-                            <div class="public-chat-empty">The property hasn't published approved answers for this unit yet. You can still ask a question below.</div>
+                        @endif
+
+                        <div class="public-chat-faqs" aria-label="Quick questions">
+                            <span class="public-chat-section-label">Quick questions</span>
+                            @foreach ($faqPrompts as $prompt)
+                                <form method="POST" action="{{ route('public.units.questions.store', $unit) }}">
+                                    @csrf
+                                    <input type="hidden" name="question" value="{{ $prompt }}">
+                                    <button class="public-chat-quick-question" type="submit">
+                                        <i class="fa fa-circle-question" aria-hidden="true"></i>{{ $prompt }}
+                                        <i class="fa fa-arrow-right" aria-hidden="true"></i>
+                                    </button>
+                                </form>
+                            @endforeach
+                        </div>
+
+                        @if ($faqs->isEmpty())
+                            <div class="public-chat-empty">Answers are generated from the unit and property details currently saved in MCTBS. If a question needs a person, a guest can start a private chat below.</div>
                         @endif
                     </div>
 

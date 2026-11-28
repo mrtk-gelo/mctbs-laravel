@@ -123,6 +123,15 @@ class PublicController extends Controller
             'question' => ['required', 'string', 'max:5000'],
         ]);
         $question = trim($data['question']);
+        $unitAnswer = $assistance->answerUnitQuestion($unit, $question);
+        if ($unitAnswer !== null) {
+            return back()->with('unitFaqAnswer', [
+                'question' => $question,
+                'answer' => $unitAnswer,
+                'related_url' => null,
+            ]);
+        }
+
         $faq = $assistance->findFaq($unit->house_id, $question, $unit->unit_id);
 
         if ($faq === null) {
@@ -194,6 +203,7 @@ class PublicController extends Controller
         return view('public.unit', [
             'unit' => $unit,
             'faqs' => $assistance->activeFaqsForGuest($unit->house_id, $unit->unit_id),
+            'faqPrompts' => $assistance->quickQuestionsForUnit(),
             'questionPrefill' => $request->query('question'),
             'reviews' => $reviews,
             'averageRating' => $reviews->avg('rating'),

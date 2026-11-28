@@ -8,7 +8,7 @@
                 <h1>Your conversations</h1>
                 <p>Messages with {{ $conversation->house->name }} are kept here.</p>
             </div>
-            <a class="chat-header-link" href="{{ route('guest.conversations.index') }}">
+            <a class="text-muted fs-sm" href="{{ route('guest.conversations.index') }}">
                 <i class="fa fa-arrow-left" aria-hidden="true"></i> All conversations
             </a>
         </header>
@@ -44,16 +44,17 @@
 
             <main class="chat-thread">
                 <header class="chat-thread-header">
-                    <a class="chat-back-link" href="{{ route('guest.conversations.index') }}" aria-label="Back to conversations">
-                        <i class="fa fa-arrow-left" aria-hidden="true"></i>
-                    </a>
                     <span class="chat-thread-avatar" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($conversation->house->name, 0, 1)) }}</span>
                     <div class="chat-thread-heading">
                         <span class="chat-eyebrow">Property conversation</span>
                         <h2>{{ $conversation->subject ?: $conversation->house->name }}</h2>
                         <p>{{ $conversation->house->name }}{{ $conversation->unit ? ' · '.$conversation->unit->unit_type : '' }}</p>
                     </div>
-                    <span class="chat-status chat-status--{{ $conversation->status }}">{{ str_replace('_', ' ', ucfirst($conversation->status)) }}</span>
+                    @if ($conversation->booking_status)
+                        <span class="chat-status chat-status--{{ \Illuminate\Support\Str::slug(\App\Support\BookingStatus::canonical($conversation->booking_status)) }}" title="{{ $conversation->booking_status === \App\Support\BookingStatus::ACCEPTED ? 'Dates are reserved while the downpayment is pending.' : \App\Support\BookingStatus::canonical($conversation->booking_status) }}">
+                            {{ \App\Support\BookingStatus::canonical($conversation->booking_status) }}
+                        </span>
+                    @endif
                 </header>
 
                 <div class="chat-thread-welcome">
@@ -103,19 +104,18 @@
                     @endif
                 </section>
 
-                @if ($conversation->status === 'resolved')
-                    <form method="POST" action="{{ route('guest.conversations.reopen', $conversation->conversation_id) }}" class="chat-resolved-notice">
-                        @csrf
-                        <span>This conversation is marked resolved.</span>
-                        <button class="btn btn-outline-primary btn-sm" type="submit">Reopen</button>
-                    </form>
-                @endif
-
                 <div class="chat-composer">
-                    @if ($faqs->isNotEmpty())
+                    @if (! empty($faqPrompts) || $faqs->isNotEmpty())
                         <details class="chat-quick-questions">
                             <summary>Quick questions</summary>
                             <div class="chat-quick-question-list">
+                                @foreach ($faqPrompts as $prompt)
+                                    <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}">
+                                        @csrf
+                                        <input type="hidden" name="message" value="{{ $prompt }}">
+                                        <button class="chat-quick-question" type="submit">{{ $prompt }}</button>
+                                    </form>
+                                @endforeach
                                 @foreach ($faqs->take(5) as $faq)
                                     <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}">
                                         @csrf
@@ -125,14 +125,6 @@
                                 @endforeach
                             </div>
                         </details>
-                    @endif
-
-                    @if ($conversation->status !== 'pending_staff' && $conversation->status !== 'resolved')
-                        <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}" class="chat-human-handoff">
-                            @csrf
-                            <input type="hidden" name="message" value="I would like to talk to a real person.">
-                            <button type="submit"><i class="fa fa-user" aria-hidden="true"></i> Talk to a person</button>
-                        </form>
                     @endif
 
                     <form method="POST" action="{{ route('guest.conversations.reply', $conversation->conversation_id) }}" class="chat-composer-form">

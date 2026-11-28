@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Mail\ConversationMessage as ConversationMessageMail;
+use App\Models\Booking;
 use App\Models\Conversation;
 use App\Models\Invitation;
 use App\Models\Message;
@@ -57,24 +58,34 @@ class ConversationService
             ? Conversation::query()->where('guest_user_id', $user->user_id)
             : Conversation::query()->whereIn('house_id', $this->accessibleHouseIds($user));
 
-        return $query->withCount([
-            'messages as unread_message_count' => function (Builder $messageQuery) use ($user): void {
-                if ($user->role?->name !== 'Guest') {
-                    $messageQuery->whereIn('conversations.status', ['open', 'pending_staff', 'assigned']);
-                }
+        return $query
+            ->addSelect([
+                'booking_status' => Booking::query()
+                    ->select('status')
+                    ->whereColumn('bookings.user_id', 'conversations.guest_user_id')
+                    ->whereHas('unit', fn (Builder $unitQuery) => $unitQuery->whereColumn('units.house_id', 'conversations.house_id'))
+                    ->orderByDesc('check_in')
+                    ->orderByDesc('booking_id')
+                    ->limit(1),
+            ])
+            ->withCount([
+                'messages as unread_message_count' => function (Builder $messageQuery) use ($user): void {
+                    if ($user->role?->name !== 'Guest') {
+                        $messageQuery->whereIn('conversations.status', ['pending_staff', 'assigned']);
+                    }
 
-                $messageQuery
-                    ->whereNotIn('sender_type', ['assistant', 'system'])
-                    ->where(function (Builder $query) use ($user): void {
-                        $query->whereNull('sender_id')
-                            ->orWhere('sender_id', '!=', $user->user_id);
-                    })
-                    ->whereRaw(
-                        'messages.message_id > COALESCE((SELECT last_read_message_id FROM conversation_participants WHERE conversation_participants.conversation_id = messages.conversation_id AND conversation_participants.user_id = ?), 0)',
-                        [$user->user_id]
-                    );
-            },
-        ]);
+                    $messageQuery
+                        ->whereNotIn('sender_type', ['assistant', 'system'])
+                        ->where(function (Builder $query) use ($user): void {
+                            $query->whereNull('sender_id')
+                                ->orWhere('sender_id', '!=', $user->user_id);
+                        })
+                        ->whereRaw(
+                            'messages.message_id > COALESCE((SELECT last_read_message_id FROM conversation_participants WHERE conversation_participants.conversation_id = messages.conversation_id AND conversation_participants.user_id = ?), 0)',
+                            [$user->user_id]
+                        );
+                },
+            ]);
     }
 
     public function markRead(User $reader, Conversation $conversation): void
@@ -97,7 +108,7 @@ class ConversationService
             ? Conversation::query()->where('guest_user_id', $user->user_id)
             : Conversation::query()
                 ->whereIn('house_id', $this->accessibleHouseIds($user))
-                ->whereIn('status', ['open', 'pending_staff', 'assigned']);
+                ->whereIn('status', ['pending_staff', 'assigned']);
 
         return $query
             ->whereHas('messages', function (Builder $messageQuery) use ($user): void {
@@ -177,10 +188,7 @@ class ConversationService
             if ($message->wasRecentlyCreated) {
                 $conversation->forceFill([
                     'last_message_at' => $message->sent_at,
-                    'status' => $sender->role?->name === 'Guest' ? 'open' : 'assigned',
-                    'assigned_to' => $sender->role?->name === 'Guest'
-                        ? $conversation->assigned_to
-                        : $sender->user_id,
+                    'status' => 'open',
                     'resolved_at' => null,
                 ])->save();
 
@@ -188,22 +196,20 @@ class ConversationService
 
                 if ($sender->role?->name === 'Guest') {
                     $assistance = app(AssistanceService::class);
-                    $faq = $assistance->findFaq($conversation->house_id, $body, $conversation->unit_id);
+                    $contextualAnswer = $this->bookingContext->answerGuestQuestion($conversation, $body);
+                    $unitAnswer = $conversation->unit
+                        ? $assistance->answerUnitQuestion($conversation->unit, $body)
+                        : null;
+                    $faq = $contextualAnswer || $unitAnswer
+                        ? null
+                        : $assistance->findFaq($conversation->house_id, $body, $conversation->unit_id);
 
-                    if ($faq) {
+                    if ($contextualAnswer) {
+                        $assistance->addAssistantResponse($conversation, $contextualAnswer);
+                    } elseif ($unitAnswer) {
+                        $assistance->addAssistantResponse($conversation, $unitAnswer);
+                    } elseif ($faq) {
                         $assistance->addFaqResponse($conversation, $faq);
-                    } elseif ($contextualAnswer = $this->bookingContext->answerGuestQuestion($conversation, $body)) {
-                        $assistantMessage = $conversation->messages()->create([
-                            'message' => $contextualAnswer,
-                            'message_type' => 'context',
-                            'sender_type' => 'assistant',
-                            'sent_at' => now(),
-                        ]);
-                        $conversation->update([
-                            'last_message_at' => $assistantMessage->sent_at,
-                            'status' => 'resolved',
-                            'resolved_at' => now(),
-                        ]);
                     } else {
                         $assistance->handoff($conversation);
                         $this->notifyRecipients($sender, $conversation, $message);
@@ -215,40 +221,6 @@ class ConversationService
 
             return $message;
         });
-    }
-
-    public function assign(User $actor, Conversation $conversation, User $assignee): void
-    {
-        abort_unless($this->canAccess($actor, $conversation), 403);
-        abort_unless($this->canAccess($assignee, $conversation), 422, 'The selected user cannot access this property.');
-        abort_unless(in_array($assignee->role?->name, ['Owner', 'Staff'], true), 422);
-
-        $conversation->update([
-            'assigned_to' => $assignee->user_id,
-            'status' => 'assigned',
-            'resolved_at' => null,
-        ]);
-        $this->addParticipant($conversation, $assignee);
-    }
-
-    public function resolve(User $actor, Conversation $conversation): void
-    {
-        abort_unless($this->canAccess($actor, $conversation), 403);
-
-        $conversation->update([
-            'status' => 'resolved',
-            'resolved_at' => now(),
-        ]);
-    }
-
-    public function reopen(User $actor, Conversation $conversation): void
-    {
-        abort_unless($this->canAccess($actor, $conversation), 403);
-
-        $conversation->update([
-            'status' => 'open',
-            'resolved_at' => null,
-        ]);
     }
 
     private function addParticipant(Conversation $conversation, User $user): void

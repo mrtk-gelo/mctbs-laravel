@@ -9,6 +9,7 @@ use App\Models\TransientHouse;
 use App\Models\User;
 use App\Services\ConversationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 
 uses(RefreshDatabase::class);
 
@@ -58,11 +59,12 @@ test('a guest receives an approved FAQ response without staff impersonation', fu
         ->and($assistantMessage->sender_id)->toBeNull()
         ->and($assistantMessage->sender_type)->toBe('assistant')
         ->and($assistantMessage->message)->toContain('Submit Payment')
-        ->and($conversation->fresh()->status)->toBe('resolved')
+        ->and($conversation->fresh()->status)->toBe('open')
         ->and($conversation->fresh()->last_message_at)->toEqual($assistantMessage->sent_at);
 });
 
 test('an unsupported guest question creates a human handoff message', function () {
+    Mail::fake();
     $owner = assistanceUser('Owner', 'handoff-owner@example.com');
     $guest = assistanceUser('Guest', 'handoff-guest@example.com');
     $house = assistanceHouse($owner);
@@ -77,8 +79,17 @@ test('an unsupported guest question creates a human handoff message', function (
 
     $systemMessage = $conversation->messages()->where('message_type', 'system')->first();
     expect($systemMessage->sender_id)->toBeNull()
-        ->and($systemMessage->message)->toBe('A team member will review this shortly.')
+        ->and($systemMessage->message)->toBe('Your message has been received. A member of our team will assist you as soon as possible.')
         ->and($conversation->fresh()->status)->toBe('pending_staff');
+
+    $this->actingAs($guest)
+        ->get(route('guest.conversations.show', $conversation->conversation_id))
+        ->assertSee('Your message has been received. A member of our team will assist you as soon as possible.');
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.show', $conversation->conversation_id))
+        ->assertSee('Can you make a special exception?')
+        ->assertDontSee('Your message has been received. A member of our team will assist you as soon as possible.');
 });
 
 test('owners can manage assistance content only for their own property', function () {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Booking;
 use App\Models\Conversation;
 use App\Models\TransientHouse;
 use App\Models\Unit;
@@ -9,7 +10,8 @@ use App\Models\User;
 use App\Services\AssistanceService;
 use App\Services\BookingContextService;
 use App\Services\ConversationService;
-use Illuminate\Database\Eloquent\Collection;
+use App\Support\BookingStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -56,6 +58,7 @@ class ConversationController extends Controller
                 ->get(),
             'settings' => $this->assistance->settingsFor($conversation->house_id),
             'faqs' => $this->assistance->activeFaqsForGuest($conversation->house_id, $conversation->unit_id),
+            'faqPrompts' => $conversation->unit ? $this->assistance->quickQuestionsForUnit() : [],
             'context' => $this->bookingContext->forConversation($request->user(), $conversation),
         ]);
     }
@@ -112,24 +115,19 @@ class ConversationController extends Controller
 
     public function staffIndex(Request $request): View
     {
-        $query = $this->conversations->conversationQueryFor($request->user())
-            ->with(['guest', 'house', 'unit', 'assignee', 'latestMessage'])
-            ->latest('last_message_at')
-            ->latest('created_at');
-
-        $status = $request->string('status')->toString();
-        if ($status === 'attention' || $status === '') {
-            $query->whereIn('status', ['open', 'pending_staff', 'assigned']);
-        } elseif ($status !== 'all' && in_array($status, ['open', 'pending_staff', 'assigned', 'resolved'], true)) {
-            $query->where('status', $status);
-        }
+        $bookingStatuses = array_merge(BookingStatus::CANONICAL_LIFECYCLE, [
+            BookingStatus::CANCELLED,
+            BookingStatus::REJECTED,
+        ]);
+        $baseQuery = $this->conversations->conversationQueryFor($request->user())
+            ->with(['guest', 'house', 'unit', 'latestMessage', 'latestHumanMessage']);
 
         if ($request->filled('search')) {
             $search = $request->string('search')->toString();
-            $query->where(function ($conversationQuery) use ($search): void {
+            $baseQuery->where(function (Builder $conversationQuery) use ($search): void {
                 $conversationQuery
                     ->where('subject', 'like', '%'.$search.'%')
-                    ->orWhereHas('guest', function ($guestQuery) use ($search): void {
+                    ->orWhereHas('guest', function (Builder $guestQuery) use ($search): void {
                         $guestQuery->where('first_name', 'like', '%'.$search.'%')
                             ->orWhere('last_name', 'like', '%'.$search.'%')
                             ->orWhere('email', 'like', '%'.$search.'%');
@@ -137,9 +135,37 @@ class ConversationController extends Controller
             });
         }
 
+        $bookingStatusCounts = collect($bookingStatuses)
+            ->mapWithKeys(function (string $bookingStatus) use ($baseQuery): array {
+                $statusQuery = clone $baseQuery;
+                $this->filterByBookingStatus($statusQuery, $bookingStatus);
+
+                return [$bookingStatus => $statusQuery->count()];
+            });
+        $noBookingQuery = clone $baseQuery;
+        $this->filterByBookingStatus($noBookingQuery, null);
+        $noBookingCount = $noBookingQuery->count();
+        $allCount = (clone $baseQuery)->count();
+
+        $query = clone $baseQuery;
+        $selectedBookingStatus = $request->string('booking_status')->toString();
+        if (in_array($selectedBookingStatus, $bookingStatuses, true)) {
+            $this->filterByBookingStatus($query, $selectedBookingStatus);
+        } elseif ($selectedBookingStatus === 'none') {
+            $this->filterByBookingStatus($query, null);
+        }
+
+        $query
+            ->latest('last_message_at')
+            ->latest('created_at');
+
         return view('conversations.staff-index', [
             'conversations' => $query->get(),
-            'filters' => $request->only(['status', 'search']),
+            'filters' => $request->only(['booking_status', 'search']),
+            'bookingStatuses' => $bookingStatuses,
+            'bookingStatusCounts' => $bookingStatusCounts,
+            'noBookingCount' => $noBookingCount,
+            'allCount' => $allCount,
         ]);
     }
 
@@ -149,13 +175,12 @@ class ConversationController extends Controller
         $this->conversations->markRead($request->user(), $conversation);
 
         return view('conversations.staff-show', [
-            'conversation' => $conversation->load(['guest', 'house', 'unit', 'assignee', 'messages.sender', 'notes.author']),
+            'conversation' => $conversation->load(['guest', 'house', 'unit', 'messages.sender', 'notes.author']),
             'conversations' => $this->conversations->conversationQueryFor($request->user())
-                ->with(['guest', 'house', 'unit', 'assignee', 'latestMessage'])
+                ->with(['guest', 'house', 'unit', 'latestMessage', 'latestHumanMessage'])
                 ->latest('last_message_at')
                 ->latest('created_at')
                 ->get(),
-            'assignees' => $this->assignees($conversation),
             'quickReplies' => $this->assistance->quickRepliesFor($request->user(), $conversation->house_id),
             'context' => $this->bookingContext->forConversation($request->user(), $conversation),
         ]);
@@ -185,42 +210,6 @@ class ConversationController extends Controller
         return back()->with('success', 'Internal note added.');
     }
 
-    public function assign(Request $request, int $conversationId): RedirectResponse
-    {
-        $conversation = $this->conversation($request->user(), $conversationId);
-        $data = $request->validate([
-            'assigned_to' => ['required', 'integer', 'exists:users,user_id'],
-        ]);
-
-        $this->conversations->assign(
-            $request->user(),
-            $conversation,
-            User::query()->findOrFail($data['assigned_to'])
-        );
-
-        return back()->with('success', 'Conversation assignment updated.');
-    }
-
-    public function resolve(Request $request, int $conversationId): RedirectResponse
-    {
-        $this->conversations->resolve(
-            $request->user(),
-            $this->conversation($request->user(), $conversationId)
-        );
-
-        return back()->with('success', 'Conversation marked as resolved.');
-    }
-
-    public function reopen(Request $request, int $conversationId): RedirectResponse
-    {
-        $this->conversations->reopen(
-            $request->user(),
-            $this->conversation($request->user(), $conversationId)
-        );
-
-        return back()->with('success', 'Conversation reopened.');
-    }
-
     private function conversation(User $user, int $conversationId): Conversation
     {
         $conversation = Conversation::query()->findOrFail($conversationId);
@@ -229,21 +218,28 @@ class ConversationController extends Controller
         return $conversation;
     }
 
-    private function assignees(Conversation $conversation): Collection
+    private function filterByBookingStatus(Builder $query, ?string $bookingStatus): void
     {
-        return User::query()
-            ->where(function ($query) use ($conversation): void {
-                $query->where('user_id', $conversation->house->owner_id)
-                    ->orWhereIn('email', function ($subquery) use ($conversation): void {
-                        $subquery->select('email')
-                            ->from('invitations')
-                            ->where('house_id', $conversation->house_id)
-                            ->whereNotNull('used_at');
-                    });
-            })
-            ->where('is_active', true)
-            ->with('role')
-            ->orderBy('first_name')
-            ->get();
+        $latestBookingStatus = Booking::query()
+            ->select('status')
+            ->whereColumn('bookings.user_id', 'conversations.guest_user_id')
+            ->whereHas('unit', fn (Builder $unitQuery) => $unitQuery->whereColumn('units.house_id', 'conversations.house_id'))
+            ->orderByDesc('check_in')
+            ->orderByDesc('booking_id')
+            ->limit(1);
+        $sql = '('.$latestBookingStatus->toSql().')';
+        $bindings = $latestBookingStatus->getBindings();
+
+        if ($bookingStatus === null) {
+            $query->whereRaw($sql.' IS NULL', $bindings);
+
+            return;
+        }
+
+        $statuses = $bookingStatus === BookingStatus::COMPLETED
+            ? BookingStatus::completedStatuses()
+            : [$bookingStatus];
+        $placeholders = implode(', ', array_fill(0, count($statuses), '?'));
+        $query->whereRaw($sql.' IN ('.$placeholders.')', [...$bindings, ...$statuses]);
     }
 }

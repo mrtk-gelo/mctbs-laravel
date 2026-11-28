@@ -68,4 +68,11 @@ class Conversation extends Model
     {
         return $this->hasOne(Message::class, 'conversation_id', 'conversation_id')->latestOfMany('sent_at');
     }
+
+    public function latestHumanMessage(): HasOne
+    {
+        return $this->hasOne(Message::class, 'conversation_id', 'conversation_id')
+            ->where('sender_type', 'user')
+            ->latestOfMany('sent_at');
+    }
 }

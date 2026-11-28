@@ -74,8 +74,17 @@ test('public unit pages show only FAQs for that unit and answer matching questio
         ->assertSee('guest-chat-launcher')
         ->assertSee('public-chat-card', false)
         ->assertSee('public-chat-message--assistant', false)
+        ->assertSee('Quick questions')
+        ->assertSee('What is the price per night?')
         ->assertSee('Breakfast is included in Suite A.')
         ->assertDontSee('Breakfast is not included in Suite B.');
+
+    $this->from(route('public.unit', $unitA))
+        ->post(route('public.units.questions.store', $unitA), [
+            'question' => 'What is the price per night?',
+        ])
+        ->assertRedirect(route('public.unit', $unitA))
+        ->assertSessionHas('unitFaqAnswer.answer', 'The current listed rate for Suite A is ₱1,800.00 per night.');
 
     $this->from(route('public.unit', $unitA))
         ->post(route('public.units.questions.store', $unitA), [
@@ -106,18 +115,18 @@ test('guest unit questions keep unit context and automatic FAQs out of staff att
 
     $conversation = Conversation::query()->firstOrFail();
     expect($conversation->unit_id)->toBe($unit->unit_id)
-        ->and($conversation->status)->toBe('resolved')
+        ->and($conversation->status)->toBe('open')
         ->and($conversation->messages()->where('sender_type', 'assistant')->value('message'))->toBe('Breakfast is included.')
         ->and(Notification::query()->where('user_id', $owner->user_id)->count())->toBe(0);
 
     $this->actingAs($owner)
         ->get(route('owner.conversations.index'))
         ->assertOk()
-        ->assertDontSee('Breakfast question')
+        ->assertSee('Breakfast question')
         ->assertDontSee('title="1 unread conversations"', false);
 
     $this->actingAs($owner)
-        ->get(route('owner.conversations.index', ['status' => 'all']))
+        ->get(route('owner.conversations.index', ['booking_status' => 'none']))
         ->assertSee('Breakfast question')
         ->assertDontSee('1 unread');
 
