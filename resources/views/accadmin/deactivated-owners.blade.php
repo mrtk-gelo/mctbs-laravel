@@ -1,5 +1,4 @@
-<x-shell title="Deactivated Owners | MCTBS">
-    <x-slot:nav>@include('partials.accadmin-nav', ['activePage' => 'owners'])</x-slot:nav>
+<x-accadmin-shell title="Deactivated Owners | MCTBS" heading="Deactivated owners">
     <main class="container workspace-page account-lifecycle-page">
         <a href="{{ route('accadmin.owners.index') }}" class="text-muted fs-sm account-lifecycle-back">
             <i class="fa fa-arrow-left"></i> Back to owner management
@@ -137,4 +136,4 @@
             ownerSearchTimer = window.setTimeout(() => ownerSearch.form.requestSubmit(), 350);
         });
     </script>
-</x-shell>
+</x-accadmin-shell>

@@ -1,5 +1,4 @@
-<x-shell title="Owner Management | MCTBS">
-    <x-slot:nav>@include('partials.accadmin-nav', ['activePage' => 'owners'])</x-slot:nav>
+<x-accadmin-shell title="Owner Management | MCTBS" heading="Owners">
 
     <main class="container workspace-page account-lifecycle-page">
         @if (session('success'))<div class="alert alert-success" role="status">{{ session('success') }}</div>@endif
@@ -215,4 +214,4 @@
             ownerSearchTimer = window.setTimeout(() => ownerSearch.form.requestSubmit(), 350);
         });
     </script>
-</x-shell>
+</x-accadmin-shell>

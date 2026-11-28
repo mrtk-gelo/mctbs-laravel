@@ -1,5 +1,4 @@
-<x-shell title="Account Admin Dashboard | MCTBS">
-    <x-slot:nav>@include('partials.accadmin-nav', ['activePage' => 'dashboard'])</x-slot:nav>
+<x-accadmin-shell title="Account Admin Dashboard | MCTBS" heading="Dashboard">
 
     <div class="container workspace-page">
         @if (session('success'))
@@ -70,7 +69,7 @@
             </div>
         </section>
 
-        <section class="card personnel-table-card sysadmin-dashboard-section">
+        <section class="card personnel-table-card sysadmin-dashboard-section" id="backups">
             <div class="card-header">
                 <span>Database backups</span>
                 <form method="POST" action="{{ route('accadmin.backups.store') }}">
@@ -98,4 +97,4 @@
             </div>
         </section>
     </div>
-</x-shell>
+</x-accadmin-shell>
