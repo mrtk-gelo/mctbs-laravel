@@ -11,7 +11,6 @@ use App\Services\ConversationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class PublicVisitorConversationController extends Controller
@@ -174,11 +173,10 @@ class PublicVisitorConversationController extends Controller
             'conversation' => $conversation,
             'conversations' => $this->conversations->visitorConversationsFor($request, $folder),
             'folder' => $folder,
-            'reactionSummaries' => $this->conversations->reactionSummariesForMessages($conversation->messages, $actorKey),
             'pinnedMessages' => $this->conversations->pinnedMessagesFor($conversation, $actorKey),
             'interactionActorKey' => $actorKey,
-            'reactionRoute' => 'public.visitor-conversations.reactions',
             'pinRoute' => 'public.visitor-conversations.pins',
+            'unsendRoute' => 'public.visitor-conversations.unsend',
             'settings' => $this->assistance->settingsFor($conversation->house_id),
             'faqPrompts' => $conversation->unit
                 ? $this->assistance->quickQuestionsForUnit()
@@ -228,42 +226,32 @@ class PublicVisitorConversationController extends Controller
         $after = (int) ($data['after'] ?? 0);
         $messages = $this->conversations->messagesAfter($conversation, $after);
         $actorKey = $this->conversations->interactionActorKey(null, $conversation);
-        $reactionSummaries = $this->conversations->reactionSummariesForConversation($conversation, $actorKey);
         $pinnedMessages = $this->conversations->pinnedMessagePayloadsFor($conversation, $actorKey);
 
         return response()->json([
             'messages' => $messages
-                ->map(fn (Message $message): array => $this->conversations->messageUpdatePayload(
-                    $message,
-                    $conversation,
-                    $reactionSummaries[(string) $message->message_id] ?? []
-                ))
+                ->map(fn (Message $message): array => $this->conversations->messageUpdatePayload($message, $conversation))
                 ->values(),
             'lastMessageId' => $messages->last()?->message_id ?? $after,
-            'reactionSummaries' => $reactionSummaries,
+            'unsentMessageIds' => $this->conversations->unsentMessageIdsForConversation($conversation),
             'pinnedMessageIds' => array_column($pinnedMessages, 'id'),
             'pins' => $pinnedMessages,
         ])->header('Cache-Control', 'no-store, private');
     }
 
-    public function toggleReaction(Request $request, int $conversationId, int $messageId): JsonResponse
+    public function unsend(Request $request, int $conversationId, int $messageId): JsonResponse
     {
         $conversation = Conversation::query()->findOrFail($conversationId);
         abort_unless($this->conversations->canAccessVisitor($request, $conversation), 404);
-        $data = $request->validate([
-            'emoji' => ['required', 'string', Rule::in(ConversationService::REACTION_EMOJIS)],
-        ]);
         $message = $conversation->messages()->findOrFail($messageId);
+        $this->conversations->unsendMessage($conversation, $message, $request);
         $actorKey = $this->conversations->interactionActorKey(null, $conversation);
+        $pinnedMessages = $this->conversations->pinnedMessagePayloadsFor($conversation, $actorKey);
 
         return response()->json([
             'messageId' => $message->message_id,
-            'reactions' => $this->conversations->toggleMessageReaction(
-                $conversation,
-                $message,
-                $actorKey,
-                $data['emoji']
-            ),
+            'pinnedMessageIds' => array_column($pinnedMessages, 'id'),
+            'pins' => $pinnedMessages,
         ])->header('Cache-Control', 'no-store, private');
     }
 
@@ -272,6 +260,7 @@ class PublicVisitorConversationController extends Controller
         $conversation = Conversation::query()->findOrFail($conversationId);
         abort_unless($this->conversations->canAccessVisitor($request, $conversation), 404);
         $message = $conversation->messages()->findOrFail($messageId);
+        abort_if($message->sender_type === 'visitor', 404);
         $actorKey = $this->conversations->interactionActorKey(null, $conversation);
 
         return response()->json([

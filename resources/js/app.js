@@ -747,8 +747,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const viewerType = messageList.dataset.viewerType ?? '';
         const viewerId = messageList.dataset.viewerId ?? '';
         const conversationId = messageList.dataset.conversationId ?? '';
-        const reactionUrlTemplate = messageList.dataset.reactionUrlTemplate ?? '';
         const pinUrlTemplate = messageList.dataset.pinUrlTemplate ?? '';
+        const unsendUrlTemplate = messageList.dataset.unsendUrlTemplate ?? '';
         const thread = messageList.closest('.chat-thread');
         const csrfToken = messageList.dataset.csrfToken ?? '';
         let lastMessageId = Number(messageList.dataset.lastMessageId ?? 0);
@@ -786,32 +786,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             return response.json();
-        };
-
-        const renderReactionChips = (row, reactions) => {
-            const list = row.querySelector('[data-chat-reaction-list]');
-            if (!list) {
-                return;
-            }
-
-            list.replaceChildren();
-            reactions.forEach((reaction) => {
-                const button = document.createElement('button');
-                button.className = `chat-reaction-chip${reaction.reactedByMe ? ' is-selected' : ''}`;
-                button.type = 'button';
-                button.dataset.chatReact = 'true';
-                button.dataset.emoji = reaction.emoji;
-                button.dataset.reactionUrl = urlForMessage(reactionUrlTemplate, row.dataset.messageId);
-                button.setAttribute('aria-pressed', String(reaction.reactedByMe));
-                button.setAttribute('aria-label', `${reaction.emoji} reaction, ${reaction.count}`);
-
-                const emoji = document.createElement('span');
-                emoji.textContent = reaction.emoji;
-                const count = document.createElement('span');
-                count.textContent = String(reaction.count);
-                button.append(emoji, count);
-                list.append(button);
-            });
         };
 
         const createMessageRow = (message) => {
@@ -862,43 +836,30 @@ document.addEventListener('DOMContentLoaded', () => {
             bubble.textContent = message.text;
             row.append(bubble);
 
-            const actions = document.createElement('div');
-            actions.className = 'chat-message-interactions';
-            const reactionList = document.createElement('div');
-            reactionList.className = 'chat-reaction-list';
-            reactionList.dataset.chatReactionList = 'true';
-            actions.append(reactionList);
-
-            const picker = document.createElement('details');
-            picker.className = 'chat-reaction-picker';
-            const pickerSummary = document.createElement('summary');
-            pickerSummary.setAttribute('aria-label', 'React to message');
-            pickerSummary.title = 'React to message';
-            pickerSummary.textContent = '☺';
-            const pickerPanel = document.createElement('div');
-            pickerPanel.className = 'chat-reaction-picker-panel';
-            ['👍', '❤️', '😂', '😮', '😢', '🙏'].forEach((emoji) => {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.dataset.chatReact = 'true';
-                button.dataset.emoji = emoji;
-                button.dataset.reactionUrl = urlForMessage(reactionUrlTemplate, message.id);
-                button.setAttribute('aria-label', `React with ${emoji}`);
-                button.textContent = emoji;
-                pickerPanel.append(button);
-            });
-            picker.append(pickerSummary, pickerPanel);
-            actions.append(picker);
-
+            const actions = document.createElement('details');
+            actions.className = 'chat-message-menu';
+            const menuSummary = document.createElement('summary');
+            menuSummary.className = 'chat-message-menu-trigger';
+            menuSummary.setAttribute('aria-label', 'Message options');
+            menuSummary.title = 'Message options';
+            const menuIcon = document.createElement('i');
+            menuIcon.className = 'fa fa-ellipsis';
+            menuIcon.setAttribute('aria-hidden', 'true');
+            menuSummary.append(menuIcon);
+            const menuPanel = document.createElement('div');
+            menuPanel.className = 'chat-message-menu-panel';
             const replyButton = document.createElement('button');
             replyButton.className = 'chat-message-action';
             replyButton.type = 'button';
             replyButton.dataset.chatReplyMessage = 'true';
             replyButton.dataset.messageId = String(message.id);
-            replyButton.textContent = 'Reply';
-            actions.append(replyButton);
+            const replyIcon = document.createElement('i');
+            replyIcon.className = 'fa fa-reply';
+            replyIcon.setAttribute('aria-hidden', 'true');
+            replyButton.append(replyIcon, document.createTextNode(' Reply'));
+            menuPanel.append(replyButton);
 
-            if (pinUrlTemplate !== '') {
+            if (pinUrlTemplate !== '' && !isOutgoing) {
                 const pinButton = document.createElement('button');
                 pinButton.className = 'chat-message-action';
                 pinButton.type = 'button';
@@ -906,17 +867,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 pinButton.dataset.messageId = String(message.id);
                 pinButton.dataset.isPinned = 'false';
                 pinButton.dataset.pinUrl = urlForMessage(pinUrlTemplate, message.id);
-                const icon = document.createElement('i');
-                icon.className = 'fa fa-thumbtack';
-                icon.setAttribute('aria-hidden', 'true');
-                const label = document.createElement('span');
-                label.textContent = 'Pin';
-                pinButton.append(icon, label);
-                actions.append(pinButton);
+                const pinIcon = document.createElement('i');
+                pinIcon.className = 'fa fa-thumbtack';
+                pinIcon.setAttribute('aria-hidden', 'true');
+                pinButton.append(pinIcon, document.createTextNode(' Pin'));
+                menuPanel.append(pinButton);
             }
 
+            if (isOutgoing && unsendUrlTemplate !== '') {
+                const unsendButton = document.createElement('button');
+                unsendButton.className = 'chat-message-action is-danger';
+                unsendButton.type = 'button';
+                unsendButton.dataset.chatUnsend = 'true';
+                unsendButton.dataset.messageId = String(message.id);
+                unsendButton.dataset.unsendUrl = urlForMessage(unsendUrlTemplate, message.id);
+                const unsendIcon = document.createElement('i');
+                unsendIcon.className = 'fa fa-trash';
+                unsendIcon.setAttribute('aria-hidden', 'true');
+                unsendButton.append(unsendIcon, document.createTextNode(' Unsend'));
+                menuPanel.append(unsendButton);
+            }
+
+            actions.append(menuSummary, menuPanel);
             row.append(actions);
-            renderReactionChips(row, message.reactions ?? []);
             messageList.append(row);
         };
 
@@ -935,11 +908,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const button = row.querySelector('[data-chat-pin-toggle]');
-                if (button && !button.closest('[data-pinned-message-id]')) {
+                if (button) {
                     button.dataset.isPinned = String(isPinned);
-                    const label = button.querySelector('span');
-                    if (label) {
-                        label.textContent = isPinned ? 'Unpin' : 'Pin';
+                    if (!button.closest('[data-pinned-message-id]')) {
+                        const icon = button.querySelector('i');
+                        button.replaceChildren(icon, document.createTextNode(isPinned ? ' Unpin' : ' Pin'));
                     }
                 }
             });
@@ -963,44 +936,45 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             pins.forEach((pin) => {
-                const item = document.createElement('div');
+                const item = document.createElement('article');
                 item.className = 'chat-pinned-item';
                 item.dataset.pinnedMessageId = String(pin.id);
+                const avatar = document.createElement('span');
+                avatar.className = 'chat-pinned-avatar';
+                avatar.setAttribute('aria-hidden', 'true');
+                avatar.textContent = pin.senderName.trim().slice(0, 1).toUpperCase();
                 const link = document.createElement('button');
                 link.className = 'chat-pinned-message-link';
                 link.type = 'button';
                 link.dataset.chatJumpToMessage = 'true';
                 link.dataset.messageId = String(pin.id);
+                const meta = document.createElement('div');
+                meta.className = 'chat-pinned-meta';
                 const author = document.createElement('strong');
                 author.textContent = pin.senderName;
-                const text = document.createElement('span');
-                text.textContent = pin.text.length > 150 ? `${pin.text.slice(0, 147)}...` : pin.text;
-                link.append(author, text);
+                const time = document.createElement('time');
+                time.dateTime = pin.sentAt;
+                time.textContent = pin.timeLabel;
+                meta.append(author, time);
+                const text = document.createElement('p');
+                text.className = 'chat-pinned-bubble';
+                text.textContent = pin.text;
+                link.append(meta, text);
 
                 const unpin = document.createElement('button');
-                unpin.className = 'chat-message-action';
+                unpin.className = 'chat-message-action chat-pinned-unpin';
                 unpin.type = 'button';
+                unpin.setAttribute('aria-label', 'Unpin message');
                 unpin.dataset.chatPinToggle = 'true';
                 unpin.dataset.messageId = String(pin.id);
                 unpin.dataset.isPinned = 'true';
                 unpin.dataset.pinUrl = urlForMessage(pinUrlTemplate, pin.id);
-                unpin.textContent = 'Unpin';
-                item.append(link, unpin);
+                const icon = document.createElement('i');
+                icon.className = 'fa fa-thumbtack';
+                icon.setAttribute('aria-hidden', 'true');
+                unpin.append(icon);
+                item.append(avatar, link, unpin);
                 list.append(item);
-            });
-        };
-
-        const updateReactionStates = (summaries) => {
-            if (!summaries || typeof summaries !== 'object') {
-                return;
-            }
-
-            Object.entries(summaries).forEach(([messageId, reactions]) => {
-                const row = [...messageList.querySelectorAll('[data-message-id]')]
-                    .find((item) => item.dataset.messageId === messageId);
-                if (row && Array.isArray(reactions)) {
-                    renderReactionChips(row, reactions);
-                }
             });
         };
 
@@ -1037,26 +1011,52 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
+        const pinnedDialog = thread?.querySelector('[data-chat-pinned-modal]');
+        pinnedDialog?.addEventListener('click', (event) => {
+            if (event.target === pinnedDialog) {
+                pinnedDialog.close();
+            }
+        });
+
+        const removeUnsentMessages = (messageIds) => {
+            if (!Array.isArray(messageIds)) {
+                return;
+            }
+
+            const unsentIds = new Set(messageIds.map((id) => String(id)));
+            messageList.querySelectorAll('[data-message-id]').forEach((row) => {
+                if (unsentIds.has(row.dataset.messageId)) {
+                    row.remove();
+                }
+            });
+
+            if (messageList.querySelector('[data-message-id]')) {
+                return;
+            }
+
+            const empty = document.createElement('div');
+            empty.className = 'chat-list-empty';
+            const title = document.createElement('strong');
+            title.textContent = 'No messages yet';
+            const detail = document.createElement('span');
+            detail.textContent = 'Send a message to continue the conversation.';
+            empty.append(title, detail);
+            messageList.replaceChildren(empty);
+        };
+
         thread?.addEventListener('click', async (event) => {
             const target = event.target;
             const pinnedToggle = target.closest('[data-chat-pinned-toggle]');
             if (pinnedToggle) {
-                const panel = thread.querySelector('[data-chat-pinned-panel]');
-                if (panel) {
-                    panel.hidden = !panel.hidden;
-                    pinnedToggle.closest('details')?.removeAttribute('open');
-                    if (!panel.hidden) {
-                        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    }
+                if (pinnedDialog && !pinnedDialog.open) {
+                    pinnedDialog.showModal();
                 }
+                pinnedToggle.closest('details')?.removeAttribute('open');
                 return;
             }
 
             if (target.closest('[data-chat-pinned-close]')) {
-                const panel = thread.querySelector('[data-chat-pinned-panel]');
-                if (panel) {
-                    panel.hidden = true;
-                }
+                pinnedDialog?.close();
                 return;
             }
 
@@ -1064,6 +1064,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (jumpButton) {
                 const row = [...messageList.querySelectorAll('[data-message-id]')]
                     .find((item) => item.dataset.messageId === jumpButton.dataset.messageId);
+                pinnedDialog?.close();
                 row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 row?.classList.add('is-highlighted');
                 window.setTimeout(() => row?.classList.remove('is-highlighted'), 1400);
@@ -1075,30 +1076,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const row = [...messageList.querySelectorAll('[data-message-id]')]
                     .find((item) => item.dataset.messageId === replyButton.dataset.messageId);
                 setReplyTarget(row);
-                return;
-            }
-
-            const reactionButton = target.closest('[data-chat-react]');
-            if (reactionButton) {
-                reactionButton.disabled = true;
-                try {
-                    const payload = await postAction(reactionButton.dataset.reactionUrl, {
-                        emoji: reactionButton.dataset.emoji,
-                    });
-                    const row = reactionButton.closest('[data-message-id]');
-                    if (!row || !Array.isArray(payload.reactions)) {
-                        throw new Error('Reaction response was invalid.');
-                    }
-                    renderReactionChips(row, payload.reactions);
-                    reactionButton.closest('details')?.removeAttribute('open');
-                    if (syncStatus) {
-                        syncStatus.hidden = true;
-                    }
-                } catch (error) {
-                    showInteractionError(error);
-                } finally {
-                    reactionButton.disabled = false;
-                }
+                replyButton.closest('details')?.removeAttribute('open');
                 return;
             }
 
@@ -1111,6 +1089,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         throw new Error('Pin response was invalid.');
                     }
                     updatePinnedMessages(payload.pins, payload.pinnedMessageIds);
+                    pinButton.closest('details')?.removeAttribute('open');
                     if (syncStatus) {
                         syncStatus.hidden = true;
                     }
@@ -1118,6 +1097,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     showInteractionError(error);
                 } finally {
                     pinButton.disabled = false;
+                }
+                return;
+            }
+
+            const unsendButton = target.closest('[data-chat-unsend]');
+            if (unsendButton) {
+                if (!window.confirm('Unsend this message for everyone? This cannot be undone.')) {
+                    return;
+                }
+                unsendButton.disabled = true;
+                try {
+                    const payload = await postAction(unsendButton.dataset.unsendUrl);
+                    if (!Array.isArray(payload.pins) || !Array.isArray(payload.pinnedMessageIds)) {
+                        throw new Error('Unsend response was invalid.');
+                    }
+                    const row = unsendButton.closest('[data-message-id]');
+                    row?.remove();
+                    updatePinnedMessages(payload.pins, payload.pinnedMessageIds);
+                    removeUnsentMessages([payload.messageId]);
+                    unsendButton.closest('details')?.removeAttribute('open');
+                    if (syncStatus) {
+                        syncStatus.hidden = true;
+                    }
+                } catch (error) {
+                    showInteractionError(error);
+                } finally {
+                    unsendButton.disabled = false;
                 }
             }
         });
@@ -1206,7 +1212,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                updateReactionStates(payload.reactionSummaries);
+                removeUnsentMessages(payload.unsentMessageIds);
                 updatePinnedMessages(payload.pins, payload.pinnedMessageIds);
                 lastMessageId = Math.max(lastMessageId, Number(payload.lastMessageId));
                 messageList.dataset.lastMessageId = String(lastMessageId);

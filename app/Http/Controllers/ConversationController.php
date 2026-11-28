@@ -14,7 +14,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class ConversationController extends Controller
@@ -67,11 +66,10 @@ class ConversationController extends Controller
                 ->latest('created_at')
                 ->get(),
             'folder' => $folder,
-            'reactionSummaries' => $this->conversations->reactionSummariesForMessages($conversation->messages, $actorKey),
             'pinnedMessages' => $pinnedMessages,
             'interactionActorKey' => $actorKey,
-            'reactionRoute' => 'guest.conversations.reactions',
             'pinRoute' => 'guest.conversations.pins',
+            'unsendRoute' => 'guest.conversations.unsend',
             'settings' => $this->assistance->settingsFor($conversation->house_id),
             'faqs' => $this->assistance->activeFaqsForGuest($conversation->house_id, $conversation->unit_id),
             'faqPrompts' => $conversation->unit ? $this->assistance->quickQuestionsForUnit() : [],
@@ -245,10 +243,8 @@ class ConversationController extends Controller
             'filter' => $filter,
             'folder' => $folder,
             'counts' => $this->staffConversationCounts($user),
-            'reactionSummaries' => $this->conversations->reactionSummariesForMessages($conversation->messages, $actorKey),
             'interactionActorKey' => $actorKey,
-            'reactionRoute' => $isStaff ? 'staff.conversations.reactions' : 'owner.conversations.reactions',
-            'pinRoute' => null,
+            'unsendRoute' => $isStaff ? 'staff.conversations.unsend' : 'owner.conversations.unsend',
         ]);
     }
 
@@ -298,42 +294,40 @@ class ConversationController extends Controller
         ]);
         $after = (int) ($data['after'] ?? 0);
         $messages = $this->conversations->messagesAfter($conversation, $after);
-        $actorKey = $this->conversations->interactionActorKey($request->user(), $conversation);
-        $reactionSummaries = $this->conversations->reactionSummariesForConversation($conversation, $actorKey);
+        $user = $request->user();
+        $actorKey = $this->conversations->interactionActorKey($user, $conversation);
+        $pinnedMessages = $user->role?->name === 'Guest'
+            ? $this->conversations->pinnedMessagePayloadsFor($conversation, $actorKey)
+            : [];
         if ($messages->isNotEmpty()) {
-            $this->conversations->markRead($request->user(), $conversation);
+            $this->conversations->markRead($user, $conversation);
         }
 
         return response()->json([
             'messages' => $messages
-                ->map(fn (Message $message): array => $this->conversations->messageUpdatePayload(
-                    $message,
-                    $conversation,
-                    $reactionSummaries[(string) $message->message_id] ?? []
-                ))
+                ->map(fn (Message $message): array => $this->conversations->messageUpdatePayload($message, $conversation))
                 ->values(),
             'lastMessageId' => $messages->last()?->message_id ?? $after,
-            'reactionSummaries' => $reactionSummaries,
+            'unsentMessageIds' => $this->conversations->unsentMessageIdsForConversation($conversation),
+            'pinnedMessageIds' => array_column($pinnedMessages, 'id'),
+            'pins' => $pinnedMessages,
         ])->header('Cache-Control', 'no-store, private');
     }
 
-    public function toggleReaction(Request $request, int $conversationId, int $messageId): JsonResponse
+    public function unsend(Request $request, int $conversationId, int $messageId): JsonResponse
     {
         $conversation = $this->conversation($request->user(), $conversationId);
-        $data = $request->validate([
-            'emoji' => ['required', 'string', Rule::in(ConversationService::REACTION_EMOJIS)],
-        ]);
         $message = $conversation->messages()->findOrFail($messageId);
+        $this->conversations->unsendMessage($conversation, $message, $request->user());
         $actorKey = $this->conversations->interactionActorKey($request->user(), $conversation);
+        $pinnedMessages = $request->user()->role?->name === 'Guest'
+            ? $this->conversations->pinnedMessagePayloadsFor($conversation, $actorKey)
+            : [];
 
         return response()->json([
             'messageId' => $message->message_id,
-            'reactions' => $this->conversations->toggleMessageReaction(
-                $conversation,
-                $message,
-                $actorKey,
-                $data['emoji']
-            ),
+            'pinnedMessageIds' => array_column($pinnedMessages, 'id'),
+            'pins' => $pinnedMessages,
         ])->header('Cache-Control', 'no-store, private');
     }
 
@@ -342,6 +336,11 @@ class ConversationController extends Controller
         abort_unless($request->user()->role?->name === 'Guest', 404);
         $conversation = $this->conversation($request->user(), $conversationId);
         $message = $conversation->messages()->findOrFail($messageId);
+        abort_if(
+            ($message->sender_type === 'user' && (int) $message->sender_id === (int) $request->user()->user_id)
+            || ($message->sender_type === 'visitor' && (int) $conversation->guest_user_id === (int) $request->user()->user_id),
+            404
+        );
         $actorKey = $this->conversations->interactionActorKey($request->user(), $conversation);
 
         return response()->json([
