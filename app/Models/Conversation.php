@@ -30,6 +30,8 @@ class Conversation extends Model
     protected $casts = [
         'last_message_at' => 'datetime',
         'resolved_at' => 'datetime',
+        'visitor_archived_at' => 'datetime',
+        'visitor_deleted_at' => 'datetime',
     ];
 
     public function house(): BelongsTo

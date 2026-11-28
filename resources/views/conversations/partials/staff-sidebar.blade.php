@@ -6,7 +6,7 @@
         </div>
         <a
             class="chat-new-button"
-            href="{{ route($createRoute, ['filter' => $filter]) }}"
+            href="{{ route($createRoute, ['filter' => $filter, 'folder' => 'inbox']) }}"
             aria-label="Start a new chat"
             title="Start a new chat"
         >
@@ -25,21 +25,36 @@
         </button>
     </form>
 
-    <nav class="chat-status-tabs" aria-label="Filter conversations" data-chat-inbox-filters>
-        @foreach (['all' => 'All', 'unread' => 'Unread', 'guest' => 'Guest'] as $filterKey => $filterLabel)
+    @if ($folder === 'inbox')
+        <nav class="chat-status-tabs" aria-label="Filter conversations" data-chat-inbox-filters>
+            @foreach (['all' => 'All', 'unread' => 'Unread', 'guest' => 'Guest'] as $filterKey => $filterLabel)
+                <a
+                    class="chat-status-tab{{ $filter === $filterKey ? ' is-active' : '' }}{{ $counts[$filterKey] > 0 ? ' has-chats' : '' }}"
+                    href="{{ route($inboxRoute, ['filter' => $filterKey, 'folder' => 'inbox']) }}"
+                    @if ($filter === $filterKey) aria-current="page" @endif
+                >
+                    <span>{{ $filterLabel }}</span>
+                    <span class="chat-tab-count">{{ $counts[$filterKey] }}</span>
+                </a>
+            @endforeach
+        </nav>
+    @endif
+
+    <nav class="chat-folder-links" aria-label="Conversation folders">
+        @foreach (['inbox' => ['Inbox', 'inbox'], 'archived' => ['Archived', 'box-archive'], 'deleted' => ['Deleted', 'trash']] as $folderKey => [$folderLabel, $folderIcon])
             <a
-                class="chat-status-tab{{ $filter === $filterKey ? ' is-active' : '' }}{{ $counts[$filterKey] > 0 ? ' has-chats' : '' }}"
-                href="{{ route($inboxRoute, ['filter' => $filterKey]) }}"
-                @if ($filter === $filterKey) aria-current="page" @endif
+                class="chat-folder-link{{ $folder === $folderKey ? ' is-active' : '' }}"
+                href="{{ route($inboxRoute, ['folder' => $folderKey, 'filter' => 'all']) }}"
+                @if ($folder === $folderKey) aria-current="page" @endif
             >
-                <span>{{ $filterLabel }}</span>
-                <span class="chat-tab-count">{{ $counts[$filterKey] }}</span>
+                <span><i class="fa fa-{{ $folderIcon }}" aria-hidden="true"></i> {{ $folderLabel }}</span>
+                <span>{{ $counts[$folderKey] }}</span>
             </a>
         @endforeach
     </nav>
 
     <div class="chat-sidebar-section-title">
-        <span>Recent conversations</span>
+        <span>{{ ['inbox' => 'Recent conversations', 'archived' => 'Archived conversations', 'deleted' => 'Deleted conversations'][$folder] }}</span>
         <span class="chat-recent-count">{{ $conversations->count() }}</span>
     </div>
     <nav class="chat-conversation-list" aria-label="Inbox conversation list" data-chat-inbox-list>

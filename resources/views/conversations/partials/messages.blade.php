@@ -16,7 +16,10 @@
         };
     @endphp
 
-    <article class="chat-message-row{{ $isSystemMessage ? ' chat-message-row--system' : ($isOutgoing ? ' chat-message-row--outgoing' : ' chat-message-row--incoming') }}">
+    <article
+        class="chat-message-row{{ $isSystemMessage ? ' chat-message-row--system' : ($isOutgoing ? ' chat-message-row--outgoing' : ' chat-message-row--incoming') }}"
+        data-message-id="{{ $message->message_id }}"
+    >
         <div class="chat-message-meta">
             <span>{{ $senderName }}</span>
             <time datetime="{{ $message->sent_at->toIso8601String() }}">{{ $message->sent_at->format('M j, g:i A') }}</time>

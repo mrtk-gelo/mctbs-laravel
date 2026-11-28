@@ -83,6 +83,89 @@ test('a guest can start a conversation and only the property owner can access it
         ->assertForbidden();
 });
 
+test('conversation updates return only new messages and mark them read', function () {
+    $owner = conversationUser('Owner', 'owner-poll@example.com');
+    $guest = conversationUser('Guest', 'guest-poll@example.com');
+    $house = conversationHouse($owner, 'Polling House');
+    $conversation = app(ConversationService::class)->createForGuest($guest, $house->house_id);
+    $firstMessage = $conversation->messages()->create([
+        'sender_id' => $owner->user_id,
+        'sender_type' => 'user',
+        'message' => 'Earlier update',
+        'message_type' => 'user',
+        'sent_at' => now()->subMinute(),
+    ]);
+    $newMessage = $conversation->messages()->create([
+        'sender_id' => $owner->user_id,
+        'sender_type' => 'user',
+        'message' => 'A new update',
+        'message_type' => 'user',
+        'sent_at' => now(),
+    ]);
+
+    $this->actingAs($guest)
+        ->getJson(route('guest.conversations.updates', [
+            'conversationId' => $conversation->conversation_id,
+            'after' => $firstMessage->message_id,
+        ]))
+        ->assertOk()
+        ->assertJsonCount(1, 'messages')
+        ->assertJsonPath('messages.0.id', $newMessage->message_id)
+        ->assertJsonPath('messages.0.text', 'A new update');
+
+    expect((int) $conversation->participants()->where('user_id', $guest->user_id)->value('last_read_message_id'))
+        ->toBe($newMessage->message_id);
+});
+
+test('conversation inbox actions are participant-specific and restorable', function () {
+    $owner = conversationUser('Owner', 'owner-folders@example.com');
+    $guest = conversationUser('Guest', 'guest-folders@example.com');
+    $house = conversationHouse($owner, 'Folder House');
+    $conversation = app(ConversationService::class)->createForGuest(
+        $guest,
+        $house->house_id,
+        'Private folder topic'
+    );
+
+    $this->actingAs($owner)
+        ->post(route('owner.conversations.archive', $conversation->conversation_id))
+        ->assertRedirect(route('owner.conversations.index', ['folder' => 'archived']));
+
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.index'))
+        ->assertDontSee('Private folder topic');
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.index', ['folder' => 'archived']))
+        ->assertSee('Private folder topic');
+    $this->actingAs($guest)
+        ->get(route('guest.conversations.index'))
+        ->assertSee('Private folder topic');
+
+    $this->actingAs($guest)
+        ->post(route('guest.conversations.delete', $conversation->conversation_id))
+        ->assertRedirect(route('guest.conversations.index', ['folder' => 'deleted']));
+    $this->actingAs($guest)
+        ->get(route('guest.conversations.index'))
+        ->assertDontSee('Private folder topic');
+    $this->actingAs($owner)
+        ->get(route('owner.conversations.index', ['folder' => 'archived']))
+        ->assertSee('Private folder topic');
+
+    $this->actingAs($owner)
+        ->post(route('owner.conversations.restore', $conversation->conversation_id))
+        ->assertRedirect(route('owner.conversations.index', ['folder' => 'inbox']));
+    $this->actingAs($guest)
+        ->get(route('guest.conversations.index', ['folder' => 'deleted']))
+        ->assertSee('Private folder topic');
+    $this->actingAs($guest)
+        ->post(route('guest.conversations.restore', $conversation->conversation_id))
+        ->assertRedirect(route('guest.conversations.index', ['folder' => 'inbox']));
+
+    expect($conversation->fresh())->not->toBeNull()
+        ->and($conversation->participants()->where('user_id', $owner->user_id)->value('archived_at'))->toBeNull()
+        ->and($conversation->participants()->where('user_id', $guest->user_id)->value('deleted_at'))->toBeNull();
+});
+
 test('staff can access only conversations for an invited property', function () {
     $owner = conversationUser('Owner', 'owner-staff@example.com');
     $otherOwner = conversationUser('Owner', 'other-owner-staff@example.com');

@@ -3,13 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\TransientHouse;
 use App\Models\Unit;
-use App\Models\User;
 use App\Services\AssistanceService;
 use App\Services\ConversationService;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -27,9 +27,12 @@ class PublicVisitorConversationController extends Controller
         }
 
         abort_if($request->user() !== null, 404);
+        $folder = $this->conversationFolder($request);
 
         return view('public-conversations.index', [
-            'conversations' => $this->conversations->visitorConversationsFor($request),
+            'conversations' => $this->conversations->visitorConversationsFor($request, $folder),
+            'folder' => $folder,
+            'folderCounts' => $this->conversations->visitorConversationCountsFor($request),
         ]);
     }
 
@@ -161,11 +164,16 @@ class PublicVisitorConversationController extends Controller
         abort_if(in_array($request->user()?->role?->name, ['Owner', 'Staff'], true), 404);
         abort_unless($this->conversations->canAccessVisitor($request, $conversation), 404);
 
-        $conversation->load(['house', 'unit', 'messages.sender']);
+        $conversation->load(['house.owner', 'unit', 'messages.sender']);
+        $folder = $request->query->has('folder')
+            ? $this->conversationFolder($request)
+            : $this->conversations->visitorFolderForConversation($conversation);
 
         return view('public-conversations.show', [
             'conversation' => $conversation,
-            'conversations' => $this->conversations->visitorConversationsFor($request),
+            'conversations' => $this->conversations->visitorConversationsFor($request, $folder),
+            'folder' => $folder,
+            'folderCounts' => $this->conversations->visitorConversationCountsFor($request),
             'settings' => $this->assistance->settingsFor($conversation->house_id),
             'faqPrompts' => $conversation->unit
                 ? $this->assistance->quickQuestionsForUnit()
@@ -193,7 +201,43 @@ class PublicVisitorConversationController extends Controller
 
         $this->conversations->sendVisitorMessage($request, $conversation, $data['message']);
 
-        return back()->with('success', 'Your message has been sent.');
+        return redirect()->route('public.visitor-conversations.show', [
+            'conversationId' => $conversation->conversation_id,
+            'folder' => 'inbox',
+        ])->with('success', 'Your message has been sent.');
+    }
+
+    public function updates(Request $request, int $conversationId): JsonResponse
+    {
+        $conversation = Conversation::query()->findOrFail($conversationId);
+        abort_unless($this->conversations->canAccessVisitor($request, $conversation), 404);
+        $data = $request->validate([
+            'after' => ['nullable', 'integer', 'min:0'],
+        ]);
+        $after = (int) ($data['after'] ?? 0);
+        $messages = $this->conversations->messagesAfter($conversation, $after);
+
+        return response()->json([
+            'messages' => $messages
+                ->map(fn (Message $message): array => $this->conversations->messageUpdatePayload($message, $conversation))
+                ->values(),
+            'lastMessageId' => $messages->last()?->message_id ?? $after,
+        ])->header('Cache-Control', 'no-store, private');
+    }
+
+    public function archive(Request $request, int $conversationId): RedirectResponse
+    {
+        return $this->moveVisitorConversation($request, $conversationId, 'archived');
+    }
+
+    public function deleteConversation(Request $request, int $conversationId): RedirectResponse
+    {
+        return $this->moveVisitorConversation($request, $conversationId, 'deleted');
+    }
+
+    public function restore(Request $request, int $conversationId): RedirectResponse
+    {
+        return $this->moveVisitorConversation($request, $conversationId, 'inbox');
     }
 
     public function access(Request $request, int $conversationId): RedirectResponse
@@ -254,5 +298,25 @@ class PublicVisitorConversationController extends Controller
         abort_if($unit === null, 404);
 
         return $unit;
+    }
+
+    private function conversationFolder(Request $request): string
+    {
+        $folder = $request->string('folder')->toString();
+
+        return in_array($folder, ['inbox', 'archived', 'deleted'], true) ? $folder : 'inbox';
+    }
+
+    private function moveVisitorConversation(Request $request, int $conversationId, string $folder): RedirectResponse
+    {
+        $conversation = Conversation::query()->findOrFail($conversationId);
+        $this->conversations->moveVisitorConversationToFolder($request, $conversation, $folder);
+
+        return redirect()->route('public.visitor-conversations.index', ['folder' => $folder])
+            ->with('success', match ($folder) {
+                'archived' => 'Conversation moved to Archived.',
+                'deleted' => 'Conversation moved to Deleted.',
+                default => 'Conversation restored to your inbox.',
+            });
     }
 }

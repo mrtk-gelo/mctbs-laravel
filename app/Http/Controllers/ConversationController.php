@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\TransientHouse;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\AssistanceService;
 use App\Services\BookingContextService;
 use App\Services\ConversationService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -24,7 +26,9 @@ class ConversationController extends Controller
 
     public function guestIndex(Request $request): View
     {
-        $conversations = $this->conversations->conversationQueryFor($request->user())
+        $folder = $this->conversationFolder($request);
+        $user = $request->user();
+        $conversations = $this->conversations->conversationQueryFor($user, $folder)
             ->with(['house', 'unit', 'latestMessage'])
             ->latest('last_message_at')
             ->latest('created_at')
@@ -32,6 +36,12 @@ class ConversationController extends Controller
 
         return view('conversations.guest-index', [
             'conversations' => $conversations,
+            'folder' => $folder,
+            'folderCounts' => [
+                'inbox' => $this->conversations->conversationQueryFor($user)->count(),
+                'archived' => $this->conversations->conversationQueryFor($user, 'archived')->count(),
+                'deleted' => $this->conversations->conversationQueryFor($user, 'deleted')->count(),
+            ],
             'houses' => TransientHouse::query()
                 ->where('is_active', true)
                 ->whereNull('archived_at')
@@ -43,17 +53,27 @@ class ConversationController extends Controller
 
     public function guestShow(Request $request, int $conversationId): View
     {
-        $conversation = $this->conversation($request->user(), $conversationId);
-        $this->conversations->markRead($request->user(), $conversation);
-        $conversation->load(['house', 'unit', 'messages.sender']);
+        $user = $request->user();
+        $conversation = $this->conversation($user, $conversationId);
+        $this->conversations->markRead($user, $conversation);
+        $conversation->load(['house.owner', 'unit', 'messages.sender']);
+        $folder = $request->query->has('folder')
+            ? $this->conversationFolder($request)
+            : $this->conversations->userFolderForConversation($user, $conversation);
 
         return view('conversations.guest-show', [
             'conversation' => $conversation,
-            'conversations' => $this->conversations->conversationQueryFor($request->user())
+            'conversations' => $this->conversations->conversationQueryFor($user, $folder)
                 ->with(['house', 'unit', 'latestMessage'])
                 ->latest('last_message_at')
                 ->latest('created_at')
                 ->get(),
+            'folder' => $folder,
+            'folderCounts' => [
+                'inbox' => $this->conversations->conversationQueryFor($user)->count(),
+                'archived' => $this->conversations->conversationQueryFor($user, 'archived')->count(),
+                'deleted' => $this->conversations->conversationQueryFor($user, 'deleted')->count(),
+            ],
             'settings' => $this->assistance->settingsFor($conversation->house_id),
             'faqs' => $this->assistance->activeFaqsForGuest($conversation->house_id, $conversation->unit_id),
             'faqPrompts' => $conversation->unit ? $this->assistance->quickQuestionsForUnit() : [],
@@ -108,22 +128,23 @@ class ConversationController extends Controller
         $conversation = $this->conversation($request->user(), $conversationId);
         $this->conversations->sendMessage($request->user(), $conversation, $data['message']);
 
-        return back()->with('success', 'Your message has been sent.');
+        return redirect()->route('guest.conversations.show', [
+            'conversationId' => $conversation->conversation_id,
+            'folder' => 'inbox',
+        ])->with('success', 'Your message has been sent.');
     }
 
     public function staffIndex(Request $request): View
     {
-        $allConversations = $this->staffConversationsFor($request->user());
-        $filter = $this->conversationFilter($request);
+        $folder = $this->conversationFolder($request);
+        $filter = $folder === 'inbox' ? $this->conversationFilter($request) : 'all';
+        $conversations = $this->staffConversationsFor($request->user(), $folder);
 
         return view('conversations.staff-index', [
-            'conversations' => $this->filterStaffConversations($allConversations, $filter),
+            'conversations' => $this->filterStaffConversations($conversations, $filter),
             'filter' => $filter,
-            'counts' => [
-                'all' => $allConversations->count(),
-                'unread' => $allConversations->filter(fn (Conversation $conversation): bool => $conversation->unread_message_count > 0)->count(),
-                'guest' => $allConversations->filter(fn (Conversation $conversation): bool => $conversation->guest_user_id === null)->count(),
-            ],
+            'folder' => $folder,
+            'counts' => $this->staffConversationCounts($request->user()),
         ]);
     }
 
@@ -158,11 +179,8 @@ class ConversationController extends Controller
         return view('conversations.staff-create', [
             'conversations' => $this->filterStaffConversations($allConversations, $filter),
             'filter' => $filter,
-            'counts' => [
-                'all' => $allConversations->count(),
-                'unread' => $allConversations->filter(fn (Conversation $conversation): bool => $conversation->unread_message_count > 0)->count(),
-                'guest' => $allConversations->filter(fn (Conversation $conversation): bool => $conversation->guest_user_id === null)->count(),
-            ],
+            'counts' => $this->staffConversationCounts($request->user()),
+            'folder' => 'inbox',
             'houses' => $houses,
             'selectedHouse' => $selectedHouse,
             'guests' => $guests,
@@ -203,22 +221,23 @@ class ConversationController extends Controller
 
     public function staffShow(Request $request, int $conversationId): View
     {
-        $conversation = $this->conversation($request->user(), $conversationId);
-        $allConversations = $this->staffConversationsFor($request->user());
-        $filter = $this->conversationFilter($request);
-        $this->conversations->markRead($request->user(), $conversation);
+        $user = $request->user();
+        $conversation = $this->conversation($user, $conversationId);
+        $folder = $request->query->has('folder')
+            ? $this->conversationFolder($request)
+            : $this->conversations->userFolderForConversation($user, $conversation);
+        $filter = $folder === 'inbox' ? $this->conversationFilter($request) : 'all';
+        $conversations = $this->staffConversationsFor($user, $folder);
+        $this->conversations->markRead($user, $conversation);
 
         return view('conversations.staff-show', [
-            'conversation' => $conversation->load(['guest', 'house', 'unit', 'messages.sender', 'notes.author']),
-            'conversations' => $this->filterStaffConversations($allConversations, $filter),
-            'quickReplies' => $this->assistance->quickRepliesFor($request->user(), $conversation->house_id),
-            'context' => $this->bookingContext->forConversation($request->user(), $conversation),
+            'conversation' => $conversation->load(['guest', 'house.owner', 'unit', 'messages.sender', 'notes.author']),
+            'conversations' => $this->filterStaffConversations($conversations, $filter),
+            'quickReplies' => $this->assistance->quickRepliesFor($user, $conversation->house_id),
+            'context' => $this->bookingContext->forConversation($user, $conversation),
             'filter' => $filter,
-            'counts' => [
-                'all' => $allConversations->count(),
-                'unread' => $allConversations->filter(fn (Conversation $thread): bool => $thread->unread_message_count > 0)->count(),
-                'guest' => $allConversations->filter(fn (Conversation $thread): bool => $thread->guest_user_id === null)->count(),
-            ],
+            'folder' => $folder,
+            'counts' => $this->staffConversationCounts($user),
         ]);
     }
 
@@ -232,7 +251,15 @@ class ConversationController extends Controller
 
         $this->conversations->sendMessage($request->user(), $conversation, $data['message']);
 
-        return back()->with('success', 'Your reply has been sent.');
+        $showRoute = $request->user()->role?->name === 'Staff'
+            ? 'staff.conversations.show'
+            : 'owner.conversations.show';
+
+        return redirect()->route($showRoute, [
+            'conversationId' => $conversation->conversation_id,
+            'folder' => 'inbox',
+            'filter' => $this->conversationFilter($request),
+        ])->with('success', 'Your reply has been sent.');
     }
 
     public function noteStore(Request $request, int $conversationId): RedirectResponse
@@ -246,9 +273,44 @@ class ConversationController extends Controller
         return back()->with('success', 'Internal note added.');
     }
 
+    public function updates(Request $request, int $conversationId): JsonResponse
+    {
+        $conversation = $this->conversation($request->user(), $conversationId);
+        $data = $request->validate([
+            'after' => ['nullable', 'integer', 'min:0'],
+        ]);
+        $after = (int) ($data['after'] ?? 0);
+        $messages = $this->conversations->messagesAfter($conversation, $after);
+        if ($messages->isNotEmpty()) {
+            $this->conversations->markRead($request->user(), $conversation);
+        }
+
+        return response()->json([
+            'messages' => $messages
+                ->map(fn (Message $message): array => $this->conversations->messageUpdatePayload($message, $conversation))
+                ->values(),
+            'lastMessageId' => $messages->last()?->message_id ?? $after,
+        ])->header('Cache-Control', 'no-store, private');
+    }
+
+    public function archive(Request $request, int $conversationId): RedirectResponse
+    {
+        return $this->moveConversation($request, $conversationId, 'archived');
+    }
+
+    public function deleteConversation(Request $request, int $conversationId): RedirectResponse
+    {
+        return $this->moveConversation($request, $conversationId, 'deleted');
+    }
+
+    public function restore(Request $request, int $conversationId): RedirectResponse
+    {
+        return $this->moveConversation($request, $conversationId, 'inbox');
+    }
+
     private function conversation(User $user, int $conversationId): Conversation
     {
-        $conversation = $this->conversations->conversationQueryFor($user)->find($conversationId);
+        $conversation = $this->conversations->conversationQueryFor($user, 'all')->find($conversationId);
         if ($conversation !== null) {
             return $conversation;
         }
@@ -259,9 +321,9 @@ class ConversationController extends Controller
         return $conversation;
     }
 
-    private function staffConversationsFor(User $user): Collection
+    private function staffConversationsFor(User $user, string $folder = 'inbox'): Collection
     {
-        return $this->conversations->conversationQueryFor($user)
+        return $this->conversations->conversationQueryFor($user, $folder)
             ->with(['guest', 'house', 'unit', 'latestMessage', 'latestHumanMessage'])
             ->latest('last_message_at')
             ->latest('created_at')
@@ -273,6 +335,59 @@ class ConversationController extends Controller
         $filter = $request->string('filter')->toString();
 
         return in_array($filter, ['all', 'unread', 'guest'], true) ? $filter : 'all';
+    }
+
+    private function conversationFolder(Request $request): string
+    {
+        $folder = $request->string('folder')->toString();
+
+        return in_array($folder, ['inbox', 'archived', 'deleted'], true) ? $folder : 'inbox';
+    }
+
+    /**
+     * @return array{all: int, unread: int, guest: int, inbox: int, archived: int, deleted: int}
+     */
+    private function staffConversationCounts(User $user): array
+    {
+        $inbox = $this->conversations->conversationQueryFor($user);
+        $inboxCount = (clone $inbox)->count();
+
+        return [
+            'all' => $inboxCount,
+            'inbox' => $inboxCount,
+            'unread' => $this->conversations->unreadConversationCountFor($user),
+            'guest' => (clone $inbox)->whereNull('guest_user_id')->count(),
+            'archived' => $this->conversations->conversationQueryFor($user, 'archived')->count(),
+            'deleted' => $this->conversations->conversationQueryFor($user, 'deleted')->count(),
+        ];
+    }
+
+    private function moveConversation(Request $request, int $conversationId, string $folder): RedirectResponse
+    {
+        $user = $request->user();
+        $conversation = $this->conversation($user, $conversationId);
+        $this->conversations->moveUserConversationToFolder($user, $conversation, $folder);
+
+        if ($user->role?->name === 'Guest') {
+            return redirect()->route('guest.conversations.index', ['folder' => $folder])
+                ->with('success', $this->conversationFolderMessage($folder));
+        }
+
+        $indexRoute = $user->role?->name === 'Staff'
+            ? 'staff.conversations.index'
+            : 'owner.conversations.index';
+
+        return redirect()->route($indexRoute, ['folder' => $folder])
+            ->with('success', $this->conversationFolderMessage($folder));
+    }
+
+    private function conversationFolderMessage(string $folder): string
+    {
+        return match ($folder) {
+            'archived' => 'Conversation moved to Archived.',
+            'deleted' => 'Conversation moved to Deleted.',
+            default => 'Conversation restored to your inbox.',
+        };
     }
 
     private function filterStaffConversations(Collection $conversations, string $filter): Collection

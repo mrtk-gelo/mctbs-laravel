@@ -55,10 +55,23 @@ Route::get('/public-chat/conversations/{conversationId}/sign-in', [PublicVisitor
 Route::get('/public-chat/conversations/{conversationId}', [PublicVisitorConversationController::class, 'show'])
     ->whereNumber('conversationId')
     ->name('public.visitor-conversations.show');
+Route::get('/public-chat/conversations/{conversationId}/updates', [PublicVisitorConversationController::class, 'updates'])
+    ->whereNumber('conversationId')
+    ->middleware('throttle:60,1')
+    ->name('public.visitor-conversations.updates');
 Route::post('/public-chat/conversations/{conversationId}/reply', [PublicVisitorConversationController::class, 'reply'])
     ->whereNumber('conversationId')
     ->middleware('throttle:10,1')
     ->name('public.visitor-conversations.reply');
+Route::post('/public-chat/conversations/{conversationId}/archive', [PublicVisitorConversationController::class, 'archive'])
+    ->whereNumber('conversationId')
+    ->name('public.visitor-conversations.archive');
+Route::post('/public-chat/conversations/{conversationId}/delete', [PublicVisitorConversationController::class, 'deleteConversation'])
+    ->whereNumber('conversationId')
+    ->name('public.visitor-conversations.delete');
+Route::post('/public-chat/conversations/{conversationId}/restore', [PublicVisitorConversationController::class, 'restore'])
+    ->whereNumber('conversationId')
+    ->name('public.visitor-conversations.restore');
 Route::get('/guest/feedback/{booking}/{token}', [GuestFeedbackController::class, 'show'])
     ->name('guest.feedback.show');
 Route::post('/guest/feedback/{booking}/{token}', [GuestFeedbackController::class, 'store'])
@@ -105,9 +118,22 @@ Route::middleware(['auth', 'role:guest'])->group(function () {
     Route::get('/guest/conversations/{conversationId}', [ConversationController::class, 'guestShow'])
         ->whereNumber('conversationId')
         ->name('guest.conversations.show');
+    Route::get('/guest/conversations/{conversationId}/updates', [ConversationController::class, 'updates'])
+        ->whereNumber('conversationId')
+        ->middleware('throttle:60,1')
+        ->name('guest.conversations.updates');
     Route::post('/guest/conversations/{conversationId}/reply', [ConversationController::class, 'guestReply'])
         ->whereNumber('conversationId')
         ->name('guest.conversations.reply');
+    Route::post('/guest/conversations/{conversationId}/archive', [ConversationController::class, 'archive'])
+        ->whereNumber('conversationId')
+        ->name('guest.conversations.archive');
+    Route::post('/guest/conversations/{conversationId}/delete', [ConversationController::class, 'deleteConversation'])
+        ->whereNumber('conversationId')
+        ->name('guest.conversations.delete');
+    Route::post('/guest/conversations/{conversationId}/restore', [ConversationController::class, 'restore'])
+        ->whereNumber('conversationId')
+        ->name('guest.conversations.restore');
     Route::get('/units/{unit}/book', BookingForm::class)->name('guest.book');
 
     Route::get('/guest/bookings/{booking_id}', [GuestBookingController::class, 'show'])->name('guest.bookings.show');
@@ -142,7 +168,14 @@ Route::middleware(['auth', 'role:owner'])->prefix('owner')->name('owner.')->grou
     Route::get('/messages/new', [ConversationController::class, 'staffCreate'])->name('conversations.create');
     Route::post('/messages/new', [ConversationController::class, 'staffCreateStore'])->name('conversations.create.store');
     Route::get('/messages/{conversationId}', [ConversationController::class, 'staffShow'])->whereNumber('conversationId')->name('conversations.show');
+    Route::get('/messages/{conversationId}/updates', [ConversationController::class, 'updates'])
+        ->whereNumber('conversationId')
+        ->middleware('throttle:60,1')
+        ->name('conversations.updates');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
+    Route::post('/messages/{conversationId}/archive', [ConversationController::class, 'archive'])->whereNumber('conversationId')->name('conversations.archive');
+    Route::post('/messages/{conversationId}/delete', [ConversationController::class, 'deleteConversation'])->whereNumber('conversationId')->name('conversations.delete');
+    Route::post('/messages/{conversationId}/restore', [ConversationController::class, 'restore'])->whereNumber('conversationId')->name('conversations.restore');
     Route::post('/messages/{conversationId}/notes', [ConversationController::class, 'noteStore'])->whereNumber('conversationId')->name('conversations.notes.store');
     Route::get('/messages/assistance', [AssistanceController::class, 'index'])->name('assistance.index');
     Route::post('/messages/assistance/settings', [AssistanceController::class, 'updateSettings'])->name('assistance.settings.update');
@@ -229,7 +262,14 @@ Route::middleware(['auth', 'role:staff'])->prefix('staff')->name('staff.')->grou
     Route::get('/messages/new', [ConversationController::class, 'staffCreate'])->name('conversations.create');
     Route::post('/messages/new', [ConversationController::class, 'staffCreateStore'])->name('conversations.create.store');
     Route::get('/messages/{conversationId}', [ConversationController::class, 'staffShow'])->whereNumber('conversationId')->name('conversations.show');
+    Route::get('/messages/{conversationId}/updates', [ConversationController::class, 'updates'])
+        ->whereNumber('conversationId')
+        ->middleware('throttle:60,1')
+        ->name('conversations.updates');
     Route::post('/messages/{conversationId}', [ConversationController::class, 'staffStore'])->whereNumber('conversationId')->name('conversations.store');
+    Route::post('/messages/{conversationId}/archive', [ConversationController::class, 'archive'])->whereNumber('conversationId')->name('conversations.archive');
+    Route::post('/messages/{conversationId}/delete', [ConversationController::class, 'deleteConversation'])->whereNumber('conversationId')->name('conversations.delete');
+    Route::post('/messages/{conversationId}/restore', [ConversationController::class, 'restore'])->whereNumber('conversationId')->name('conversations.restore');
     Route::post('/messages/{conversationId}/notes', [ConversationController::class, 'noteStore'])->whereNumber('conversationId')->name('conversations.notes.store');
     Route::get('/messages/assistance', [AssistanceController::class, 'index'])->name('assistance.index');
     Route::post('/messages/assistance/settings', [AssistanceController::class, 'updateSettings'])->name('assistance.settings.update');
